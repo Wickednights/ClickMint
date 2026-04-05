@@ -1,2 +1,2 @@
-# lastclick-mvp
-LastClick MVP — one button, one hidden target, one on-chain NFT winner on Base
+# ClickMint
+LastClick MVP — one button, one hidden target, on-chain NFT winners and CLICK collector all with a click on Base
