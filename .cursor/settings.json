@@ -1,0 +1,37 @@
+{
+  "plugins": {
+    "vercel": {
+      "enabled": true
+    },
+    "supabase": {
+      "enabled": true
+    },
+    "browse": {
+      "enabled": true
+    },
+    "functions": {
+      "enabled": true
+    },
+    "continual-learning": {
+      "enabled": true
+    },
+    "parallel": {
+      "enabled": true
+    },
+    "phantom-connect": {
+      "enabled": true
+    },
+    "firecrawl": {
+      "enabled": true
+    },
+    "render": {
+      "enabled": true
+    },
+    "mongodb": {
+      "enabled": true
+    },
+    "webflow": {
+      "enabled": true
+    }
+  }
+}
