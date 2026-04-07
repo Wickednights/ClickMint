@@ -1,17 +1,24 @@
 import type { Metadata } from "next";
-import { Geist_Mono } from "next/font/google";
+import { Space_Grotesk, Inter } from "next/font/google";
 import { Toaster } from "sonner";
 import { Providers } from "./providers";
 import "./globals.css";
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const spaceGrotesk = Space_Grotesk({
+  variable: "--font-space-grotesk",
   subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
 });
 
 export const metadata: Metadata = {
-  title: "ClickMint",
-  description: "Base Sepolia clicker — credits, vested CLICK, hourly POT",
+  title: "CLICKMINT // SYSTEM_READY",
+  description: "Base Sepolia terminal — credits, vested CLICK, hourly POT",
 };
 
 export default function RootLayout({
@@ -21,7 +28,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`${geistMono.variable} min-h-screen antialiased`}>
+      <body
+        className={`${spaceGrotesk.variable} ${inter.variable} min-h-screen bg-black font-body text-on-surface antialiased selection:bg-primary-container selection:text-on-primary-fixed`}
+      >
         <Providers>
           {children}
           <Toaster
@@ -29,7 +38,8 @@ export default function RootLayout({
             position="top-center"
             toastOptions={{
               classNames: {
-                toast: "border border-cyan-500/40 bg-zinc-950 text-cyan-100",
+                toast:
+                  "rounded-none border border-outline-variant/40 bg-surface-container-low text-primary-fixed font-label text-xs tracking-widest uppercase",
               },
             }}
           />

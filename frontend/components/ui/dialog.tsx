@@ -17,7 +17,7 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-50 bg-black/80 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out",
+      "fixed inset-0 z-50 bg-black/70 backdrop-blur-[20px] data-[state=open]:animate-in data-[state=closed]:animate-out",
       className
     )}
     {...props}
@@ -34,13 +34,13 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-1/2 top-1/2 z-50 grid w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 border border-cyan-500/30 bg-zinc-950 p-6 shadow-[0_0_40px_-10px_rgba(34,211,238,0.4)] duration-200 sm:rounded-2xl",
+        "fixed left-1/2 top-1/2 z-50 grid w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 border border-outline-variant/30 bg-surface-container/60 p-6 opacity-[0.98] shadow-[0_0_30px_-8px_rgba(0,251,251,0.25)] duration-200 sm:rounded-none",
         className
       )}
       {...props}
     >
       {children}
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm text-zinc-400 opacity-70 ring-offset-black transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-cyan-400">
+      <DialogPrimitive.Close className="absolute right-4 top-4 text-secondary opacity-70 transition-opacity hover:opacity-100 hover:text-primary-fixed focus:outline-none focus:ring-1 focus:ring-primary-fixed">
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>
@@ -52,13 +52,17 @@ DialogContent.displayName = DialogPrimitive.Content.displayName;
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (
   <div className={cn("flex flex-col space-y-1.5 text-center sm:text-left", className)} {...props} />
 );
+
 const DialogTitle = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Title>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn("text-lg font-semibold tracking-tight text-cyan-200", className)}
+    className={cn(
+      "font-headline text-sm font-bold uppercase tracking-[0.2em] text-primary-fixed",
+      className
+    )}
     {...props}
   />
 ));
