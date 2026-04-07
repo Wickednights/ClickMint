@@ -5,6 +5,7 @@ import { useConnect } from "wagmi";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -52,11 +53,10 @@ export function WalletPickerDialog({ open, onOpenChange }: Props) {
           <DialogTitle className="font-headline uppercase tracking-widest text-primary-fixed">
             Connect wallet
           </DialogTitle>
+          <DialogDescription className="!mt-1 text-[10px] opacity-90">
+            Network: <span className="font-mono text-primary-fixed">Base Sepolia</span> (chain {baseSepolia.id})
+          </DialogDescription>
         </DialogHeader>
-        <p className="font-body text-[10px] text-secondary opacity-80">
-          Network: <span className="font-mono text-primary-fixed">Base Sepolia</span> (chain{" "}
-          {baseSepolia.id})
-        </p>
         {!process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim() && (
           <p className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 font-body text-[9px] text-amber-200">
             WalletConnect is disabled until you set{" "}
@@ -69,14 +69,14 @@ export function WalletPickerDialog({ open, onOpenChange }: Props) {
             <li key={`${c.id}-${c.name}`}>
               <button
                 type="button"
-                disabled={!c.ready || isPending}
+                disabled={isPending}
                 onClick={() => {
                   void (async () => {
                     try {
                       await connectAsync({ connector: c, chainId: baseSepolia.id });
                       onOpenChange(false);
-                    } catch {
-                      /* stay open; error surfaces below */
+                    } catch (err) {
+                      console.error("[ClickMint] connect failed", c.id, err);
                     }
                   })();
                 }}

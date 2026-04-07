@@ -11,6 +11,13 @@ Format:
 
 ---
 
+### 2026-04-06T18:00:00Z — Production polish: credits UX, debug unlinked, verification doc
+
+- **`clickmint-dashboard.tsx`:** Removed optimistic debit race; **Click Credits** follow `credits / clickCostCredits` after `waitForTransactionReceipt` + batched refetch; **claimVested** waits for receipt then refetches; dropped **post-click 500ms cooldown** (kept 500ms client guard + `writePending` to avoid misleading “RATE LIMIT” spike after a successful click); deposit footnote points to **`set-economy-round.ts`**; **`keepPreviousData`** on vesting reads to reduce claimable flicker; hero **CLICK** above collapsible deposit; no Debug in sidebar/footer (prior change).
+- **`wallet-picker-dialog.tsx`:** Connect buttons **`disabled={isPending}`** only; **`DialogDescription`**; **`console.error`** on connect failure (connectors no longer blocked when `ready === false`).
+- **`app/documentation/page.tsx`:** No **`Link` to `/debug`** — text-only note that `/debug` is typed manually.
+- **`docs/SYSTEM_VERIFICATION.md`:** Owner/player checklist (config, deposit, click, vesting, POT, wallets, economy tuning) + template for what to paste back after deploy.
+
 ### 2026-04-07T08:21:10Z — Minimal terminal UI, /documentation mechanics, Debug panel, credit formatting
 
 - **`game-display.ts`:** `formatWholeCredits` (full grouped integers, no `T+`); `isTinyClickCostWei` — flag when `clickCostCredits` is far below cent-scale (typical 1-wei test misconfig); `formatPlayCountBigint` kept for non-credit abbreviations.

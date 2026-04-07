@@ -196,11 +196,9 @@ export default function DocumentationPage() {
         </Section>
 
         <p className="mt-12 border-t border-outline-variant/30 pt-8 font-body text-xs text-outline">
-          Parameters on the live testnet deployment may differ from this specification until mainnet launch. Use the{" "}
-          <Link href="/debug" className="text-primary-fixed hover:underline">
-            Debug
-          </Link>{" "}
-          page for raw contract values.
+          Parameters on the live testnet deployment may differ from this specification until mainnet launch. Operators can
+          open the <span className="font-mono text-outline">/debug</span> route manually in the browser for raw contract
+          values (no public nav link by design).
         </p>
       </article>
     </div>
