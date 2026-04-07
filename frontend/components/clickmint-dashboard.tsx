@@ -24,6 +24,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { getClickAddress, getGameAddress } from "@/lib/addresses";
 
 const QUICK_BUY = ["0.001", "0.01", "0.1", "0.25", "0.5", "1"] as const;
 
@@ -36,12 +37,6 @@ type PotRow = {
 };
 
 type MobileTab = "terminal" | "history" | "trophies";
-
-function envAddr(name: string): Address | undefined {
-  const v = process.env[name];
-  if (!v || !v.startsWith("0x")) return undefined;
-  return v as Address;
-}
 
 function fmtToken(wei: bigint | undefined, maxFrac = 2) {
   if (wei === undefined) return "—";
@@ -91,8 +86,8 @@ function WinnerTable({ rows }: { rows: PotRow[] }) {
 }
 
 export function ClickMintDashboard() {
-  const gameAddr = envAddr("NEXT_PUBLIC_GAME_ADDRESS");
-  const clickAddr = envAddr("NEXT_PUBLIC_CLICK_ADDRESS");
+  const gameAddr = getGameAddress();
+  const clickAddr = getClickAddress();
 
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
@@ -311,19 +306,6 @@ export function ClickMintDashboard() {
     const c = claimable ?? 0n;
     return { main: fmtToken(p, 0), sub: c > 0n ? `${fmtToken(c, 2)} claimable` : null };
   }, [pending, claimable]);
-
-  if (!gameAddr || !clickAddr) {
-    return (
-      <main className="relative z-10 mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
-        <h1 className="font-headline text-2xl font-black tracking-tighter text-white">CLICKMINT</h1>
-        <p className="font-body text-[10px] text-secondary opacity-80">
-          Set <span className="text-primary-fixed">NEXT_PUBLIC_GAME_ADDRESS</span> and{" "}
-          <span className="text-primary-fixed">NEXT_PUBLIC_CLICK_ADDRESS</span> in{" "}
-          <span className="text-primary-fixed">.env.local</span>, then restart the dev server.
-        </p>
-      </main>
-    );
-  }
 
   const canAct = isConnected && !wrongChain && !writePending;
 
