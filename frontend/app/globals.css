@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #070a0f;
+  --foreground: #e8f7ff;
+  --neon-cyan: #22d3ee;
+  --neon-fuchsia: #e879f9;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  color: var(--foreground);
+  background: radial-gradient(ellipse 120% 80% at 50% -20%, #1a1033 0%, var(--background) 45%),
+    var(--background);
+  min-height: 100vh;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+@keyframes pulse-neon {
+  0%,
+  100% {
+    box-shadow: 0 0 28px -4px rgba(34, 211, 238, 0.55), 0 0 48px -12px rgba(232, 121, 249, 0.35);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 40px -2px rgba(34, 211, 238, 0.8), 0 0 64px -8px rgba(232, 121, 249, 0.5);
+    transform: scale(1.03);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+.animate-pulse-neon {
+  animation: pulse-neon 1.8s ease-in-out infinite;
+}
+
+.animate-shimmer-bar {
+  background: linear-gradient(
+    90deg,
+    rgba(34, 211, 238, 0.15),
+    rgba(232, 121, 249, 0.35),
+    rgba(34, 211, 238, 0.15)
+  );
+  background-size: 200% 100%;
+  animation: shimmer 3s linear infinite;
+}
