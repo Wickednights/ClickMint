@@ -22,6 +22,10 @@ contract ClickMintGame is Ownable, ReentrancyGuard {
 
     uint256 public constant MIN_POT_CLICKS = 100;
     uint256 public constant MAX_CLICKS_PER_BLOCK = 2;
+    /// @notice Global clicks per game hour — every N clicks adds one required leading-zero bit (cap 4) for click hash.
+    uint256 public constant CLICKS_PER_HASH_TIER = 5000;
+
+    mapping(uint256 hourId => uint256) public totalClicksInHour;
 
     /// @notice Wei of CLICK minted per 1 ETH of pot (scaled — testnet sized).
     uint256 public clickPerEthWei;
@@ -146,7 +150,17 @@ contract ClickMintGame is Ownable, ReentrancyGuard {
 
         uint256 c = clicksInHour[hid][msg.sender] + 1;
         clicksInHour[hid][msg.sender] = c;
+        totalClicksInHour[hid]++;
         windowMask[hid][msg.sender] |= uint8(1 << w);
+
+        uint256 tier = totalClicksInHour[hid] / CLICKS_PER_HASH_TIER;
+        uint256 needBits = tier > 4 ? 4 : tier;
+        if (needBits > 0) {
+            uint256 h = uint256(
+                keccak256(abi.encodePacked(msg.sender, hid, c, block.number, block.timestamp, block.prevrandao))
+            );
+            require(h >> (256 - needBits) == 0, "game: clickhash");
+        }
 
         if (!_hourListed[hid][msg.sender]) {
             _hourListed[hid][msg.sender] = true;
