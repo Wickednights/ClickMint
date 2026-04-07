@@ -1,18 +1,34 @@
-import { formatEther, parseEther } from "viem";
+import { parseEther } from "viem";
 
-/** Deposit grid step — “credit steps” UX, not on-chain click cost. */
-export const DISPLAY_PLAY_ETH = 0.001;
-const WEI_PER_BUDGET_STEP = parseEther("0.001");
+const BPS = 10_000n;
 
-/** If per-click cost is below this (in wei), UI shows ETH-backed credits instead of credits÷cost (avoids trillion-scale counts). */
-export const DUST_CLICK_COST_WEI = parseEther("0.00001");
+/**
+ * Mirrors `ClickMintGame._depositBonusWei` — bonus added to `credits` on each `deposit()`.
+ */
+export function depositBonusWei(depositWei: bigint): bigint {
+  if (depositWei >= parseEther("1")) return (depositWei * 1000n) / BPS;
+  if (depositWei >= parseEther("0.5")) return (depositWei * 700n) / BPS;
+  if (depositWei >= parseEther("0.25")) return (depositWei * 500n) / BPS;
+  if (depositWei >= parseEther("0.1")) return (depositWei * 300n) / BPS;
+  if (depositWei >= parseEther("0.01")) return (depositWei * 100n) / BPS;
+  return 0n;
+}
 
-export function isDustClickCost(clickCostWei: bigint | undefined): boolean {
-  return clickCostWei !== undefined && clickCostWei > 0n && clickCostWei < DUST_CLICK_COST_WEI;
+/** Total credit wei granted for a deposit (principal + tier bonus). */
+export function creditsGrantedOnDeposit(depositWei: bigint): bigint {
+  return depositWei + depositBonusWei(depositWei);
+}
+
+/** Human label for deposit tier bonus, e.g. "+1% bonus credits". */
+export function depositBonusLabel(depositWei: bigint): string | null {
+  const b = depositBonusWei(depositWei);
+  if (b === 0n) return null;
+  const pct = (b * BPS) / depositWei;
+  return `+${(Number(pct) / 100).toFixed(pct % 100n === 0n ? 0 : 1)}% bonus credits`;
 }
 
 /**
- * On-chain clicks still available: credits / clickCost. Use when showing raw counter and cost is not dust.
+ * On-chain clicks available: credit balance / per-click cost.
  */
 export function onChainPlaysRemaining(creditsWei: bigint | undefined, clickCostWei: bigint | undefined): bigint {
   if (creditsWei === undefined || creditsWei === 0n) return 0n;
@@ -20,10 +36,9 @@ export function onChainPlaysRemaining(creditsWei: bigint | undefined, clickCostW
   return creditsWei / clickCostWei;
 }
 
-/** How many 0.001 ETH “budget steps” credits equal (deposit UX only). */
-export function budgetStepsFromCredits(creditsWei: bigint | undefined): bigint {
-  if (creditsWei === undefined || creditsWei === 0n) return 0n;
-  return creditsWei / WEI_PER_BUDGET_STEP;
+/** Click credits preview for a deposit amount (whole number). */
+export function clickCreditsFromDeposit(depositWei: bigint, clickCostWei: bigint | undefined): bigint {
+  return onChainPlaysRemaining(creditsGrantedOnDeposit(depositWei), clickCostWei);
 }
 
 /** Abbreviate large integer counts for UI (no scientific notation). */
@@ -42,70 +57,53 @@ export function trimEtherString(s: string): string {
   return t === "" ? "0" : t;
 }
 
+const ONE_CLICK = parseEther("1");
+
 /**
- * Human-readable vesting vault slice: whole number = count of per-click grants when baseReward fits,
- * never “×” (reads as multiply). Subcaption is always exact CLICK (trimmed ether).
+ * Whole-number $CLICK vesting vault display (no wei decimals in UI).
  */
 export function vestingVaultDisplay(wei: bigint, baseRewardWei?: bigint): {
   headline: string;
   caption: string;
-  exactClick: string;
 } {
-  const exactClick = `${trimEtherString(formatEther(wei))} CLICK`;
   if (wei === 0n) {
-    return { headline: "0", caption: "CLICK in vesting", exactClick };
+    return { headline: "0", caption: "$CLICK in vesting" };
   }
   if (baseRewardWei !== undefined && baseRewardWei > 0n) {
     const grants = wei / baseRewardWei;
     if (grants > 0n) {
       return {
         headline: grants.toLocaleString(),
-        caption: grants === 1n ? "per-click grant vesting" : "per-click grants vesting",
-        exactClick,
+        caption: grants === 1n ? "$CLICK grant vesting" : "$CLICK grants vesting",
       };
     }
   }
-  return {
-    headline: trimEtherString(formatEther(wei)),
-    caption: "CLICK unvested",
-    exactClick,
-  };
+  const whole = wei / ONE_CLICK;
+  if (whole > 0n) {
+    return { headline: whole.toLocaleString(), caption: "whole $CLICK unvested" };
+  }
+  return { headline: "0", caption: "$CLICK in vesting" };
 }
 
 export function claimableVaultDisplay(wei: bigint, baseRewardWei?: bigint): {
   headline: string;
   caption: string;
-  exactClick: string;
 } {
-  const exactClick = `${trimEtherString(formatEther(wei))} CLICK`;
   if (wei === 0n) {
-    return { headline: "0", caption: "ready to claim", exactClick };
+    return { headline: "0", caption: "$CLICK ready to claim" };
   }
   if (baseRewardWei !== undefined && baseRewardWei > 0n) {
     const grants = wei / baseRewardWei;
     if (grants > 0n) {
       return {
         headline: grants.toLocaleString(),
-        caption: grants === 1n ? "vested grant claimable" : "vested grants claimable",
-        exactClick,
+        caption: grants === 1n ? "vested $CLICK grant" : "vested $CLICK grants",
       };
     }
   }
-  return {
-    headline: trimEtherString(formatEther(wei)),
-    caption: "CLICK claimable",
-    exactClick,
-  };
-}
-
-/** @deprecated Use `onChainPlaysRemaining` + bigint; kept for any stray imports. */
-export function estimatedPlaysFromCreditsWei(creditsWei: bigint | undefined): number {
-  if (creditsWei === undefined || creditsWei === 0n) return 0;
-  return Number(budgetStepsFromCredits(creditsWei));
-}
-
-/** @deprecated Prefer `formatPlayCountBigint`. */
-export function formatPlayCount(n: number): string {
-  if (!Number.isFinite(n) || n < 0) return "0";
-  return formatPlayCountBigint(BigInt(Math.floor(n)));
+  const whole = wei / ONE_CLICK;
+  if (whole > 0n) {
+    return { headline: whole.toLocaleString(), caption: "whole $CLICK claimable" };
+  }
+  return { headline: "0", caption: "$CLICK ready to claim" };
 }

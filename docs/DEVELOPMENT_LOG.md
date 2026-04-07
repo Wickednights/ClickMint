@@ -11,6 +11,15 @@ Format:
 
 ---
 
+### 2026-04-07T08:06:37Z — Click Credits as whole numbers, $CLICK branding, on-chain deposit bonuses
+
+- **`ClickMintGame.sol`:** `_depositBonusWei` — single-transaction deposit tiers add +1% … +10% extra credits (same wei unit as `credits`); `credits += v + bonus`; `Deposited` emits `creditsOut = v + bonus`.
+- **`contracts/scripts/deploy.ts`:** `clickCostCredits = 1e18 / 350_000` (internal ~1¢/click at ~$3.5k ETH; tune via `setEconomy`); `baseClickReward = 5e18`.
+- **`contracts/scripts/set-economy-round.ts`:** defaults aligned with deploy (`CLICK_COST` / `BASE_CLICK_REWARD`).
+- **`frontend/lib/game-display.ts`:** `depositBonusWei`, `creditsGrantedOnDeposit`, `depositBonusLabel`, `clickCreditsFromDeposit`; `vestingVaultDisplay` / `claimableVaultDisplay` — whole-number $CLICK headlines/captions only (no fractional wei sublines); removed dust-step / deprecated helpers.
+- **`clickmint-dashboard.tsx`:** primary stat = whole **Click Credits** (plays left); ETH only on deposit buttons + small “funded with … ETH equivalent” note; deposit grid shows ~credits + bonus label; CLICK hero above stats; larger body/labels in stats + POT block; toasts/table/debug token copy uses **$CLICK**; deposit success toast mentions tier bonus.
+- **Note:** games deployed **before** this contract change do not grant bonuses on-chain until upgraded; UI bonus preview matches new contract logic.
+
 ### 2026-04-07T07:32:37Z — Open Graph / link preview (neon CLICK)
 
 - Added `frontend/app/opengraph-image.tsx` (`next/og` ImageResponse) — 1200×630 preview matching neon CLICK tile; `dynamic = "force-dynamic"` to avoid prerender `Invalid URL` with `@vercel/og` on this stack.

@@ -22,8 +22,9 @@ async function main() {
 
   const ClickMintGame = await ethers.getContractFactory("ClickMintGame");
   const clickPerEthWei = ethers.parseEther("1000");
-  const clickCostCredits = 0n;
-  const baseClickReward = ethers.parseEther("0.25");
+  /// ~1 USD cent per click at ~$3.5k ETH — tune on mainnet via `setEconomy`.
+  const clickCostCredits = ethers.parseEther("1") / 350_000n;
+  const baseClickReward = ethers.parseEther("5");
   const game = await ClickMintGame.deploy(
     owner,
     await click.getAddress(),

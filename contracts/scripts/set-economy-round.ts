@@ -7,8 +7,8 @@
  * Env (optional overrides):
  *   GAME_ADDRESS — ClickMintGame proxy (required)
  *   CLICK_PER_ETH_WEI — default 1000e18 (POT mint rate numerator, same as deploy sample)
- *   CLICK_COST_CREDITS — default 0.001e18 wei deducted from credits per click (0 for free clicks)
- *   BASE_CLICK_REWARD — default 5e18 (5 whole CLICK per click into vesting vault)
+ *   CLICK_COST_CREDITS — default ~(1 US cent)/click at ~$3.5k ETH: 1e18/350_000 wei (0 = free clicks)
+ *   BASE_CLICK_REWARD — default 5e18 (5 whole $CLICK per click into vesting vault)
  */
 import { ethers } from "hardhat";
 
@@ -24,7 +24,7 @@ async function main() {
 
   const clickCostCredits = process.env.CLICK_COST_CREDITS?.trim()
     ? ethers.toBigInt(process.env.CLICK_COST_CREDITS)
-    : ethers.parseEther("0.001");
+    : ethers.parseEther("1") / 350_000n;
 
   const baseClickReward = process.env.BASE_CLICK_REWARD?.trim()
     ? ethers.toBigInt(process.env.BASE_CLICK_REWARD)

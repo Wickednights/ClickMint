@@ -109,7 +109,17 @@ contract ClickMintGame is Ownable, ReentrancyGuard {
         return uint8(_minuteInUtcHour(ts) / 15);
     }
 
-    /// @notice Split fees, grant full credits (wei), accrue POT in ETH.
+    /// @dev Extra game credits on larger single deposits (same wei units as `credits`). Tiers: 1%..10% of deposit.
+    function _depositBonusWei(uint256 v) internal pure returns (uint256) {
+        if (v >= 1 ether) return (v * 1000) / BPS;
+        if (v >= 0.5 ether) return (v * 700) / BPS;
+        if (v >= 0.25 ether) return (v * 500) / BPS;
+        if (v >= 0.1 ether) return (v * 300) / BPS;
+        if (v >= 0.01 ether) return (v * 100) / BPS;
+        return 0;
+    }
+
+    /// @notice Split fees, grant credits (deposit + tier bonus), accrue POT in ETH.
     function deposit() external payable nonReentrant {
         uint256 v = msg.value;
         require(v > 0, "game: eth");
@@ -123,12 +133,13 @@ contract ClickMintGame is Ownable, ReentrancyGuard {
         (bool okS,) = secretWallet.call{value: fs}("");
         require(okT && okS, "game: fee send");
 
-        credits[msg.sender] += v;
+        uint256 bonus = _depositBonusWei(v);
+        credits[msg.sender] += v + bonus;
 
         uint256 hid = gameHour(block.timestamp);
         potEthByHour[hid] += fp;
 
-        emit Deposited(msg.sender, v, v);
+        emit Deposited(msg.sender, v, v + bonus);
     }
 
     /// @notice One click: consumes credits, 2 per block max, records hourly stats + window activity.
