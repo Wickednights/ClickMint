@@ -4,6 +4,9 @@ import { Toaster } from "sonner";
 import { Providers } from "./providers";
 import "./globals.css";
 
+const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, "") ?? "https://clickmint-blue.vercel.app";
+
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",
   subsets: ["latin"],
@@ -17,8 +20,31 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "CLICKMINT // SYSTEM_READY",
   description: "Base Sepolia terminal — credits, vested CLICK, hourly POT",
+  openGraph: {
+    title: "CLICKMINT // SYSTEM_READY",
+    description: "Base Sepolia terminal — credits, vested CLICK, hourly POT",
+    type: "website",
+    locale: "en_US",
+    siteName: "ClickMint",
+    url: "/",
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "ClickMint — neon CLICK button",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "CLICKMINT // SYSTEM_READY",
+    description: "Base Sepolia terminal — credits, vested CLICK, hourly POT",
+    images: ["/opengraph-image"],
+  },
 };
 
 export default function RootLayout({

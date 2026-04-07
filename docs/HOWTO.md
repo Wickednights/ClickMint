@@ -1,0 +1,128 @@
+# ClickMint — how-to
+
+## Prerequisites
+
+- Node.js 20+ (recommended)
+- npm
+- A wallet on **Base Sepolia** (chain id `84532`)
+- Optional: [QuickNode](https://www.quicknode.com/) or other RPC URL for Base Sepolia
+
+## Repository layout
+
+| Path | Purpose |
+|------|---------|
+| `contracts/` | Hardhat — Solidity, deploy scripts |
+| `frontend/` | Next.js 15 — game UI, wagmi |
+| `docs/` | Architecture, issues, this guide, dev log |
+
+## Contracts
+
+### Install and compile
+
+```bash
+cd contracts
+npm install
+npx hardhat compile
+```
+
+### Deploy (local or network per `hardhat.config.ts`)
+
+```bash
+cd contracts
+npx hardhat run scripts/deploy.ts --network <networkName>
+```
+
+Note the printed addresses for **CLICK**, **ClickMintGame**, **Treasury**, **SecretPrizeWallet**, **BinaryTrophyNFT**, **Escrow**.
+
+### Link CLICK token to the game
+
+After deploy, `deploy.ts` normally calls `CLICK.setGame(gameAddress)`. If you deploy manually or reset state:
+
+```bash
+cd contracts
+npx hardhat run scripts/set-game.ts --network <networkName>
+```
+
+(Adjust `set-game.ts` env / Hardhat vars so it knows CLICK and game addresses.)
+
+### Economy tuning (owner)
+
+On **ClickMintGame**, owner can call:
+
+- `setEconomy(clickPerEthWei, clickCostCredits, baseClickReward)` — POT mint rate, per-click credit cost, per-click vested CLICK grant.
+
+If **`baseClickReward`** is `0`, clicks do not add to users’ CLICK vesting vault; early spend will have no unvested balance.
+
+**Readable testnet numbers:** run (with `GAME_ADDRESS` and owner key in `.env`):
+
+```bash
+cd contracts
+GAME_ADDRESS=0xYourGame npx hardhat run scripts/set-economy-round.ts --network baseSepolia
+```
+
+Defaults: `baseClickReward = 5` CLICK, `clickCostCredits = 0.001` ETH-worth of credits per click. Override with env vars documented in the script header.
+
+## Frontend
+
+### Install
+
+```bash
+cd frontend
+npm install
+```
+
+### Environment
+
+Copy `frontend/.env.example` → `frontend/.env.local` (or use root `.env` if your setup loads it). Set at minimum:
+
+- `NEXT_PUBLIC_GAME_ADDRESS` — ClickMintGame proxy/impl address  
+- `NEXT_PUBLIC_CLICK_ADDRESS` — CLICK token address  
+- Optional: `NEXT_PUBLIC_TROPHY_NFT_ADDRESS`, treasury/secret/escrow if the UI references them  
+- `NEXT_PUBLIC_QUICKNODE_RPC` — optional RPC (else public Base Sepolia endpoint in `wagmi.ts`)  
+- `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` — optional; enables WalletConnect QR in the connect modal  
+
+### Dev server
+
+```bash
+cd frontend
+npm run dev
+```
+
+Open the shown localhost URL.
+
+### Production build
+
+```bash
+cd frontend
+npm run build
+npm start
+```
+
+### Audio assets
+
+Place files under `frontend/public/sounds/`:
+
+- `button_click.mp3` — click SFX  
+- `cyberpunkbg.mp3` — optional loop for BGM  
+
+Browsers require a user gesture (click/key) before audio unlocks.
+
+## Wallet behavior
+
+- **One signature per on-chain action** is normal for EOAs: each `click()`, `deposit()`, `claimVested()`, `earlySpendPending()`, etc. is its own transaction unless you add a relayer, smart wallet batching, or session keys (not in this repo).
+
+## Troubleshooting
+
+| Symptom | Things to check |
+|--------|------------------|
+| “Wrong network” / mainnet prompt | Ensure wallet on Base Sepolia; header / CLICK flow should request switch. |
+| Early spend fails / “rejected” | Unvested must be ≥ amount; see `docs/ARCHITECTURE.md` and `docs/KNOWN_ISSUES.md`. |
+| No CLICK from clicks | Read `baseClickReward` on game; if zero, owner must `setEconomy` or rewards come from POT only. |
+| WalletConnect missing | Set `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`. |
+| Connector build warnings | Optional peers for unused wagmi connector exports; core MetaMask/CB/WC paths install the packages added in `frontend/package.json`. |
+
+## Related docs
+
+- `docs/ARCHITECTURE.md` — contract relationships  
+- `docs/KNOWN_ISSUES.md` — checklist  
+- `docs/DEVELOPMENT_LOG.md` — change history  

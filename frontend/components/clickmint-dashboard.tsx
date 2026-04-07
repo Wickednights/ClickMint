@@ -14,7 +14,13 @@ import {
   usePublicClient,
 } from "wagmi";
 import { WalletPickerDialog } from "@/components/wallet-picker-dialog";
-import { estimatedPlaysFromCreditsWei, formatPlayCount, DISPLAY_PLAY_ETH } from "@/lib/game-display";
+import {
+  budgetStepsFromCredits,
+  formatClickWhole,
+  formatPlayCountBigint,
+  onChainPlaysRemaining,
+  DISPLAY_PLAY_ETH,
+} from "@/lib/game-display";
 import { baseSepolia } from "wagmi/chains";
 import { formatEther, parseEther, type Address } from "viem";
 import { toast } from "sonner";
@@ -54,15 +60,6 @@ function fmtToken(wei: bigint | undefined, maxFrac = 2) {
   if (wei === undefined) return "—";
   const n = Number(formatEther(wei));
   if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("en-US", { maximumFractionDigits: maxFrac });
-}
-
-/** Formats CLICK (18 decimals); keeps tiny vesting amounts readable. */
-function fmtVest(wei: bigint, maxFrac = 8) {
-  const n = Number(formatEther(wei));
-  if (!Number.isFinite(n)) return "—";
-  if (n === 0) return "0";
-  if (n < 1e-6) return n.toExponential(3);
   return n.toLocaleString("en-US", { maximumFractionDigits: maxFrac });
 }
 
@@ -175,7 +172,17 @@ export function ClickMintDashboard() {
     query: { enabled: !!gameAddr && !!address },
   });
 
-  const playsRemainingUi = useMemo(() => estimatedPlaysFromCreditsWei(credits), [credits]);
+  const [pendingClickDebit, setPendingClickDebit] = useState(0n);
+  useEffect(() => {
+    setPendingClickDebit(0n);
+  }, [credits]);
+
+  const effectiveCreditsWei = useMemo(() => {
+    if (credits === undefined) return undefined;
+    const p = pendingClickDebit;
+    if (p >= credits) return 0n;
+    return credits - p;
+  }, [credits, pendingClickDebit]);
 
   const { data: clickCostCredits } = useReadContract({
     address: gameAddr,
@@ -183,6 +190,13 @@ export function ClickMintDashboard() {
     functionName: "clickCostCredits",
     query: { enabled: !!gameAddr },
   });
+
+  const playsRemainingBig = useMemo(() => {
+    if (effectiveCreditsWei === undefined) return 0n;
+    return onChainPlaysRemaining(effectiveCreditsWei, clickCostCredits);
+  }, [effectiveCreditsWei, clickCostCredits]);
+
+  const unlimitedClicks = clickCostCredits !== undefined && clickCostCredits === 0n;
 
   const { data: gameClickTokenAddr } = useReadContract({
     address: gameAddr,
@@ -211,6 +225,21 @@ export function ClickMintDashboard() {
     abi: clickMintGameAbi,
     functionName: "currentPotEth",
     query: { enabled: !!gameAddr, refetchInterval: 12_000 },
+  });
+
+  const { data: potCarryWei } = useReadContract({
+    address: gameAddr,
+    abi: clickMintGameAbi,
+    functionName: "potCarry",
+    query: { enabled: !!gameAddr, refetchInterval: 12_000 },
+  });
+
+  const { data: potHourWei } = useReadContract({
+    address: gameAddr,
+    abi: clickMintGameAbi,
+    functionName: "potEthByHour",
+    args: gameHourNow !== undefined ? [gameHourNow] : undefined,
+    query: { enabled: !!gameAddr && gameHourNow !== undefined, refetchInterval: 12_000 },
   });
 
   const { data: baseClickReward } = useReadContract({
@@ -351,6 +380,7 @@ export function ClickMintDashboard() {
         value: parseEther(eth),
       });
       void refetchCredits();
+      void refetchPot();
       toast.success(`Credits +${eth} ETH`);
     } catch (e) {
       sfxRef.current.playError();
@@ -405,6 +435,9 @@ export function ClickMintDashboard() {
         ...request,
         chainId: baseSepolia.id,
       });
+      if (clickCostCredits !== undefined && clickCostCredits > 0n) {
+        setPendingClickDebit((d) => d + clickCostCredits);
+      }
       const ts = Date.now();
       setLastOnchainClickTs(ts);
       if (typeof window !== "undefined") window.localStorage.setItem(LAST_CLICK_KEY, String(ts));
@@ -538,11 +571,12 @@ export function ClickMintDashboard() {
   const vestingDisplay = useMemo(() => {
     const u = unvestedWei ?? 0n;
     const c = claimable ?? 0n;
+    const br = baseClickReward;
     return {
-      unvestedLabel: fmtVest(u),
-      claimableLine: `${fmtVest(c)} claimable now`,
+      unvestedLabel: formatClickWhole(u, br),
+      claimableLine: `${formatClickWhole(c, br)} claimable now`,
     };
-  }, [unvestedWei, claimable]);
+  }, [unvestedWei, claimable, baseClickReward]);
 
   const parsedEarlySpend: { ok: true; wei: bigint } | { ok: false } = useMemo(() => {
     const t = earlyAmt.trim();
@@ -594,7 +628,7 @@ export function ClickMintDashboard() {
               >
                 <span>{e} ETH</span>
                 <span className="mt-1 font-body text-[8px] normal-case tracking-normal text-secondary opacity-80">
-                  ~{formatPlayCount(estimatedPlaysFromCreditsWei(parseEther(e)))} plays
+                  ~{formatPlayCountBigint(budgetStepsFromCredits(parseEther(e)))} credit steps
                 </span>
               </button>
             ))}
@@ -622,20 +656,35 @@ export function ClickMintDashboard() {
         <div className="w-full text-center">
           <div className="flex items-center justify-center gap-8 md:gap-10">
             <div className="text-center">
-              <p className="mb-1 font-label text-[10px] uppercase tracking-widest text-secondary">Credits</p>
-              <p className="font-headline text-3xl font-black text-white md:text-4xl">{fmtCreditsEth(credits)}</p>
-              <p className="mt-1 font-body text-[9px] text-primary-fixed/90">
-                {clickCostCredits === 0n
-                  ? "Plays left: unlimited"
-                  : `Plays left (≈${DISPLAY_PLAY_ETH} ETH each): ${formatPlayCount(playsRemainingUi)}`}
+              <p className="mb-1 font-label text-[10px] uppercase tracking-widest text-secondary">Click credits</p>
+              <p className="font-headline text-3xl font-black text-white md:text-4xl md:tabular-nums">
+                {clickCostCredits === undefined ? "—" : unlimitedClicks ? "∞" : formatPlayCountBigint(playsRemainingBig)}
               </p>
+              <p className="mt-1 font-body text-[9px] text-primary-fixed/90">
+                {clickCostCredits === undefined
+                  ? "Loading click cost…"
+                  : unlimitedClicks
+                    ? "Zero wei click cost — unlimited on-chain clicks while your credit wei balance lasts."
+                    : `Clicks remaining (each click burns ${clickCostCredits.toString()} wei from credits)`}
+              </p>
+              {credits !== undefined && (
+                <p className="mt-0.5 font-body text-[8px] text-secondary opacity-70">
+                  Deposit backing: <span className="text-outline">{fmtCreditsEth(credits)} ETH</span>
+                  {!unlimitedClicks && (
+                    <>
+                      {" "}
+                      · ~{formatPlayCountBigint(budgetStepsFromCredits(credits))} × {DISPLAY_PLAY_ETH} ETH steps
+                    </>
+                  )}
+                </p>
+              )}
             </div>
             <div className="h-10 w-px bg-outline-variant/30" aria-hidden />
             <div className="text-center">
               <p className="mb-1 font-label text-[10px] uppercase tracking-widest text-secondary">Unvested CLICK</p>
               <p
                 className="font-headline text-3xl font-black text-primary-fixed text-glow md:text-4xl md:tabular-nums"
-                title="Slice of your vesting vault not yet unlocked linearly — this is the cap for earlySpendPending."
+                title="Whole-number style uses baseClickReward multiples, then mCLICK / wei. Early spend only uses this slice."
               >
                 {vestingDisplay.unvestedLabel}
               </p>
@@ -647,7 +696,7 @@ export function ClickMintDashboard() {
           <p className="mt-2 font-body text-[9px] leading-snug text-secondary opacity-70">
             Contract <span className="font-mono">pendingVested</span> = unvested (early-spend cap).{" "}
             <span className="font-mono">claimable</span> = vested slice you can mint with claim — not spendable via early
-            spend.
+            spend. Early spend / claim changes CLICK balances only — not click-game credits.
           </p>
           <p className="mt-3 font-body text-[10px] tracking-wide text-secondary opacity-50">
             10 min vesting (testnet) ·{" "}
@@ -749,8 +798,31 @@ export function ClickMintDashboard() {
             </span>
             <span className="text-primary-fixed">{potFillPct.toFixed(0)}%</span>
           </div>
+          <p className="font-body text-[8px] leading-snug text-secondary opacity-80">
+            This hour (deposits only):{" "}
+            <span className="text-primary-fixed/90">
+              {potHourWei !== undefined
+                ? Number(formatEther(potHourWei)).toLocaleString("en-US", { maximumFractionDigits: 6 })
+                : "—"}{" "}
+              ETH
+            </span>
+            {" · "}
+            Carry:{" "}
+            <span className="text-primary-fixed/90">
+              {potCarryWei !== undefined
+                ? Number(formatEther(potCarryWei)).toLocaleString("en-US", { maximumFractionDigits: 6 })
+                : "—"}{" "}
+              ETH
+            </span>
+          </p>
+          <p className="font-body text-[8px] leading-snug text-outline opacity-70">
+            Clicks do not fund the pot — only <span className="font-mono">deposit()</span> moves 1% of each deposit into
+            this game hour. If you have not deposited during <em>this</em> hour, the hour line can be 0 while carry reflects
+            earlier finalizations.
+          </p>
           <p className="font-body text-[8px] uppercase tracking-wider text-outline opacity-60">
-            Bar = pot size vs {formatEther(POT_BAR_DISPLAY_MAX)} ETH display cap (on-chain value from currentPotEth)
+            Bar = total vs {formatEther(POT_BAR_DISPLAY_MAX)} ETH display cap (
+            <span className="font-mono">currentPotEth</span>)
           </p>
           <div className="h-px w-full overflow-hidden bg-surface-container-highest">
             <div
@@ -771,6 +843,10 @@ export function ClickMintDashboard() {
           >
             Finalize previous hour (ops)
           </button>
+          <p className="text-center font-body text-[8px] leading-snug text-secondary opacity-65">
+            Nothing auto-finalizes on-chain — call <span className="font-mono">finalizeHour</span> after the UTC hour ends
+            (keeper, cron, or this button). VRF replaces randomness quality, not scheduling.
+          </p>
         </div>
       </section>
 
@@ -824,6 +900,12 @@ export function ClickMintDashboard() {
             {lastOnchainClickTs ? `${new Date(lastOnchainClickTs).toISOString()} · ${lastOnchainClickTs}` : "—"}
           </p>
           <p>Chain: Base Sepolia ({baseSepolia.id}) · connected {chainId}</p>
+          <p>
+            potEthByHour(current):{" "}
+            {potHourWei !== undefined ? `${formatEther(potHourWei)} ETH · ${potHourWei.toString()} wei` : "—"}
+          </p>
+          <p>potCarry: {potCarryWei !== undefined ? `${formatEther(potCarryWei)} ETH` : "—"}</p>
+          <p>gameHour (client now): {gameHourNow?.toString() ?? "—"}</p>
         </div>
       </section>
     </>

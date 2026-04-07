@@ -9,6 +9,8 @@ export const clickMintGameAbi = parseAbi([
   "function totalClicksInHour(uint256 hourId) view returns (uint256)",
   "function credits(address user) view returns (uint256)",
   "function currentPotEth() view returns (uint256)",
+  "function potCarry() view returns (uint256)",
+  "function potEthByHour(uint256 hourId) view returns (uint256)",
   "function gameHour(uint256 ts) view returns (uint256)",
   "function hourWinner(uint256 hourId) view returns (address)",
   "function hourPayout(uint256 hourId) view returns (uint256)",
