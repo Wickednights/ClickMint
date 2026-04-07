@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { headers } from "next/headers";
+import { DebugContractPanel } from "@/components/debug-contract-panel";
 import { baseSepoliaDeployed, getClickAddress, getGameAddress } from "@/lib/addresses";
 
 export const dynamic = "force-dynamic";
@@ -49,9 +50,16 @@ export default async function DebugPage() {
         <code className="text-primary-fixed">frontend</code> (recommended) or rely on root{" "}
         <code className="text-primary-fixed">vercel.json</code> build commands.
       </p>
-      <Link className="mt-6 inline-block text-primary-fixed underline" href="/">
-        ← Terminal
-      </Link>
+      <DebugContractPanel />
+
+      <div className="mt-8 flex flex-wrap gap-4">
+        <Link className="text-primary-fixed underline" href="/">
+          ← Terminal
+        </Link>
+        <Link className="text-primary-fixed underline" href="/documentation">
+          Documentation
+        </Link>
+      </div>
     </main>
   );
 }

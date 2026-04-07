@@ -11,6 +11,13 @@ Format:
 
 ---
 
+### 2026-04-07T08:21:10Z — Minimal terminal UI, /documentation mechanics, Debug panel, credit formatting
+
+- **`game-display.ts`:** `formatWholeCredits` (full grouped integers, no `T+`); `isTinyClickCostWei` — flag when `clickCostCredits` is far below cent-scale (typical 1-wei test misconfig); `formatPlayCountBigint` kept for non-credit abbreviations.
+- **`app/documentation/page.tsx`:** public mechanics doc (user-provided rules: play flow, $CLICK, POT, trophies, cipher, difficulty, endgame, testnet).
+- **`components/debug-contract-panel.tsx`:** client wagmi readout (credits, costs, vesting, pot lines, game link); embedded from **`app/debug/page.tsx`** with links to Terminal + Documentation.
+- **`clickmint-dashboard.tsx`:** deposit as **collapsible** “Add credits (ETH)”; stripped stats/POT/footer copy; removed main-page debug block; sidebar **Documentation** + **Debug** (`Link` to `/documentation`, `/debug`); header **Docs**; `formatWholeCredits` for all credit counts; banner when tiny click cost; removed unused POT hour/refetch noise + `balanceOf` read; POT bar + “How the POT works” link; localStorage last-click timestamp removed.
+
 ### 2026-04-07T08:06:37Z — Click Credits as whole numbers, $CLICK branding, on-chain deposit bonuses
 
 - **`ClickMintGame.sol`:** `_depositBonusWei` — single-transaction deposit tiers add +1% … +10% extra credits (same wei unit as `credits`); `credits += v + bonus`; `Deposited` emits `creditsOut = v + bonus`.

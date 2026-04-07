@@ -41,7 +41,16 @@ export function clickCreditsFromDeposit(depositWei: bigint, clickCostWei: bigint
   return onChainPlaysRemaining(creditsGrantedOnDeposit(depositWei), clickCostWei);
 }
 
-/** Abbreviate large integer counts for UI (no scientific notation). */
+/**
+ * Click Credits and other “count” displays that must stay human-readable — **no** T+/B+ rounding.
+ * (Abbreviated `formatPlayCountBigint` made 1-wei click costs look like “30,999T+”.)
+ */
+export function formatWholeCredits(n: bigint): string {
+  if (n < 0n) return "0";
+  return n.toLocaleString("en-US");
+}
+
+/** Abbreviate for compact UI where huge numbers are unexpected (e.g. leaderboards). */
 export function formatPlayCountBigint(n: bigint): string {
   if (n < 0n) return "0";
   if (n >= 1_000_000_000_000n) return `${(n / 1_000_000_000_000n).toLocaleString()}T+`;
@@ -49,6 +58,15 @@ export function formatPlayCountBigint(n: bigint): string {
   if (n >= 1_000_000n) return `${(n / 1_000_000n).toLocaleString()}M+`;
   if (n >= 10_000n) return `${(n / 1000n).toLocaleString()}K+`;
   return n.toLocaleString("en-US");
+}
+
+/**
+ * True when `clickCostCredits` is positive but far below the designed ~cent-scale cost.
+ * Usually means test `setEconomy` left cost at **1 wei** — not a contract bug; fix via owner script.
+ */
+export function isTinyClickCostWei(clickCostWei: bigint | undefined): boolean {
+  if (clickCostWei === undefined || clickCostWei === 0n) return false;
+  return clickCostWei < parseEther("0.000001");
 }
 
 export function trimEtherString(s: string): string {
