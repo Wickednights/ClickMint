@@ -1,18 +1,14 @@
 "use client";
 
 import confetti from "canvas-confetti";
-import { useCallback, useEffect, useState } from "react";
-import useSound from "use-sound";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 const MUSIC_PREF = "clickmint-pref-music";
 const SFX_PREF = "clickmint-pref-sfx";
 
-export const SOUND_PATHS = {
-  click: "/sounds/click.mp3",
-  win: "/sounds/win.mp3",
-  nftDrop: "/sounds/nft-drop.mp3",
-  error: "/sounds/error.mp3",
-  ambient: "/sounds/ambient.mp3",
+const SRC = {
+  sfx: "/sounds/button_click.mp3",
+  ambient: "/sounds/cyberpunkbg.mp3",
 } as const;
 
 function readBoolPref(key: string, defaultValue: boolean) {
@@ -47,13 +43,35 @@ export function celebratePotWin() {
 }
 
 /**
- * Game audio via use-sound (Howler). SFX respect SFX toggle + user gesture.
- * Background loop respects music toggle + gesture; starts/stops via Howlers when prefs change.
+ * Native Audio elements — fewer moving parts than use-sound/Howler with Next.js client bundles.
  */
 export function useClickMintAudio() {
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [musicOn, setMusicOnState] = useState(() => readBoolPref(MUSIC_PREF, false));
   const [sfxOn, setSfxOnState] = useState(() => readBoolPref(SFX_PREF, true));
+
+  const clickBaseRef = useRef<HTMLAudioElement | null>(null);
+  const ambientRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const clickEl = new Audio(SRC.sfx);
+    clickEl.preload = "auto";
+    clickBaseRef.current = clickEl;
+
+    const amb = new Audio(SRC.ambient);
+    amb.preload = "auto";
+    amb.loop = true;
+    ambientRef.current = amb;
+
+    return () => {
+      clickEl.pause();
+      amb.pause();
+      clickBaseRef.current = null;
+      ambientRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof document === "undefined") return;
@@ -66,39 +84,16 @@ export function useClickMintAudio() {
     };
   }, []);
 
-  const sfxActive = sfxOn && audioUnlocked;
-  const musicActive = musicOn && audioUnlocked;
-
-  const [playClickSfx] = useSound(SOUND_PATHS.click, {
-    volume: 0.42,
-    interrupt: true,
-    soundEnabled: sfxActive,
-  });
-  const [playWinSfx] = useSound(SOUND_PATHS.win, {
-    volume: 0.5,
-    interrupt: false,
-    soundEnabled: sfxActive,
-  });
-  const [playNftSfx] = useSound(SOUND_PATHS.nftDrop, {
-    volume: 0.48,
-    interrupt: false,
-    soundEnabled: sfxActive,
-  });
-  const [playErrorSfx] = useSound(SOUND_PATHS.error, {
-    volume: 0.38,
-    interrupt: true,
-    soundEnabled: sfxActive,
-  });
-  const [playAmbient, { stop: stopAmbient }] = useSound(SOUND_PATHS.ambient, {
-    volume: 0.16,
-    loop: true,
-    soundEnabled: musicActive,
-  });
-
   useEffect(() => {
-    if (musicActive) playAmbient();
-    else stopAmbient();
-  }, [musicActive, playAmbient, stopAmbient]);
+    const amb = ambientRef.current;
+    if (!amb) return;
+    if (musicOn && audioUnlocked) {
+      amb.volume = 0.18;
+      void amb.play().catch(() => {});
+    } else {
+      amb.pause();
+    }
+  }, [musicOn, audioUnlocked]);
 
   const setMusicOn = useCallback((value: boolean) => {
     setMusicOnState(value);
@@ -110,21 +105,23 @@ export function useClickMintAudio() {
     writePref(SFX_PREF, value);
   }, []);
 
-  const playClickSuccess = useCallback(() => {
-    playClickSfx();
-  }, [playClickSfx]);
+  const playOneShot = useCallback(
+    (volume: number) => {
+      if (!sfxOn || !audioUnlocked) return;
+      const base = clickBaseRef.current;
+      if (!base) return;
+      const el = base.cloneNode(true) as HTMLAudioElement;
+      el.volume = volume;
+      el.onended = () => el.remove();
+      void el.play().catch(() => {});
+    },
+    [sfxOn, audioUnlocked]
+  );
 
-  const playWin = useCallback(() => {
-    playWinSfx();
-  }, [playWinSfx]);
-
-  const playNft = useCallback(() => {
-    playNftSfx();
-  }, [playNftSfx]);
-
-  const playError = useCallback(() => {
-    playErrorSfx();
-  }, [playErrorSfx]);
+  const playClickSuccess = useCallback(() => playOneShot(0.48), [playOneShot]);
+  const playWin = useCallback(() => playOneShot(0.32), [playOneShot]);
+  const playNft = useCallback(() => playOneShot(0.32), [playOneShot]);
+  const playError = useCallback(() => playOneShot(0.2), [playOneShot]);
 
   const celebrateWin = useCallback(() => {
     celebratePotWin();

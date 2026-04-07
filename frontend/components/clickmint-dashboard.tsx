@@ -13,6 +13,8 @@ import {
   useDisconnect,
   usePublicClient,
 } from "wagmi";
+import { WalletPickerDialog } from "@/components/wallet-picker-dialog";
+import { estimatedPlaysFromCreditsWei, formatPlayCount, DISPLAY_PLAY_ETH } from "@/lib/game-display";
 import { baseSepolia } from "wagmi/chains";
 import { formatEther, parseEther, type Address } from "viem";
 import { toast } from "sonner";
@@ -52,6 +54,15 @@ function fmtToken(wei: bigint | undefined, maxFrac = 2) {
   if (wei === undefined) return "—";
   const n = Number(formatEther(wei));
   if (!Number.isFinite(n)) return "—";
+  return n.toLocaleString("en-US", { maximumFractionDigits: maxFrac });
+}
+
+/** Formats CLICK (18 decimals); keeps tiny vesting amounts readable. */
+function fmtVest(wei: bigint, maxFrac = 8) {
+  const n = Number(formatEther(wei));
+  if (!Number.isFinite(n)) return "—";
+  if (n === 0) return "0";
+  if (n < 1e-6) return n.toExponential(3);
   return n.toLocaleString("en-US", { maximumFractionDigits: maxFrac });
 }
 
@@ -101,7 +112,6 @@ export function ClickMintDashboard() {
   const trophyAddr = getTrophyNftAddress();
 
   const {
-    audioUnlocked,
     musicOn,
     setMusicOn,
     sfxOn,
@@ -126,9 +136,11 @@ export function ClickMintDashboard() {
 
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
-  const { connect, connectors, isPending: connectPending } = useConnect();
+  const { isPending: connectPending } = useConnect();
   const { disconnect } = useDisconnect();
-  const { switchChain, isPending: switchPending } = useSwitchChain();
+  const { switchChain, switchChainAsync, isPending: switchPending } = useSwitchChain();
+
+  const [walletOpen, setWalletOpen] = useState(false);
 
   const { writeContractAsync, isPending: writePending } = useWriteContract();
   const publicClient = usePublicClient({ chainId: baseSepolia.id });
@@ -155,13 +167,15 @@ export function ClickMintDashboard() {
     query: { enabled: !!gameAddr && prevHour !== undefined },
   });
 
-  const { data: credits } = useReadContract({
+  const { data: credits, refetch: refetchCredits } = useReadContract({
     address: gameAddr,
     abi: clickMintGameAbi,
     functionName: "credits",
     args: address ? [address] : undefined,
     query: { enabled: !!gameAddr && !!address },
   });
+
+  const playsRemainingUi = useMemo(() => estimatedPlaysFromCreditsWei(credits), [credits]);
 
   const { data: clickCostCredits } = useReadContract({
     address: gameAddr,
@@ -199,7 +213,14 @@ export function ClickMintDashboard() {
     query: { enabled: !!gameAddr, refetchInterval: 12_000 },
   });
 
-  const { data: claimable } = useReadContract({
+  const { data: baseClickReward } = useReadContract({
+    address: gameAddr,
+    abi: clickMintGameAbi,
+    functionName: "baseClickReward",
+    query: { enabled: !!gameAddr },
+  });
+
+  const { data: claimable, refetch: refetchClaimable } = useReadContract({
     address: clickAddr,
     abi: clickTokenAbi,
     functionName: "claimable",
@@ -207,7 +228,8 @@ export function ClickMintDashboard() {
     query: { enabled: !!clickAddr && !!address, refetchInterval: 10_000 },
   });
 
-  const { data: pending } = useReadContract({
+  /** On-chain name is pendingVested — it is the still-unvested slice (early-spend cap), not “pending rewards” total. */
+  const { data: unvestedWei, refetch: refetchUnvested } = useReadContract({
     address: clickAddr,
     abi: clickTokenAbi,
     functionName: "pendingVested",
@@ -215,8 +237,16 @@ export function ClickMintDashboard() {
     query: { enabled: !!clickAddr && !!address, refetchInterval: 10_000 },
   });
 
+  const { data: clickBalance, refetch: refetchClickBalance } = useReadContract({
+    address: clickAddr,
+    abi: clickTokenAbi,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: { enabled: !!clickAddr && !!address, refetchInterval: 12_000 },
+  });
+
   const [potRows, setPotRows] = useState<PotRow[]>([]);
-  const [earlyAmt, setEarlyAmt] = useState("1");
+  const [earlyAmt, setEarlyAmt] = useState("");
   const [mobileTab, setMobileTab] = useState<MobileTab>("terminal");
   const [historyOpen, setHistoryOpen] = useState(false);
   const lastClientClick = useRef(0);
@@ -314,11 +344,13 @@ export function ClickMintDashboard() {
     if (!gameAddr || wrongChain || !address) return;
     try {
       await writeContractAsync({
+        chainId: baseSepolia.id,
         address: gameAddr,
         abi: clickMintGameAbi,
         functionName: "deposit",
         value: parseEther(eth),
       });
+      void refetchCredits();
       toast.success(`Credits +${eth} ETH`);
     } catch (e) {
       sfxRef.current.playError();
@@ -330,7 +362,15 @@ export function ClickMintDashboard() {
   };
 
   const onClick = async () => {
-    if (!gameAddr || wrongChain || !address) return;
+    if (!gameAddr || !address) return;
+    if (wrongChain) {
+      try {
+        await switchChainAsync({ chainId: baseSepolia.id });
+      } catch {
+        toast.error("Switch to Base Sepolia in your wallet, then tap CLICK again.");
+        return;
+      }
+    }
     if (gameLinkPending) {
       toast.message("Still loading on-chain config…");
       return;
@@ -361,10 +401,17 @@ export function ClickMintDashboard() {
         functionName: "click",
         account: address,
       });
-      await writeContractAsync(request);
+      await writeContractAsync({
+        ...request,
+        chainId: baseSepolia.id,
+      });
       const ts = Date.now();
       setLastOnchainClickTs(ts);
       if (typeof window !== "undefined") window.localStorage.setItem(LAST_CLICK_KEY, String(ts));
+      void refetchCredits();
+      void refetchUnvested();
+      void refetchClaimable();
+      void refetchClickBalance();
       sfxRef.current.playClickSuccess();
       toast.success("Click sent");
     } catch (e) {
@@ -380,10 +427,14 @@ export function ClickMintDashboard() {
     if (!clickAddr || wrongChain) return;
     try {
       await writeContractAsync({
+        chainId: baseSepolia.id,
         address: clickAddr,
         abi: clickTokenAbi,
         functionName: "claimVested",
       });
+      void refetchClaimable();
+      void refetchUnvested();
+      void refetchClickBalance();
       toast.success("Vested CLICK claimed");
     } catch (e) {
       sfxRef.current.playError();
@@ -395,22 +446,63 @@ export function ClickMintDashboard() {
   };
 
   const onEarlySpend = async () => {
-    if (!clickAddr || wrongChain) return;
+    if (!clickAddr || wrongChain || !address) return;
+    const cap = unvestedWei ?? 0n;
+    let amt: bigint;
     try {
-      const amt = parseEther(earlyAmt);
+      amt = parseEther(earlyAmt.trim() === "" ? "0" : earlyAmt.trim());
+    } catch {
+      sfxRef.current.playError();
+      toast.error("Early spend", { description: "Enter a valid CLICK amount (e.g. 0.000001)." });
+      return;
+    }
+    if (amt === 0n) {
+      toast.message("Enter an amount ≤ your unvested balance (see Unvested).");
+      return;
+    }
+    if (amt > cap) {
+      sfxRef.current.playError();
+      toast.error("Early spend exceeds unvested", {
+        description:
+          cap === 0n
+            ? "You have 0 unvested CLICK in the vesting vault. Clicks must grant baseClickReward, or wait for vesting after rewards."
+            : `Max early spend now: ${formatEther(cap)} CLICK (unvested). Wallets often say "rejected" when simulation reverts.`,
+      });
+      return;
+    }
+    try {
+      if (publicClient) {
+        await publicClient.simulateContract({
+          address: clickAddr,
+          abi: clickTokenAbi,
+          functionName: "earlySpendPending",
+          args: [amt],
+          account: address,
+        });
+      }
       await writeContractAsync({
+        chainId: baseSepolia.id,
         address: clickAddr,
         abi: clickTokenAbi,
         functionName: "earlySpendPending",
         args: [amt],
       });
+      void refetchUnvested();
+      void refetchClaimable();
+      void refetchClickBalance();
       toast.success("Early spend (30/30/20/20)");
     } catch (e) {
       sfxRef.current.playError();
       const data = extractRevertData(e);
-      const msg = data ? explainRevertData(data) : (e as Error).message;
+      let msg = data ? explainRevertData(data) : (e as Error).message;
+      if (/unvested/i.test(msg) || msg.includes("click: unvested")) {
+        msg = `On-chain: amount must be ≤ unvested (${formatEther(cap)} CLICK). ${msg}`;
+      }
+      if (/user rejected|denied|rejected/i.test(msg)) {
+        msg = `${msg.slice(0, 120)} — If you did not cancel, the wallet may be hiding a revert; try a smaller amount.`;
+      }
       console.error("earlySpendPending() failed", e);
-      toast.error("Early spend failed", { description: msg.slice(0, 220) });
+      toast.error("Early spend failed", { description: msg.slice(0, 260) });
     }
   };
 
@@ -418,6 +510,7 @@ export function ClickMintDashboard() {
     if (!gameAddr || wrongChain || prevHour === undefined) return;
     try {
       await writeContractAsync({
+        chainId: baseSepolia.id,
         address: gameAddr,
         abi: clickMintGameAbi,
         functionName: "finalizeHour",
@@ -440,15 +533,6 @@ export function ClickMintDashboard() {
     return Number((potWei * 100n) / POT_BAR_DISPLAY_MAX);
   }, [potWei]);
 
-  const clicksAccounting = useMemo(() => {
-    if (clickCostCredits === undefined)
-      return { left: undefined as bigint | null | undefined, perEth: undefined as bigint | null | undefined };
-    if (clickCostCredits === 0n) return { left: null, perEth: null };
-    const left = credits !== undefined ? credits / clickCostCredits : undefined;
-    const perEth = parseEther("1") / clickCostCredits;
-    return { left, perEth };
-  }, [credits, clickCostCredits]);
-
   const cooldownLabel = cooldownMs > 0 ? (cooldownMs / 1000).toFixed(1) : "0.0";
 
   const pendingDisplay = useMemo(() => {
@@ -458,7 +542,8 @@ export function ClickMintDashboard() {
   }, [pending, claimable]);
 
   const canAct = isConnected && !wrongChain && !writePending;
-  const canSendClick = canAct && !gameLinkPending && gameLinkOk;
+  /** Allow CLICK on wrong chain so the handler can prompt a network switch. */
+  const canSendClick = isConnected && !writePending && !gameLinkPending && gameLinkOk;
 
   const terminalBody = (
     <>
@@ -472,14 +557,12 @@ export function ClickMintDashboard() {
           <p className="text-center font-label text-[10px] uppercase tracking-widest text-secondary opacity-50">
             Select amount to buy credits
           </p>
-          {clickCostCredits !== undefined && clickCostCredits > 0n && clicksAccounting.perEth !== undefined && clicksAccounting.perEth !== null && (
-            <p className="text-center font-body text-[9px] text-primary-fixed/80">
-              ~{clicksAccounting.perEth.toString()} clicks per 1 ETH credit at current cost ({formatEther(clickCostCredits)} ETH /
-              click)
-            </p>
-          )}
+          <p className="text-center font-body text-[9px] text-secondary opacity-75">
+            UI budgets <span className="text-primary-fixed/90">{DISPLAY_PLAY_ETH} ETH</span> ≈ one play. On-chain click may
+            charge less; balances still show in ETH.
+          </p>
           {clickCostCredits === 0n && (
-            <p className="text-center font-body text-[9px] text-secondary opacity-70">Clicks are free on-chain (cost = 0).</p>
+            <p className="text-center font-body text-[9px] text-secondary opacity-70">On-chain click cost is zero (unlimited plays).</p>
           )}
           <div className="grid grid-cols-3 gap-2">
             {QUICK_BUY.map((e) => (
@@ -494,11 +577,9 @@ export function ClickMintDashboard() {
                 )}
               >
                 <span>{e} ETH</span>
-                {clickCostCredits !== undefined && clickCostCredits > 0n && (
-                  <span className="mt-1 font-body text-[8px] normal-case tracking-normal text-secondary opacity-80">
-                    ~{(parseEther(e) / clickCostCredits).toString()} clicks
-                  </span>
-                )}
+                <span className="mt-1 font-body text-[8px] normal-case tracking-normal text-secondary opacity-80">
+                  ~{formatPlayCount(estimatedPlaysFromCreditsWei(parseEther(e)))} plays
+                </span>
               </button>
             ))}
           </div>
@@ -519,13 +600,11 @@ export function ClickMintDashboard() {
             <div className="text-center">
               <p className="mb-1 font-label text-[10px] uppercase tracking-widest text-secondary">Credits</p>
               <p className="font-headline text-3xl font-black text-white md:text-4xl">{fmtCreditsEth(credits)}</p>
-              {clicksAccounting.left !== undefined && (
-                <p className="mt-1 font-body text-[9px] text-primary-fixed/90">
-                  {clicksAccounting.left === null
-                    ? "Clicks left: unlimited (zero cost)"
-                    : `~${clicksAccounting.left.toString()} clicks left at this credit balance`}
-                </p>
-              )}
+              <p className="mt-1 font-body text-[9px] text-primary-fixed/90">
+                {clickCostCredits === 0n
+                  ? "Plays left: unlimited"
+                  : `Plays left (≈${DISPLAY_PLAY_ETH} ETH each): ${formatPlayCount(playsRemainingUi)}`}
+              </p>
             </div>
             <div className="h-10 w-px bg-outline-variant/30" aria-hidden />
             <div className="text-center">
@@ -581,7 +660,8 @@ export function ClickMintDashboard() {
             onClick={() => void onClick()}
             className={cn(
               "relative z-10 flex h-56 w-56 flex-col items-center justify-center font-headline font-black uppercase transition-transform active:scale-90",
-              "rounded-full border-4 border-primary-container bg-surface-container md:rounded-none md:border-0 md:bg-primary-fixed md:text-on-primary-fixed md:neon-pulse"
+              "rounded-full border-4 border-primary-container bg-surface-container md:rounded-none md:border-0 md:bg-primary-fixed md:text-on-primary-fixed md:neon-pulse",
+              wrongChain && "ring-2 ring-amber-400/80"
             )}
           >
             <span className="absolute inset-0 bg-gradient-to-tr from-primary-container/20 to-transparent md:hidden" />
@@ -592,6 +672,11 @@ export function ClickMintDashboard() {
               EXECUTE
             </span>
           </button>
+          {wrongChain && (
+            <p className="max-w-xs text-center font-body text-[9px] uppercase tracking-wider text-amber-200/90">
+              Wrong network — tap CLICK to switch to Base Sepolia, or use the header link.
+            </p>
+          )}
           <div className="border border-outline-variant/30 bg-surface-container-low px-4 py-2 font-label text-[10px] uppercase tracking-widest text-primary-fixed">
             <span className="inline-flex items-center gap-2">
               <span
@@ -640,37 +725,6 @@ export function ClickMintDashboard() {
 
       {/* Info */}
       <section className="max-w-lg space-y-8 text-center">
-        <div className="flex flex-col items-center gap-2">
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            <button
-              type="button"
-              onClick={() => setMusicOn(!musicOn)}
-              className={cn(
-                "border border-outline-variant/40 px-3 py-1.5 font-label text-[9px] uppercase tracking-widest transition-colors",
-                musicOn ? "border-primary-fixed text-primary-fixed" : "text-secondary opacity-70 hover:text-primary-fixed"
-              )}
-            >
-              {musicOn ? "Music on" : "Music off"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setSfxOn(!sfxOn)}
-              className={cn(
-                "border border-outline-variant/40 px-3 py-1.5 font-label text-[9px] uppercase tracking-widest transition-colors",
-                sfxOn ? "border-primary-fixed text-primary-fixed" : "text-secondary opacity-70 hover:text-primary-fixed"
-              )}
-            >
-              {sfxOn ? "Click sounds on" : "Click sounds off"}
-            </button>
-          </div>
-          <span className="max-w-md font-body text-[8px] leading-relaxed text-secondary opacity-50">
-            Loops <span className="font-mono">/sounds/ambient.mp3</span> after you interact · SFX from{" "}
-            <span className="font-mono">/sounds/</span> · prefs saved in this browser
-          </span>
-          {!audioUnlocked && (
-            <span className="font-body text-[8px] text-amber-200/80">Tap or keypress anywhere to unlock audio (browser policy).</span>
-          )}
-        </div>
         <p className="font-label text-[10px] uppercase leading-loose tracking-[0.25em] text-secondary opacity-60">
           Each on-chain click is a transaction (wallet signature). Gasless UX needs a relayer / session scheme later.
         </p>
@@ -728,18 +782,46 @@ export function ClickMintDashboard() {
       </div>
 
       {/* Header */}
-      <header className="fixed left-0 top-0 z-50 flex w-full items-center justify-between border-b border-outline-variant/20 bg-surface/90 px-6 py-4 font-headline uppercase tracking-tighter backdrop-blur-sm">
-        <div className="flex items-center gap-2 md:block">
-          <span className="material-symbols-outlined text-primary-fixed md:hidden">token</span>
-          <span className="text-xl font-black tracking-tighter text-white md:text-2xl">CLICKMINT</span>
+      <header className="fixed left-0 top-0 z-50 flex w-full items-center justify-between gap-3 border-b border-outline-variant/20 bg-surface/90 px-4 py-3 font-headline uppercase tracking-tighter backdrop-blur-sm md:px-6 md:py-4">
+        <div className="flex min-w-0 items-center gap-2 md:block">
+          <span className="material-symbols-outlined shrink-0 text-primary-fixed md:hidden">token</span>
+          <span className="truncate text-lg font-black tracking-tighter text-white md:text-2xl">CLICKMINT</span>
         </div>
-        <div className="flex flex-col items-end gap-1">
+        <div className="flex shrink-0 items-center gap-1.5 md:gap-2">
+          <button
+            type="button"
+            aria-pressed={musicOn ? "true" : "false"}
+            aria-label="Background music"
+            title="Background music"
+            onClick={() => setMusicOn(!musicOn)}
+            className={cn(
+              "border border-outline-variant/50 px-2 py-1 font-label text-[8px] font-bold tracking-widest transition-colors md:px-2.5 md:text-[9px]",
+              musicOn ? "border-primary-fixed text-primary-fixed" : "text-secondary opacity-60 hover:text-primary-fixed"
+            )}
+          >
+            BGM
+          </button>
+          <button
+            type="button"
+            aria-pressed={sfxOn ? "true" : "false"}
+            aria-label="Click sounds"
+            title="Click sounds"
+            onClick={() => setSfxOn(!sfxOn)}
+            className={cn(
+              "border border-outline-variant/50 px-2 py-1 font-label text-[8px] font-bold tracking-widest transition-colors md:px-2.5 md:text-[9px]",
+              sfxOn ? "border-primary-fixed text-primary-fixed" : "text-secondary opacity-60 hover:text-primary-fixed"
+            )}
+          >
+            SFX
+          </button>
+        </div>
+        <div className="flex min-w-0 flex-col items-end gap-1">
           {isConnected ? (
             <>
               <button
                 type="button"
                 onClick={() => disconnect()}
-                className="bg-primary-container px-4 py-1.5 font-headline text-xs font-bold tracking-widest text-on-primary-fixed transition-all hover:brightness-110 active:scale-95"
+                className="max-w-[11rem] truncate bg-primary-container px-3 py-1.5 font-headline text-[11px] font-bold tracking-widest text-on-primary-fixed transition-all hover:brightness-110 active:scale-95 md:max-w-none md:px-4 md:text-xs"
               >
                 {address?.slice(0, 6)}…{address?.slice(-4)}
               </button>
@@ -757,12 +839,12 @@ export function ClickMintDashboard() {
           ) : (
             <button
               type="button"
-              disabled={connectPending || !connectors[0]}
-              onClick={() => connect({ connector: connectors[0] })}
-              className="bg-primary-container px-6 py-1.5 font-headline text-xs font-bold tracking-widest text-on-primary-fixed transition-all hover:brightness-110 active:scale-95 md:px-6"
+              disabled={connectPending}
+              onClick={() => setWalletOpen(true)}
+              className="bg-primary-container px-4 py-1.5 font-headline text-[11px] font-bold tracking-widest text-on-primary-fixed transition-all hover:brightness-110 active:scale-95 md:px-6 md:text-xs"
             >
-              <span className="hidden md:inline">Connect Wallet</span>
-              <span className="md:hidden">Connect</span>
+              <span className="hidden sm:inline">Connect Wallet</span>
+              <span className="sm:hidden">Connect</span>
             </button>
           )}
         </div>
@@ -807,9 +889,7 @@ export function ClickMintDashboard() {
             Documentation
           </a>
         </nav>
-        <div className="mt-auto px-6 py-8 font-body text-[10px] uppercase tracking-widest text-secondary opacity-50">
-          ©2026 CLICKMINT // SYSTEM_READY
-        </div>
+        <div className="mt-auto px-6 py-8" aria-hidden />
       </aside>
 
       {/* Main */}
@@ -902,6 +982,8 @@ export function ClickMintDashboard() {
 
       {/* Mobile scanline hint */}
       <div className="pointer-events-none fixed inset-0 z-[100] opacity-[0.02] md:hidden bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(0,251,251,0.03)_2px,rgba(0,251,251,0.03)_4px)]" />
+
+      <WalletPickerDialog open={walletOpen} onOpenChange={setWalletOpen} />
     </div>
   );
 }
