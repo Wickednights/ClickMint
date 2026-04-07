@@ -1,12 +1,18 @@
-import { parseEther } from "viem";
+import { formatEther, parseEther } from "viem";
 
-/** Deposit grid step — used only for “~N deposit steps” hint, not on-chain click cost. */
+/** Deposit grid step — “credit steps” UX, not on-chain click cost. */
 export const DISPLAY_PLAY_ETH = 0.001;
 const WEI_PER_BUDGET_STEP = parseEther("0.001");
 
+/** If per-click cost is below this (in wei), UI shows ETH-backed credits instead of credits÷cost (avoids trillion-scale counts). */
+export const DUST_CLICK_COST_WEI = parseEther("0.00001");
+
+export function isDustClickCost(clickCostWei: bigint | undefined): boolean {
+  return clickCostWei !== undefined && clickCostWei > 0n && clickCostWei < DUST_CLICK_COST_WEI;
+}
+
 /**
- * On-chain clicks still available: credits / clickCost. Use when `clickCostCredits > 0`.
- * Integer math — avoids float drift (e.g. 0.021 ETH credits showing 20 instead of 21 steps).
+ * On-chain clicks still available: credits / clickCost. Use when showing raw counter and cost is not dust.
  */
 export function onChainPlaysRemaining(creditsWei: bigint | undefined, clickCostWei: bigint | undefined): bigint {
   if (creditsWei === undefined || creditsWei === 0n) return 0n;
@@ -30,25 +36,66 @@ export function formatPlayCountBigint(n: bigint): string {
   return n.toLocaleString("en-US");
 }
 
+export function trimEtherString(s: string): string {
+  if (!s.includes(".")) return s;
+  const t = s.replace(/\.?0+$/, "");
+  return t === "" ? "0" : t;
+}
+
 /**
- * Whole-number style for tiny CLICK balances: prefer “≈ N × base rewards”, then milli-CLICK, then raw wei.
+ * Human-readable vesting vault slice: whole number = count of per-click grants when baseReward fits,
+ * never “×” (reads as multiply). Subcaption is always exact CLICK (trimmed ether).
  */
-export function formatClickWhole(wei: bigint, baseRewardWei?: bigint): string {
-  if (wei === 0n) return "0";
+export function vestingVaultDisplay(wei: bigint, baseRewardWei?: bigint): {
+  headline: string;
+  caption: string;
+  exactClick: string;
+} {
+  const exactClick = `${trimEtherString(formatEther(wei))} CLICK`;
+  if (wei === 0n) {
+    return { headline: "0", caption: "CLICK in vesting", exactClick };
+  }
   if (baseRewardWei !== undefined && baseRewardWei > 0n) {
-    const multiples = wei / baseRewardWei;
-    const rem = wei % baseRewardWei;
-    if (multiples > 0n) {
-      return rem === 0n ? `${multiples.toLocaleString()}× reward` : `≈ ${multiples.toLocaleString()}× reward`;
+    const grants = wei / baseRewardWei;
+    if (grants > 0n) {
+      return {
+        headline: grants.toLocaleString(),
+        caption: grants === 1n ? "per-click grant vesting" : "per-click grants vesting",
+        exactClick,
+      };
     }
   }
-  const milli = 10n ** 15n; // 0.001 CLICK
-  const m = wei / milli;
-  if (m > 0n) return `${m.toLocaleString()} mCLICK`;
-  const micro = 10n ** 12n;
-  const u = wei / micro;
-  if (u > 0n) return `${u.toLocaleString()} µCLICK`;
-  return `${wei.toLocaleString()} wei`;
+  return {
+    headline: trimEtherString(formatEther(wei)),
+    caption: "CLICK unvested",
+    exactClick,
+  };
+}
+
+export function claimableVaultDisplay(wei: bigint, baseRewardWei?: bigint): {
+  headline: string;
+  caption: string;
+  exactClick: string;
+} {
+  const exactClick = `${trimEtherString(formatEther(wei))} CLICK`;
+  if (wei === 0n) {
+    return { headline: "0", caption: "ready to claim", exactClick };
+  }
+  if (baseRewardWei !== undefined && baseRewardWei > 0n) {
+    const grants = wei / baseRewardWei;
+    if (grants > 0n) {
+      return {
+        headline: grants.toLocaleString(),
+        caption: grants === 1n ? "vested grant claimable" : "vested grants claimable",
+        exactClick,
+      };
+    }
+  }
+  return {
+    headline: trimEtherString(formatEther(wei)),
+    caption: "CLICK claimable",
+    exactClick,
+  };
 }
 
 /** @deprecated Use `onChainPlaysRemaining` + bigint; kept for any stray imports. */

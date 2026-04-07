@@ -16,9 +16,12 @@ import {
 import { WalletPickerDialog } from "@/components/wallet-picker-dialog";
 import {
   budgetStepsFromCredits,
-  formatClickWhole,
+  claimableVaultDisplay,
   formatPlayCountBigint,
+  isDustClickCost,
   onChainPlaysRemaining,
+  trimEtherString,
+  vestingVaultDisplay,
   DISPLAY_PLAY_ETH,
 } from "@/lib/game-display";
 import { baseSepolia } from "wagmi/chains";
@@ -197,6 +200,7 @@ export function ClickMintDashboard() {
   }, [effectiveCreditsWei, clickCostCredits]);
 
   const unlimitedClicks = clickCostCredits !== undefined && clickCostCredits === 0n;
+  const dustClickCost = isDustClickCost(clickCostCredits);
 
   const { data: gameClickTokenAddr } = useReadContract({
     address: gameAddr,
@@ -573,8 +577,8 @@ export function ClickMintDashboard() {
     const c = claimable ?? 0n;
     const br = baseClickReward;
     return {
-      unvestedLabel: formatClickWhole(u, br),
-      claimableLine: `${formatClickWhole(c, br)} claimable now`,
+      unvested: vestingVaultDisplay(u, br),
+      claimable: claimableVaultDisplay(c, br),
     };
   }, [unvestedWei, claimable, baseClickReward]);
 
@@ -636,6 +640,48 @@ export function ClickMintDashboard() {
         </div>
       </div>
 
+      {/* Primary action — above balances; full width centers on desktop */}
+      <div className="relative flex w-full flex-col items-center space-y-4 py-2 md:py-8">
+        <div className="absolute inset-0 flex items-center justify-center opacity-10 md:hidden">
+          <div className="pulse-ring h-64 w-64 rounded-full border border-primary-container" />
+        </div>
+        <button
+          type="button"
+          disabled={!canSendClick}
+          onClick={() => void onClick()}
+          className={cn(
+            "relative z-10 flex h-56 w-56 flex-col items-center justify-center font-headline font-black uppercase transition-transform active:scale-90",
+            "md:h-[17rem] md:w-[17rem] md:mx-auto md:shrink-0",
+            "rounded-full border-4 border-primary-container bg-surface-container md:rounded-none md:border-0 md:bg-primary-fixed md:text-on-primary-fixed md:neon-pulse",
+            wrongChain && "ring-2 ring-amber-400/80"
+          )}
+        >
+          <span className="absolute inset-0 bg-gradient-to-tr from-primary-container/20 to-transparent md:hidden" />
+          <span className="relative z-20 font-headline text-5xl font-extrabold tracking-tighter text-white glitch-text md:text-6xl md:text-on-primary-fixed md:[text-shadow:none]">
+            CLICK
+          </span>
+          <span className="relative z-20 mt-1 font-label text-[10px] font-medium tracking-[0.3em] text-primary-fixed md:hidden">
+            EXECUTE
+          </span>
+        </button>
+        {wrongChain && (
+          <p className="max-w-xs text-center font-body text-[9px] uppercase tracking-wider text-amber-200/90">
+            Wrong network — tap CLICK to switch to Base Sepolia, or use the header link.
+          </p>
+        )}
+        <div className="border border-outline-variant/30 bg-surface-container-low px-4 py-2 font-label text-[10px] uppercase tracking-widest text-primary-fixed">
+          <span className="inline-flex items-center gap-2">
+            <span
+              className="material-symbols-outlined text-xs"
+              style={{ fontVariationSettings: `"FILL" 1, "wght" 400` } as CSSProperties}
+            >
+              bolt
+            </span>
+            COOLDOWN ACTIVE: {cooldownLabel}s
+          </span>
+        </div>
+      </div>
+
         {/* Stats */}
       <section className="flex w-full max-w-sm flex-col items-center space-y-10">
         {!gameLinkPending && !gameLinkOk && (
@@ -658,19 +704,33 @@ export function ClickMintDashboard() {
             <div className="text-center">
               <p className="mb-1 font-label text-[10px] uppercase tracking-widest text-secondary">Click credits</p>
               <p className="font-headline text-3xl font-black text-white md:text-4xl md:tabular-nums">
-                {clickCostCredits === undefined ? "—" : unlimitedClicks ? "∞" : formatPlayCountBigint(playsRemainingBig)}
+                {clickCostCredits === undefined
+                  ? "—"
+                  : unlimitedClicks
+                    ? "∞"
+                    : dustClickCost
+                      ? `${fmtCreditsEth(effectiveCreditsWei)} ETH`
+                      : formatPlayCountBigint(playsRemainingBig)}
               </p>
               <p className="mt-1 font-body text-[9px] text-primary-fixed/90">
                 {clickCostCredits === undefined
                   ? "Loading click cost…"
                   : unlimitedClicks
                     ? "Zero wei click cost — unlimited on-chain clicks while your credit wei balance lasts."
-                    : `Clicks remaining (each click burns ${clickCostCredits.toString()} wei from credits)`}
+                    : dustClickCost
+                      ? "Playable ETH balance after in-game holds. On-chain click uses a minimal wei debit; budgeting here follows deposit steps."
+                      : `Clicks remaining. Each click debits ${trimEtherString(formatEther(clickCostCredits))} ETH from this balance.`}
               </p>
               {credits !== undefined && (
                 <p className="mt-0.5 font-body text-[8px] text-secondary opacity-70">
                   Deposit backing: <span className="text-outline">{fmtCreditsEth(credits)} ETH</span>
-                  {!unlimitedClicks && (
+                  {!unlimitedClicks && dustClickCost && (
+                    <>
+                      {" "}
+                      · ~{formatPlayCountBigint(budgetStepsFromCredits(credits))} budget steps at {DISPLAY_PLAY_ETH} ETH
+                    </>
+                  )}
+                  {!unlimitedClicks && !dustClickCost && (
                     <>
                       {" "}
                       · ~{formatPlayCountBigint(budgetStepsFromCredits(credits))} × {DISPLAY_PLAY_ETH} ETH steps
@@ -682,17 +742,35 @@ export function ClickMintDashboard() {
             <div className="h-10 w-px bg-outline-variant/30" aria-hidden />
             <div className="text-center">
               <p className="mb-1 font-label text-[10px] uppercase tracking-widest text-secondary">Unvested CLICK</p>
-              <p
-                className="font-headline text-3xl font-black text-primary-fixed text-glow md:text-4xl md:tabular-nums"
-                title="Whole-number style uses baseClickReward multiples, then mCLICK / wei. Early spend only uses this slice."
+              <div
+                className="flex flex-col items-center gap-0.5"
+                title={`${vestingDisplay.unvested.exactClick} — early-spend cap uses this slice.`}
               >
-                {vestingDisplay.unvestedLabel}
-              </p>
+                <span className="font-headline text-3xl font-black text-primary-fixed text-glow md:text-4xl md:tabular-nums">
+                  {vestingDisplay.unvested.headline}
+                </span>
+                <span className="max-w-[10rem] font-body text-[9px] font-medium uppercase leading-tight tracking-wide text-primary-fixed/85">
+                  {vestingDisplay.unvested.caption}
+                </span>
+                <span className="font-mono text-[8px] text-secondary opacity-75">{vestingDisplay.unvested.exactClick}</span>
+              </div>
             </div>
           </div>
-          <p className="mt-1 font-body text-[8px] uppercase tracking-wider text-outline opacity-80">
-            {vestingDisplay.claimableLine}
-          </p>
+          <div className="mt-1 flex flex-col items-center gap-0.5 font-body text-[8px] uppercase tracking-wider text-outline opacity-80">
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                className="material-symbols-outlined text-[14px] text-primary-fixed/70"
+                style={{ fontVariationSettings: `"FILL" 0, "wght" 400` } as CSSProperties}
+              >
+                redeem
+              </span>
+              <span className="text-primary-fixed/90">{vestingDisplay.claimable.headline}</span>
+              <span className="normal-case tracking-normal opacity-90">{vestingDisplay.claimable.caption}</span>
+            </span>
+            <span className="font-mono text-[7px] normal-case tracking-normal opacity-65">
+              {vestingDisplay.claimable.exactClick}
+            </span>
+          </div>
           <p className="mt-2 font-body text-[9px] leading-snug text-secondary opacity-70">
             Contract <span className="font-mono">pendingVested</span> = unvested (early-spend cap).{" "}
             <span className="font-mono">claimable</span> = vested slice you can mint with claim — not spendable via early
@@ -747,47 +825,6 @@ export function ClickMintDashboard() {
               No unvested balance — early spend will revert (wallet may show “User rejected”).
             </p>
           )}
-        </div>
-
-        {/* Click control */}
-        <div className="relative flex flex-col items-center space-y-6">
-          <div className="absolute inset-0 flex items-center justify-center opacity-10 md:hidden">
-            <div className="pulse-ring h-64 w-64 rounded-full border border-primary-container" />
-          </div>
-          <button
-            type="button"
-            disabled={!canSendClick}
-            onClick={() => void onClick()}
-            className={cn(
-              "relative z-10 flex h-56 w-56 flex-col items-center justify-center font-headline font-black uppercase transition-transform active:scale-90",
-              "rounded-full border-4 border-primary-container bg-surface-container md:rounded-none md:border-0 md:bg-primary-fixed md:text-on-primary-fixed md:neon-pulse",
-              wrongChain && "ring-2 ring-amber-400/80"
-            )}
-          >
-            <span className="absolute inset-0 bg-gradient-to-tr from-primary-container/20 to-transparent md:hidden" />
-            <span className="relative z-20 font-headline text-5xl font-extrabold tracking-tighter text-white glitch-text md:text-5xl md:text-on-primary-fixed md:[text-shadow:none]">
-              CLICK
-            </span>
-            <span className="relative z-20 mt-1 font-label text-[10px] font-medium tracking-[0.3em] text-primary-fixed md:hidden">
-              EXECUTE
-            </span>
-          </button>
-          {wrongChain && (
-            <p className="max-w-xs text-center font-body text-[9px] uppercase tracking-wider text-amber-200/90">
-              Wrong network — tap CLICK to switch to Base Sepolia, or use the header link.
-            </p>
-          )}
-          <div className="border border-outline-variant/30 bg-surface-container-low px-4 py-2 font-label text-[10px] uppercase tracking-widest text-primary-fixed">
-            <span className="inline-flex items-center gap-2">
-              <span
-                className="material-symbols-outlined text-xs"
-                style={{ fontVariationSettings: `"FILL" 1, "wght" 400` } as CSSProperties}
-              >
-                bolt
-              </span>
-              COOLDOWN ACTIVE: {cooldownLabel}s
-            </span>
-          </div>
         </div>
 
         {/* POT */}
