@@ -352,7 +352,7 @@ export function ClickMintDashboard() {
           CLICK
         </Button>
         <p className="text-center text-xs text-zinc-500">
-          Max ~2 clicks/block on-chain · client 500ms cooldown
+          Max ~2 clicks/block · 500ms client cooldown · clickhash difficulty scales with hourly global clicks
         </p>
         {cooldownMs > 0 && (
           <p className="text-sm text-fuchsia-300">Cooldown: {(cooldownMs / 1000).toFixed(2)}s</p>
