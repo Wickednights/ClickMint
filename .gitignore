@@ -137,3 +137,9 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Hardhat / ClickMint contracts build outputs
+contracts/artifacts/
+contracts/cache/
+contracts/typechain-types/
+/contracts/node_modules/
