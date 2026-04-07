@@ -11,11 +11,13 @@ import {
   useSwitchChain,
   useConnect,
   useDisconnect,
+  usePublicClient,
 } from "wagmi";
 import { baseSepolia } from "wagmi/chains";
 import { formatEther, parseEther, type Address } from "viem";
 import { toast } from "sonner";
-import { clickMintGameAbi, clickTokenAbi } from "@/lib/abi";
+import { binaryTrophyAbi, clickMintGameAbi, clickTokenAbi } from "@/lib/abi";
+import { explainRevertData, extractRevertData } from "@/lib/revert-reason";
 import {
   Dialog,
   DialogContent,
@@ -24,9 +26,17 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { getClickAddress, getGameAddress } from "@/lib/addresses";
+import { getClickAddress, getGameAddress, getTrophyNftAddress } from "@/lib/addresses";
+import { useClickMintAudio } from "@/hooks/use-clickmint-audio";
 
 const QUICK_BUY = ["0.001", "0.01", "0.1", "0.25", "0.5", "1"] as const;
+
+/** Pot bar fills to 100% at this on-chain pot size (display only; tune for your campaign). */
+const POT_BAR_DISPLAY_MAX = parseEther("0.05");
+
+const LAST_CLICK_KEY = "clickmint-last-click-ts";
+
+const ZERO_ADDR = "0x0000000000000000000000000000000000000000" as const;
 
 type PotRow = {
   hourId: bigint;
@@ -88,6 +98,31 @@ function WinnerTable({ rows }: { rows: PotRow[] }) {
 export function ClickMintDashboard() {
   const gameAddr = getGameAddress();
   const clickAddr = getClickAddress();
+  const trophyAddr = getTrophyNftAddress();
+
+  const {
+    audioUnlocked,
+    musicOn,
+    setMusicOn,
+    sfxOn,
+    setSfxOn,
+    playClickSuccess,
+    playWin,
+    playNft,
+    playError,
+    celebrateWin,
+  } = useClickMintAudio();
+
+  const sfxRef = useRef({
+    playClickSuccess,
+    playWin,
+    playNft,
+    playError,
+    celebrateWin,
+  });
+  useEffect(() => {
+    sfxRef.current = { playClickSuccess, playWin, playNft, playError, celebrateWin };
+  }, [playClickSuccess, playWin, playNft, playError, celebrateWin]);
 
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
@@ -96,6 +131,7 @@ export function ClickMintDashboard() {
   const { switchChain, isPending: switchPending } = useSwitchChain();
 
   const { writeContractAsync, isPending: writePending } = useWriteContract();
+  const publicClient = usePublicClient({ chainId: baseSepolia.id });
 
   const nowTs = BigInt(Math.floor(Date.now() / 1000));
   const { data: gameHourNow } = useReadContract({
@@ -127,6 +163,35 @@ export function ClickMintDashboard() {
     query: { enabled: !!gameAddr && !!address },
   });
 
+  const { data: clickCostCredits } = useReadContract({
+    address: gameAddr,
+    abi: clickMintGameAbi,
+    functionName: "clickCostCredits",
+    query: { enabled: !!gameAddr },
+  });
+
+  const { data: gameClickTokenAddr } = useReadContract({
+    address: gameAddr,
+    abi: clickMintGameAbi,
+    functionName: "clickToken",
+    query: { enabled: !!gameAddr },
+  });
+
+  const { data: clickTokenLinkedGame } = useReadContract({
+    address: gameClickTokenAddr,
+    abi: clickTokenAbi,
+    functionName: "game",
+    query: { enabled: !!gameClickTokenAddr },
+  });
+
+  const { data: totalClicksThisHour } = useReadContract({
+    address: gameAddr,
+    abi: clickMintGameAbi,
+    functionName: "totalClicksInHour",
+    args: gameHourNow !== undefined ? [gameHourNow] : undefined,
+    query: { enabled: !!gameAddr && gameHourNow !== undefined, refetchInterval: 15_000 },
+  });
+
   const { data: potWei, refetch: refetchPot } = useReadContract({
     address: gameAddr,
     abi: clickMintGameAbi,
@@ -152,15 +217,25 @@ export function ClickMintDashboard() {
 
   const [potRows, setPotRows] = useState<PotRow[]>([]);
   const [earlyAmt, setEarlyAmt] = useState("1");
-  const [tick, setTick] = useState(0);
   const [mobileTab, setMobileTab] = useState<MobileTab>("terminal");
   const [historyOpen, setHistoryOpen] = useState(false);
   const lastClientClick = useRef(0);
   const [cooldownMs, setCooldownMs] = useState(0);
+  const [lastOnchainClickTs, setLastOnchainClickTs] = useState<number | null>(null);
+
+  const gameLinkOk = useMemo(() => {
+    if (!gameAddr || clickTokenLinkedGame === undefined) return false;
+    return clickTokenLinkedGame.toLowerCase() === gameAddr.toLowerCase();
+  }, [gameAddr, clickTokenLinkedGame]);
+
+  const gameLinkPending = !!gameClickTokenAddr && clickTokenLinkedGame === undefined;
 
   useEffect(() => {
-    const i = setInterval(() => setTick((t) => t + 1), 1000);
-    return () => clearInterval(i);
+    if (typeof window === "undefined") return;
+    const raw = window.localStorage.getItem(LAST_CLICK_KEY);
+    if (!raw) return;
+    const n = Number(raw);
+    if (Number.isFinite(n)) setLastOnchainClickTs(n);
   }, []);
 
   useEffect(() => {
@@ -186,7 +261,7 @@ export function ClickMintDashboard() {
           window: number;
           entropy: `0x${string}`;
         };
-        if (!args?.winner || args.winner === "0x0000000000000000000000000000000000000000") {
+        if (!args?.winner || args.winner === ZERO_ADDR) {
           toast.message("POT — no eligible winner; carry forward.");
           void refetchPot();
           continue;
@@ -198,6 +273,8 @@ export function ClickMintDashboard() {
           window: args.window,
           entropy: args.entropy,
         });
+        sfxRef.current.playWin();
+        sfxRef.current.celebrateWin();
         toast.success("POT WIN", {
           description: `${args.winner.slice(0, 10)}… +${formatEther(args.clickPayout)} CLICK`,
           duration: 8000,
@@ -206,6 +283,29 @@ export function ClickMintDashboard() {
       }
     },
     enabled: !!gameAddr,
+  });
+
+  useWatchContractEvent({
+    address: trophyAddr,
+    abi: binaryTrophyAbi,
+    eventName: "Transfer",
+    onLogs(logs) {
+      if (!address) return;
+      for (const log of logs) {
+        const args = log.args as unknown as { from?: Address; to?: Address; tokenId?: bigint };
+        const from = args?.from;
+        const to = args?.to;
+        if (!from || !to) continue;
+        if (from.toLowerCase() !== ZERO_ADDR.toLowerCase()) continue;
+        if (to.toLowerCase() !== address.toLowerCase()) continue;
+        sfxRef.current.playNft();
+        toast.success("Trophy NFT received", {
+          description: `Token #${args.tokenId?.toString() ?? "?"}`,
+          duration: 6000,
+        });
+      }
+    },
+    enabled: !!trophyAddr && !!address,
   });
 
   const wrongChain = isConnected && chainId !== baseSepolia.id;
@@ -221,28 +321,58 @@ export function ClickMintDashboard() {
       });
       toast.success(`Credits +${eth} ETH`);
     } catch (e) {
-      toast.error("Deposit failed", { description: (e as Error).message?.slice(0, 120) });
+      sfxRef.current.playError();
+      const data = extractRevertData(e);
+      const msg = data ? explainRevertData(data) : (e as Error).message;
+      console.error("deposit() failed", e);
+      toast.error("Deposit failed", { description: msg.slice(0, 220) });
     }
   };
 
   const onClick = async () => {
     if (!gameAddr || wrongChain || !address) return;
+    if (gameLinkPending) {
+      toast.message("Still loading on-chain config…");
+      return;
+    }
+    if (!gameLinkOk) {
+      sfxRef.current.playError();
+      toast.error("CLICK token is not linked to this game", {
+        description:
+          "On-chain CLICK.game is zero or points elsewhere. Deploy owner must run: CLICK.setGame(<ClickMintGame address>). See repo contracts/scripts/set-game.ts",
+        duration: 12_000,
+      });
+      return;
+    }
     const now = Date.now();
     if (now - lastClientClick.current < 500) {
       setCooldownMs(500 - (now - lastClientClick.current));
+      sfxRef.current.playError();
       toast.message("Cooldown");
       return;
     }
     lastClientClick.current = now;
     setCooldownMs(500);
     try {
-      await writeContractAsync({
+      if (!publicClient) throw new Error("No RPC client for Base Sepolia");
+      const { request } = await publicClient.simulateContract({
         address: gameAddr,
         abi: clickMintGameAbi,
         functionName: "click",
+        account: address,
       });
+      await writeContractAsync(request);
+      const ts = Date.now();
+      setLastOnchainClickTs(ts);
+      if (typeof window !== "undefined") window.localStorage.setItem(LAST_CLICK_KEY, String(ts));
+      sfxRef.current.playClickSuccess();
+      toast.success("Click sent");
     } catch (e) {
-      toast.error("Click failed", { description: (e as Error).message?.slice(0, 120) });
+      sfxRef.current.playError();
+      const data = extractRevertData(e);
+      const msg = data ? explainRevertData(data) : (e as Error).message;
+      console.error("click() failed", { error: e, revertData: data, explained: msg });
+      toast.error("Click failed", { description: msg.slice(0, 280), duration: 12_000 });
     }
   };
 
@@ -256,7 +386,11 @@ export function ClickMintDashboard() {
       });
       toast.success("Vested CLICK claimed");
     } catch (e) {
-      toast.error("Claim failed", { description: (e as Error).message?.slice(0, 120) });
+      sfxRef.current.playError();
+      const data = extractRevertData(e);
+      const msg = data ? explainRevertData(data) : (e as Error).message;
+      console.error("claimVested() failed", e);
+      toast.error("Claim failed", { description: msg.slice(0, 220) });
     }
   };
 
@@ -272,7 +406,11 @@ export function ClickMintDashboard() {
       });
       toast.success("Early spend (30/30/20/20)");
     } catch (e) {
-      toast.error("Early spend failed", { description: (e as Error).message?.slice(0, 120) });
+      sfxRef.current.playError();
+      const data = extractRevertData(e);
+      const msg = data ? explainRevertData(data) : (e as Error).message;
+      console.error("earlySpendPending() failed", e);
+      toast.error("Early spend failed", { description: msg.slice(0, 220) });
     }
   };
 
@@ -287,17 +425,29 @@ export function ClickMintDashboard() {
       });
       toast.message(`Finalize hour ${prevHour.toString()} sent`);
     } catch (e) {
-      toast.error("Finalize failed", { description: (e as Error).message?.slice(0, 120) });
+      sfxRef.current.playError();
+      const data = extractRevertData(e);
+      const msg = data ? explainRevertData(data) : (e as Error).message;
+      console.error("finalizeHour() failed", e);
+      toast.error("Finalize failed", { description: msg.slice(0, 220) });
     }
   };
 
   const potEthStr = potWei !== undefined ? Number(formatEther(potWei)).toLocaleString("en-US", { maximumFractionDigits: 4 }) : "0";
-  const mysteryPct = useMemo(() => {
-    const base =
-      potWei !== undefined ? Math.min(94, 20 + Number(formatEther(potWei)) * 55) : 18;
-    const wave = Math.sin((typeof performance !== "undefined" ? performance.now() : tick * 1000) / 1100) * 8;
-    return Math.min(98, Math.max(8, base + wave));
-  }, [potWei, tick]);
+  const potFillPct = useMemo(() => {
+    if (potWei === undefined || POT_BAR_DISPLAY_MAX === 0n) return 0;
+    if (potWei >= POT_BAR_DISPLAY_MAX) return 100;
+    return Number((potWei * 100n) / POT_BAR_DISPLAY_MAX);
+  }, [potWei]);
+
+  const clicksAccounting = useMemo(() => {
+    if (clickCostCredits === undefined)
+      return { left: undefined as bigint | null | undefined, perEth: undefined as bigint | null | undefined };
+    if (clickCostCredits === 0n) return { left: null, perEth: null };
+    const left = credits !== undefined ? credits / clickCostCredits : undefined;
+    const perEth = parseEther("1") / clickCostCredits;
+    return { left, perEth };
+  }, [credits, clickCostCredits]);
 
   const cooldownLabel = cooldownMs > 0 ? (cooldownMs / 1000).toFixed(1) : "0.0";
 
@@ -308,6 +458,7 @@ export function ClickMintDashboard() {
   }, [pending, claimable]);
 
   const canAct = isConnected && !wrongChain && !writePending;
+  const canSendClick = canAct && !gameLinkPending && gameLinkOk;
 
   const terminalBody = (
     <>
@@ -321,6 +472,15 @@ export function ClickMintDashboard() {
           <p className="text-center font-label text-[10px] uppercase tracking-widest text-secondary opacity-50">
             Select amount to buy credits
           </p>
+          {clickCostCredits !== undefined && clickCostCredits > 0n && clicksAccounting.perEth !== undefined && clicksAccounting.perEth !== null && (
+            <p className="text-center font-body text-[9px] text-primary-fixed/80">
+              ~{clicksAccounting.perEth.toString()} clicks per 1 ETH credit at current cost ({formatEther(clickCostCredits)} ETH /
+              click)
+            </p>
+          )}
+          {clickCostCredits === 0n && (
+            <p className="text-center font-body text-[9px] text-secondary opacity-70">Clicks are free on-chain (cost = 0).</p>
+          )}
           <div className="grid grid-cols-3 gap-2">
             {QUICK_BUY.map((e) => (
               <button
@@ -329,24 +489,43 @@ export function ClickMintDashboard() {
                 disabled={!canAct}
                 onClick={() => void onDeposit(e)}
                 className={cn(
-                  "border border-outline-variant/30 bg-surface-container py-3 font-label text-[10px] font-bold uppercase tracking-widest text-on-surface transition-colors",
+                  "flex flex-col items-center justify-center border border-outline-variant/30 bg-surface-container py-3 font-label text-[10px] font-bold uppercase tracking-widest text-on-surface transition-colors",
                   "hover:border-primary-fixed/50 hover:text-primary-fixed active:scale-[0.98] disabled:opacity-30"
                 )}
               >
-                {e}
+                <span>{e} ETH</span>
+                {clickCostCredits !== undefined && clickCostCredits > 0n && (
+                  <span className="mt-1 font-body text-[8px] normal-case tracking-normal text-secondary opacity-80">
+                    ~{(parseEther(e) / clickCostCredits).toString()} clicks
+                  </span>
+                )}
               </button>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Stats */}
+        {/* Stats */}
       <section className="flex w-full max-w-sm flex-col items-center space-y-10">
+        {!gameLinkPending && !gameLinkOk && (
+          <div className="w-full border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-center font-body text-[10px] text-amber-200">
+            On-chain misconfiguration: CLICK.game is not this ClickMintGame. Owner must call{" "}
+            <span className="font-mono text-amber-100">setGame({gameAddr})</span> on the CLICK token (see{" "}
+            <span className="font-mono">contracts/scripts/set-game.ts</span>).
+          </div>
+        )}
         <div className="w-full text-center">
           <div className="flex items-center justify-center gap-8 md:gap-10">
             <div className="text-center">
               <p className="mb-1 font-label text-[10px] uppercase tracking-widest text-secondary">Credits</p>
               <p className="font-headline text-3xl font-black text-white md:text-4xl">{fmtCreditsEth(credits)}</p>
+              {clicksAccounting.left !== undefined && (
+                <p className="mt-1 font-body text-[9px] text-primary-fixed/90">
+                  {clicksAccounting.left === null
+                    ? "Clicks left: unlimited (zero cost)"
+                    : `~${clicksAccounting.left.toString()} clicks left at this credit balance`}
+                </p>
+              )}
             </div>
             <div className="h-10 w-px bg-outline-variant/30" aria-hidden />
             <div className="text-center">
@@ -398,7 +577,7 @@ export function ClickMintDashboard() {
           </div>
           <button
             type="button"
-            disabled={!canAct}
+            disabled={!canSendClick}
             onClick={() => void onClick()}
             className={cn(
               "relative z-10 flex h-56 w-56 flex-col items-center justify-center font-headline font-black uppercase transition-transform active:scale-90",
@@ -430,16 +609,24 @@ export function ClickMintDashboard() {
         <div className="w-full max-w-sm space-y-3">
           <div className="flex justify-between font-label text-[10px] uppercase tracking-widest text-secondary">
             <span className="text-left">
-              CLICK POT GROWING: {potEthStr} ETH ({mysteryPct.toFixed(1)}%)
+              POT (this hour + carry): {potEthStr} ETH
             </span>
-            <span className="text-primary-fixed">{mysteryPct.toFixed(1)}%</span>
+            <span className="text-primary-fixed">{potFillPct.toFixed(0)}%</span>
           </div>
+          <p className="font-body text-[8px] uppercase tracking-wider text-outline opacity-60">
+            Bar = pot size vs {formatEther(POT_BAR_DISPLAY_MAX)} ETH display cap (on-chain value from currentPotEth)
+          </p>
           <div className="h-px w-full overflow-hidden bg-surface-container-highest">
             <div
-              className="h-full bg-primary-fixed transition-all duration-1000 shadow-[0_0_15px_#00fbfb]"
-              style={{ width: `${mysteryPct}%` }}
+              className="h-full bg-primary-fixed transition-all duration-700 shadow-[0_0_15px_#00fbfb]"
+              style={{ width: `${potFillPct}%` }}
             />
           </div>
+          {totalClicksThisHour !== undefined && (
+            <p className="font-body text-[8px] text-secondary opacity-70">
+              Global clicks this game hour (hash tier ramps every 5k): {totalClicksThisHour.toString()}
+            </p>
+          )}
           <button
             type="button"
             disabled={!canAct || prevHour === undefined || !!prevFinalized}
@@ -453,8 +640,42 @@ export function ClickMintDashboard() {
 
       {/* Info */}
       <section className="max-w-lg space-y-8 text-center">
+        <div className="flex flex-col items-center gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              onClick={() => setMusicOn(!musicOn)}
+              className={cn(
+                "border border-outline-variant/40 px-3 py-1.5 font-label text-[9px] uppercase tracking-widest transition-colors",
+                musicOn ? "border-primary-fixed text-primary-fixed" : "text-secondary opacity-70 hover:text-primary-fixed"
+              )}
+            >
+              {musicOn ? "Music on" : "Music off"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSfxOn(!sfxOn)}
+              className={cn(
+                "border border-outline-variant/40 px-3 py-1.5 font-label text-[9px] uppercase tracking-widest transition-colors",
+                sfxOn ? "border-primary-fixed text-primary-fixed" : "text-secondary opacity-70 hover:text-primary-fixed"
+              )}
+            >
+              {sfxOn ? "Click sounds on" : "Click sounds off"}
+            </button>
+          </div>
+          <span className="max-w-md font-body text-[8px] leading-relaxed text-secondary opacity-50">
+            Loops <span className="font-mono">/sounds/ambient.mp3</span> after you interact · SFX from{" "}
+            <span className="font-mono">/sounds/</span> · prefs saved in this browser
+          </span>
+          {!audioUnlocked && (
+            <span className="font-body text-[8px] text-amber-200/80">Tap or keypress anywhere to unlock audio (browser policy).</span>
+          )}
+        </div>
         <p className="font-label text-[10px] uppercase leading-loose tracking-[0.25em] text-secondary opacity-60">
-          Max ~2 clicks per block · Mystery POT · Binary Trophy NFTs with revenue share
+          Each on-chain click is a transaction (wallet signature). Gasless UX needs a relayer / session scheme later.
+        </p>
+        <p className="font-label text-[10px] uppercase leading-loose tracking-[0.25em] text-secondary opacity-60">
+          Max ~2 clicks per block · Hourly POT · Binary Trophy NFTs with revenue share
         </p>
         <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
           <DialogTrigger asChild>
@@ -475,6 +696,24 @@ export function ClickMintDashboard() {
             <WinnerTable rows={potRows} />
           </DialogContent>
         </Dialog>
+
+        <div className="w-full max-w-lg border border-outline-variant/30 bg-surface-container-low/80 p-4 text-left font-mono text-[10px] leading-relaxed text-secondary">
+          <p className="mb-2 font-label text-[10px] uppercase tracking-widest text-primary-fixed">Debug info</p>
+          <p>User: {address ?? "—"}</p>
+          <p>ClickMintGame: {gameAddr}</p>
+          <p>CLICK token: {gameClickTokenAddr ?? "—"}</p>
+          <p>CLICK.game: {clickTokenLinkedGame ?? "(loading)"}</p>
+          <p title="Must match game address or grantVested reverts">
+            Game link OK: {gameLinkPending ? "loading…" : gameLinkOk ? "yes" : "NO — run CLICK.setGame(game)"}
+          </p>
+          <p>Credits (wei): {credits !== undefined ? credits.toString() : "—"}</p>
+          <p>clickCostCredits: {clickCostCredits !== undefined ? `${clickCostCredits.toString()} wei` : "—"}</p>
+          <p>
+            Last click (client, after success):{" "}
+            {lastOnchainClickTs ? `${new Date(lastOnchainClickTs).toISOString()} · ${lastOnchainClickTs}` : "—"}
+          </p>
+          <p>Chain: Base Sepolia ({baseSepolia.id}) · connected {chainId}</p>
+        </div>
       </section>
     </>
   );
