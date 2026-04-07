@@ -6,11 +6,13 @@
     "compile": "hardhat compile",
     "test": "hardhat test",
     "deploy:base-sepolia": "hardhat run scripts/deploy.ts --network baseSepolia",
-    "set-game:base-sepolia": "hardhat run scripts/set-game.ts --network baseSepolia"
+    "set-game:base-sepolia": "hardhat run scripts/set-game.ts --network baseSepolia",
+    "peek:deployer-meta": "node scripts/peek-deployer-key-meta.cjs"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "@types/node": "^22.10.0",
+    "dotenv": "^17.4.1",
     "hardhat": "^2.22.17",
     "typescript": "^5.7.2"
   },

@@ -18,7 +18,15 @@ async function main() {
     throw new Error("Set GAME_ADDRESS to the ClickMintGame contract (0x…42 chars)");
   }
 
-  const [signer] = await ethers.getSigners();
+  const signers = await ethers.getSigners();
+  if (signers.length === 0) {
+    throw new Error(
+      "No Hardhat signer. Set DEPLOYER_KEY to the CLICK owner private key (0x…, 32-byte hex). " +
+        "PowerShell: $env:DEPLOYER_KEY='0xYourKeys'; $env:CLICK_ADDRESS='...'; $env:GAME_ADDRESS='...'; npm run set-game:base-sepolia. " +
+        "RPC: QUICKNODE_RPC or BASE_SEPOLIA_RPC_URL, or default https://sepolia.base.org"
+    );
+  }
+  const signer = signers[0]!;
   const click = await ethers.getContractAt("CLICK", clickAddr, signer);
   const current = await click.game();
   if (current.toLowerCase() === gameAddr.toLowerCase()) {
@@ -30,8 +38,20 @@ async function main() {
   console.log("CLICK.game was:", current);
   const tx = await click.setGame(gameAddr);
   console.log("setGame tx:", tx.hash);
-  await tx.wait();
-  console.log("CLICK.game now:", await click.game());
+  const receipt = await tx.wait();
+  if (receipt && Number(receipt.status) !== 1) {
+    throw new Error(`setGame reverted (status ${receipt.status})`);
+  }
+  const after = await click.game();
+  console.log("CLICK.game now:", String(after));
+  if (after.toLowerCase() !== gameAddr.toLowerCase()) {
+    console.warn(
+      "Read-back mismatch — verify on explorer; RPC may lag. Expected:",
+      gameAddr,
+      " Got:",
+      String(after)
+    );
+  }
 }
 
 main().catch((e) => {
