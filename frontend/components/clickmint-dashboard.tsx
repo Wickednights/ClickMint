@@ -535,11 +535,27 @@ export function ClickMintDashboard() {
 
   const cooldownLabel = cooldownMs > 0 ? (cooldownMs / 1000).toFixed(1) : "0.0";
 
-  const pendingDisplay = useMemo(() => {
-    const p = pending ?? 0n;
+  const vestingDisplay = useMemo(() => {
+    const u = unvestedWei ?? 0n;
     const c = claimable ?? 0n;
-    return { main: fmtToken(p, 0), sub: c > 0n ? `${fmtToken(c, 2)} claimable` : null };
-  }, [pending, claimable]);
+    return {
+      unvestedLabel: fmtVest(u),
+      claimableLine: `${fmtVest(c)} claimable now`,
+    };
+  }, [unvestedWei, claimable]);
+
+  const parsedEarlySpend: { ok: true; wei: bigint } | { ok: false } = useMemo(() => {
+    const t = earlyAmt.trim();
+    if (t === "") return { ok: true, wei: 0n };
+    try {
+      return { ok: true, wei: parseEther(t) };
+    } catch {
+      return { ok: false };
+    }
+  }, [earlyAmt]);
+
+  const earlySpendWei = parsedEarlySpend.ok ? parsedEarlySpend.wei : 0n;
+  const unvestedCap = unvestedWei ?? 0n;
 
   const canAct = isConnected && !wrongChain && !writePending;
   /** Allow CLICK on wrong chain so the handler can prompt a network switch. */
@@ -595,6 +611,14 @@ export function ClickMintDashboard() {
             <span className="font-mono">contracts/scripts/set-game.ts</span>).
           </div>
         )}
+        {baseClickReward !== undefined && baseClickReward === 0n && (
+          <div className="w-full border border-outline-variant/40 bg-surface-container-low/80 px-3 py-2 text-center font-body text-[10px] text-secondary">
+            <span className="text-primary-fixed/90">baseClickReward is 0</span> on this deployment — clicks do not add to
+            your CLICK vesting vault, so unvested stays 0 and early spend has nothing to take. Owner can raise{" "}
+            <span className="font-mono">baseClickReward</span> via <span className="font-mono">setEconomy</span>, or earn
+            liquid CLICK from the hourly POT (<span className="font-mono">mint</span> path).
+          </div>
+        )}
         <div className="w-full text-center">
           <div className="flex items-center justify-center gap-8 md:gap-10">
             <div className="text-center">
@@ -608,19 +632,25 @@ export function ClickMintDashboard() {
             </div>
             <div className="h-10 w-px bg-outline-variant/30" aria-hidden />
             <div className="text-center">
-              <p className="mb-1 font-label text-[10px] uppercase tracking-widest text-secondary">Pending $CLICK</p>
-              <p className="font-headline text-3xl font-black text-primary-fixed text-glow md:text-4xl">
-                {pendingDisplay.main}
+              <p className="mb-1 font-label text-[10px] uppercase tracking-widest text-secondary">Unvested CLICK</p>
+              <p
+                className="font-headline text-3xl font-black text-primary-fixed text-glow md:text-4xl md:tabular-nums"
+                title="Slice of your vesting vault not yet unlocked linearly — this is the cap for earlySpendPending."
+              >
+                {vestingDisplay.unvestedLabel}
               </p>
             </div>
           </div>
-          {pendingDisplay.sub && (
-            <p className="mt-1 font-body text-[8px] uppercase tracking-wider text-outline opacity-80">
-              {pendingDisplay.sub}
-            </p>
-          )}
+          <p className="mt-1 font-body text-[8px] uppercase tracking-wider text-outline opacity-80">
+            {vestingDisplay.claimableLine}
+          </p>
+          <p className="mt-2 font-body text-[9px] leading-snug text-secondary opacity-70">
+            Contract <span className="font-mono">pendingVested</span> = unvested (early-spend cap).{" "}
+            <span className="font-mono">claimable</span> = vested slice you can mint with claim — not spendable via early
+            spend.
+          </p>
           <p className="mt-3 font-body text-[10px] tracking-wide text-secondary opacity-50">
-            10 min vesting (testnet) · early spend ·{" "}
+            10 min vesting (testnet) ·{" "}
             <button
               type="button"
               className="text-primary-fixed/80 underline-offset-2 hover:underline"
@@ -634,19 +664,40 @@ export function ClickMintDashboard() {
             <input
               value={earlyAmt}
               onChange={(e) => setEarlyAmt(e.target.value)}
-              className="w-20 border-b border-outline bg-transparent py-1 font-body text-[10px] text-primary-fixed focus:border-primary-fixed focus:outline-none"
-              placeholder="amt"
-              title="CLICK (whole tokens)"
+              className="min-w-[5rem] flex-1 border-b border-outline bg-transparent py-1 font-body text-[10px] text-primary-fixed focus:border-primary-fixed focus:outline-none sm:max-w-[7rem]"
+              placeholder="0"
+              title="Amount of unvested CLICK to early-liquidate (≤ Unvested)"
             />
+            <button
+              type="button"
+              disabled={!canAct || unvestedCap === 0n}
+              onClick={() => setEarlyAmt(formatEther(unvestedCap))}
+              className="font-label text-[9px] font-bold uppercase tracking-widest text-secondary hover:text-primary-fixed disabled:opacity-30"
+            >
+              Max
+            </button>
             <button
               type="button"
               disabled={!canAct}
               onClick={() => void onEarlySpend()}
-              className="font-label text-[10px] font-bold uppercase tracking-widest text-primary-fixed hover:text-white"
+              className="font-label text-[10px] font-bold uppercase tracking-widest text-primary-fixed hover:text-white disabled:opacity-30"
             >
               Early spend
             </button>
           </div>
+          {canAct && !parsedEarlySpend.ok && (
+            <p className="mt-1 font-body text-[8px] text-amber-200/90">Invalid amount — use a decimal number (wei parsed as ether).</p>
+          )}
+          {canAct && parsedEarlySpend.ok && earlySpendWei > unvestedCap && unvestedCap > 0n && (
+            <p className="mt-1 font-body text-[8px] text-amber-200/90">
+              Amount exceeds unvested ({formatEther(unvestedCap)} CLICK max). Try Max.
+            </p>
+          )}
+          {canAct && unvestedCap === 0n && (
+            <p className="mt-1 font-body text-[8px] text-secondary opacity-80">
+              No unvested balance — early spend will revert (wallet may show “User rejected”).
+            </p>
+          )}
         </div>
 
         {/* Click control */}
@@ -762,6 +813,12 @@ export function ClickMintDashboard() {
           </p>
           <p>Credits (wei): {credits !== undefined ? credits.toString() : "—"}</p>
           <p>clickCostCredits: {clickCostCredits !== undefined ? `${clickCostCredits.toString()} wei` : "—"}</p>
+          <p>baseClickReward (per click): {baseClickReward !== undefined ? `${formatEther(baseClickReward)} CLICK` : "—"}</p>
+          <p title="Unvested — cap for earlySpendPending">
+            pendingVested / unvested (wei): {unvestedWei !== undefined ? `${formatEther(unvestedWei)} CLICK` : "—"}
+          </p>
+          <p>claimable (wei): {claimable !== undefined ? `${formatEther(claimable)} CLICK` : "—"}</p>
+          <p>CLICK balance (liquid): {clickBalance !== undefined ? `${formatEther(clickBalance)} CLICK` : "—"}</p>
           <p>
             Last click (client, after success):{" "}
             {lastOnchainClickTs ? `${new Date(lastOnchainClickTs).toISOString()} · ${lastOnchainClickTs}` : "—"}
