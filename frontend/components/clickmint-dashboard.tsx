@@ -660,10 +660,159 @@ export function ClickMintDashboard() {
   const canSendClick =
     isConnected && !writePending && !gaslessActionPending && !gameLinkPending && gameLinkOk;
 
+<<<<<<< HEAD
   const terminalBody = (
     <>
       {/* Alerts */}
       <div className="flex w-full max-w-xl flex-col items-center gap-2">
+=======
+  const depositPanel = (
+    <div className="flex w-full flex-col items-stretch border border-primary-fixed/20 bg-surface-container-low/60">
+      <button
+        type="button"
+        aria-expanded={depositOpen}
+        onClick={() => setDepositOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left font-headline text-sm font-bold uppercase tracking-[0.15em] text-primary-fixed transition-colors hover:bg-surface-container-low"
+      >
+        <span className="inline-flex items-center gap-2">
+          <Icon name="add_circle" className="text-lg" />
+          Add credits (ETH)
+        </span>
+        <Icon name={depositOpen ? "expand_less" : "expand_more"} className="text-xl opacity-80" />
+      </button>
+      {depositOpen ? (
+        <div className="border-t border-outline-variant/20 px-4 pb-4 pt-3 max-h-[min(28rem,52svh)] overflow-y-auto overscroll-y-contain md:max-h-[min(32rem,70vh)] md:overscroll-auto lg:max-h-none lg:overflow-visible">
+            <p className="mb-3 text-center font-body text-[12px] leading-snug text-secondary md:text-sm">
+              In-game Click Credits (not $CLICK). Bonuses apply on larger single deposits.
+            </p>
+            {clickCostCredits === 0n && (
+              <p className="mb-3 text-center font-body text-[11px] text-secondary opacity-80">0 credits charged per click on this deployment.</p>
+            )}
+            <div className="grid grid-cols-3 gap-2">
+              {QUICK_BUY.map((e) => {
+                const depWei = parseEther(e);
+                const bonusLine = depositBonusLabel(depWei);
+                const credPreview =
+                  clickCostCredits === undefined
+                    ? undefined
+                    : unlimitedClicks
+                      ? creditsGrantedOnDeposit(depWei)
+                      : clickCreditsFromDeposit(depWei, clickCostCredits);
+                const creditLine =
+                  credPreview === undefined
+                    ? "…"
+                    : unlimitedClicks
+                      ? `${formatWholeCredits(credPreview)} to balance`
+                      : tinyClickCost && credPreview > 500_000n
+                        ? "Fix click cost*"
+                        : `${formatWholeCredits(credPreview)} credits`;
+                return (
+                  <button
+                    key={e}
+                    type="button"
+                    disabled={!canAct}
+                    onClick={() => void onDeposit(e)}
+                    className={cn(
+                      "flex flex-col items-center justify-center border border-outline-variant/30 bg-surface-container py-3 font-label text-[11px] font-bold uppercase tracking-widest text-on-surface transition-colors md:text-xs",
+                      "hover:border-primary-fixed/50 hover:text-primary-fixed active:scale-[0.98] disabled:opacity-30"
+                    )}
+                  >
+                    <span>{e} ETH</span>
+                    <span
+                      className="mt-1 break-words px-0.5 text-center font-body text-[10px] font-medium normal-case tracking-normal text-primary-fixed/90 md:text-[11px]"
+                      title={tinyClickCost && credPreview !== undefined && credPreview > 500_000n ? "Owner: setEconomy on game so clickCostCredits isn’t 1 wei." : undefined}
+                    >
+                      {creditLine}
+                    </span>
+                    {bonusLine ? (
+                      <span className="mt-1 font-label text-[10px] font-bold uppercase tracking-wide text-secondary opacity-90 md:text-[11px]">
+                        {bonusLine}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+            {tinyClickCost && (
+              <p className="mt-2 text-center font-body text-[10px] text-secondary opacity-80">
+                *Credit count explodes when per-click cost is ~1 wei. Use repo{" "}
+                <span className="font-mono text-primary-fixed/80">set-economy-round.ts</span>.
+              </p>
+            )}
+            <p className="mt-3 text-center">
+              <Link href="/documentation#click-credits" className="font-label text-[10px] uppercase tracking-widest text-primary-fixed/80 underline-offset-2 hover:underline">
+                How credits work
+              </Link>
+            </p>
+          </div>
+        ) : null}
+    </div>
+  );
+
+  const terminalBody = (
+    <>
+      {/* Deposit (top on mobile, left column on md+) + centered CLICK hero */}
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-1 md:flex-row md:items-start md:justify-center md:gap-8 lg:gap-12">
+        <aside className="mx-auto w-full max-w-sm shrink-0 md:mx-0 md:w-[17.5rem] lg:w-80 md:sticky md:top-28 md:z-[5] md:self-start">
+          {depositPanel}
+        </aside>
+        <div className="relative flex min-w-0 flex-1 flex-col items-center justify-center space-y-4 py-2 md:py-8">
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-10 md:hidden">
+            <div className="pulse-ring h-64 w-64 rounded-full border border-primary-container" />
+          </div>
+          <button
+            type="button"
+            disabled={!canSendClick}
+            onClick={() => void onClick()}
+            className={cn(
+              "relative z-10 flex h-56 w-56 flex-col items-center justify-center font-headline font-black uppercase transition-transform active:scale-90",
+              "md:h-[17rem] md:w-[17rem] md:shrink-0",
+              "rounded-full border-4 border-primary-container bg-surface-container md:rounded-none md:border-0 md:bg-primary-fixed md:text-on-primary-fixed md:neon-pulse",
+              wrongChain && "ring-2 ring-amber-400/80"
+            )}
+          >
+            <span className="absolute inset-0 bg-gradient-to-tr from-primary-container/20 to-transparent md:hidden" />
+            <span className="relative z-20 font-headline text-5xl font-extrabold tracking-tighter text-white glitch-text md:text-6xl md:text-on-primary-fixed md:[text-shadow:none]">
+              CLICK
+            </span>
+            <span className="relative z-20 mt-1 font-label text-[10px] font-medium tracking-[0.3em] text-primary-fixed md:hidden">
+              EXECUTE
+            </span>
+          </button>
+          {wrongChain && (
+            <p className="max-w-xs text-center font-body text-[9px] uppercase tracking-wider text-amber-200/90">
+              Wrong network — tap CLICK to switch to Base Sepolia, or use the header link.
+            </p>
+          )}
+          <div className="border border-outline-variant/30 bg-surface-container-low px-4 py-2 font-label text-[10px] uppercase tracking-widest text-primary-fixed">
+            <span className="inline-flex items-center gap-2">
+              <span
+                className="material-symbols-outlined text-xs"
+                style={{ fontVariationSettings: `"FILL" 1, "wght" 400` } as CSSProperties}
+              >
+                bolt
+              </span>
+              {cooldownLabel !== null ? <>RATE LIMIT: {cooldownLabel}s</> : <>READY</>}
+            </span>
+          </div>
+          {gasless.status === "ready" ? (
+            <p className="max-w-md px-2 text-center font-body text-[10px] leading-snug text-secondary">
+              <span className="font-semibold text-primary-fixed/90">Gasless mode active</span> — clicks are free of gas. Your
+              EOA receives all rewards and uses your existing credits. Executor:{" "}
+              <span className="font-mono text-primary-fixed/85">
+                {gasless.smartAccountAddress
+                  ? `${gasless.smartAccountAddress.slice(0, 6)}…${gasless.smartAccountAddress.slice(-4)}`
+                  : "—"}
+              </span>
+              .
+            </p>
+          ) : null}
+        </div>
+      </div>
+
+      {/* Stats */}
+      <section className="mx-auto flex w-full max-w-sm flex-col items-center space-y-10 md:max-w-lg">
+>>>>>>> cb156908ebe9a62a386237bb3879bc2056685d37
         {!gameLinkPending && !gameLinkOk && (
           <div className="w-full border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-center font-body text-[11px] text-amber-200 md:text-xs">
             Game not linked. Owner runs <span className="font-mono text-amber-100">CLICK.setGame({gameAddr})</span> (
