@@ -11,6 +11,7 @@ ClickMint — fair on-chain clicker on Base with 2 CPS limit, vesting + 30/30/20
 | [docs/ARCHITECTURE_FOR_GROK_REVIEW.md](docs/ARCHITECTURE_FOR_GROK_REVIEW.md) | Full-stack architecture for external review (incl. Pimlico funding model) |
 | [docs/WHERE_WE_ARE_AND_NEXT_STEPS.md](docs/WHERE_WE_ARE_AND_NEXT_STEPS.md) | Current status + suggested roadmap |
 | [docs/KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | Checklist — working vs to-verify |
+| [docs/TESTNET_E2E_CHECKLIST.md](docs/TESTNET_E2E_CHECKLIST.md) | Pimlico sponsorship policy + full Base Sepolia QA order |
 | [docs/DEVELOPMENT_LOG.md](docs/DEVELOPMENT_LOG.md) | Timestamped change log — **append an entry for every change** |
 
 ## Packages

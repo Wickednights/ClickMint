@@ -54,8 +54,10 @@ Use this as a living QA list. Update checkboxes as you verify. **Maintenance:** 
 
 | Item | Notes |
 |------|--------|
-| Gasless / one-signature multi-click | Requires relayer, AA session keys, or off-chain queue — not in repo. |
-| Full trophy ↔ game automation | Trophy mint/revenue is separate from `ClickMintGame.click()`. |
+| Gasless clicks | **In repo:** Pimlico + ZeroDev Kernel session + `clickFor` — see `frontend/lib/account-abstraction.ts`, **`docs/TESTNET_E2E_CHECKLIST.md`** Part B. |
+| One signature for **many** clicks in one tx | Not supported; each gasless click is one sponsored UserOp. |
+| Full trophy ↔ game automation | **`_click` does not** mint trophies; owner uses **`ClickMintGame.mintTrophyForPlayer`** (or NFT **`mint`**) for drops. |
+| Trophy **IPFS** metadata | **`tokenURI`** is on-chain **data URI** (JSON + SVG), not `ipfs://`. |
 | Production VRF | POT uses pseudo-random; upgrade for mainnet fairness. |
 | Escrow integrated flow | Contract exists; product flow not tied to dashboard MVP. |
 

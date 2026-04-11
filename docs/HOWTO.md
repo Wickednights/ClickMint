@@ -95,6 +95,8 @@ Copy `frontend/.env.example` → `frontend/.env.local` (or use root `.env` if yo
 - Optional: `NEXT_PUBLIC_TROPHY_NFT_ADDRESS`, treasury/secret/escrow if the UI references them  
 - `NEXT_PUBLIC_QUICKNODE_RPC` — optional RPC (else public Base Sepolia endpoint in `wagmi.ts`)  
 - `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` — optional; enables WalletConnect QR in the connect modal  
+- **`NEXT_PUBLIC_PIMLICO_API_KEY`** — optional; **gasless clicks** (Pimlico bundler + paymaster on Base Sepolia).  
+- **`NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID`** — optional; paste **policy id** from Pimlico after you create a **sponsorship policy** (required if paymaster calls fail without context).
 
 ### Dev server
 
@@ -124,7 +126,8 @@ Browsers require a user gesture (click/key) before audio unlocks.
 
 ## Wallet behavior
 
-- **One signature per on-chain action** is normal for EOAs: each `click()`, `deposit()`, `claimVested()`, `earlySpendPending()`, etc. is its own transaction unless you add a relayer, smart wallet batching, or session keys (not in this repo).
+- **One wallet signature per EOA transaction** is normal: each `deposit()`, `click()`, `claimVested()`, `earlySpendPending()`, etc. is its own tx.
+- **Gasless clicks (optional):** with Pimlico + a Kernel **session**, the **smart account** submits sponsored UserOps for **`clickFor(your EOA)`** so you skip **per-click** gas; you still pay gas for **`setClickExecutor`** once and for **deposits** from the EOA. Setup: **`docs/TESTNET_E2E_CHECKLIST.md`** Part B.
 
 ## Troubleshooting
 
@@ -134,6 +137,7 @@ Browsers require a user gesture (click/key) before audio unlocks.
 | Early spend fails / “rejected” | Unvested must be ≥ amount; see `docs/ARCHITECTURE.md` and `docs/KNOWN_ISSUES.md`. |
 | No CLICK from clicks | Read `baseClickReward` on game; if zero, owner must `setEconomy` or rewards come from POT only. |
 | WalletConnect missing | Set `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`. |
+| Gasless errors (`pm_*`, policy, `zd_*`) | Create Pimlico **sponsorship policy**, set **`NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID`**; ensure **testnet chains** enabled; see **`docs/TESTNET_E2E_CHECKLIST.md`** Part B. |
 | Connector build warnings | Optional peers for unused wagmi connector exports; core MetaMask/CB/WC paths install the packages added in `frontend/package.json`. |
 
 ## Related docs
@@ -141,4 +145,5 @@ Browsers require a user gesture (click/key) before audio unlocks.
 - `docs/ARCHITECTURE.md` — contract relationships  
 - `docs/POST_DEPLOY_VERIFICATION.md` — automated read-only checks after deploy  
 - `docs/KNOWN_ISSUES.md` — checklist  
+- `docs/TESTNET_E2E_CHECKLIST.md` — Pimlico policy + ordered full testnet QA (explorers, vesting, gasless, NFT metadata)  
 - `docs/DEVELOPMENT_LOG.md` — change history  
