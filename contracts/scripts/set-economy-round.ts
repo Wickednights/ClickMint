@@ -1,16 +1,18 @@
 /**
- * Owner-only: set test-friendly economy so UI shows round CLICK rewards and meaningful click cost.
+ * Owner-only: `setEconomy` on an existing ClickMintGame.
  *
  * Usage (example Base Sepolia):
  *   GAME_ADDRESS=0x... npx hardhat run scripts/set-economy-round.ts --network baseSepolia
  *
- * Env (optional overrides):
- *   GAME_ADDRESS — ClickMintGame proxy (required)
- *   CLICK_PER_ETH_WEI — default 1000e18 (POT mint rate numerator, same as deploy sample)
- *   CLICK_COST_CREDITS — default ~(1 US cent)/click at ~$3.5k ETH: 1e18/350_000 wei (0 = free clicks)
- *   BASE_CLICK_REWARD — default 5e18 (5 whole $CLICK per click into vesting vault)
+ * Presets (no manual wei math):
+ *   ECONOMY=testnet — readable Click Credits (~100 clicks per 0.001 ETH); default
+ *   ECONOMY=mainnet — ~1¢/click at $3.5k ETH (`MAINNET_ETH_USD` in scripts/config/economy.ts)
+ *
+ * Env overrides (optional, raw wei strings):
+ *   CLICK_PER_ETH_WEI, CLICK_COST_CREDITS, BASE_CLICK_REWARD
  */
 import { ethers } from "hardhat";
+import { MAINNET_ECONOMY, TESTNET_ECONOMY } from "./config/economy";
 
 async function main() {
   const gameAddr = process.env.GAME_ADDRESS?.trim();
@@ -18,17 +20,22 @@ async function main() {
     throw new Error("Set GAME_ADDRESS in contracts/.env (ClickMintGame address)");
   }
 
+  const preset = process.env.ECONOMY?.toLowerCase() === "mainnet" ? "mainnet" : "testnet";
+  const defaults = preset === "mainnet" ? MAINNET_ECONOMY : TESTNET_ECONOMY;
+
   const clickPerEthWei = process.env.CLICK_PER_ETH_WEI?.trim()
     ? ethers.toBigInt(process.env.CLICK_PER_ETH_WEI)
-    : ethers.parseEther("1000");
+    : defaults.clickPerEthWei;
 
   const clickCostCredits = process.env.CLICK_COST_CREDITS?.trim()
     ? ethers.toBigInt(process.env.CLICK_COST_CREDITS)
-    : ethers.parseEther("1") / 350_000n;
+    : defaults.clickCostCredits;
 
   const baseClickReward = process.env.BASE_CLICK_REWARD?.trim()
     ? ethers.toBigInt(process.env.BASE_CLICK_REWARD)
-    : ethers.parseEther("5");
+    : defaults.baseClickReward;
+
+  console.log("Using preset:", preset);
 
   const game = await ethers.getContractAt("ClickMintGame", gameAddr);
   const owner = await game.owner();

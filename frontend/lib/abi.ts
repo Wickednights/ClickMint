@@ -2,10 +2,16 @@ import { parseAbi } from "viem";
 
 export const clickMintGameAbi = parseAbi([
   "function deposit() payable",
+  "function depositFor(address player) payable",
   "function click()",
+  "function clickFor(address player)",
+  "function setClickExecutor(address executor)",
+  "function clickExecutor(address player) view returns (address)",
+  "event ClickExecutorSet(address indexed player, address indexed executor)",
   "function clickToken() view returns (address)",
   "function clickCostCredits() view returns (uint256)",
   "function baseClickReward() view returns (uint256)",
+  "function clicksPerHashTier() view returns (uint256)",
   "function totalClicksInHour(uint256 hourId) view returns (uint256)",
   "function credits(address user) view returns (uint256)",
   "function currentPotEth() view returns (uint256)",
@@ -27,6 +33,8 @@ export const binaryTrophyAbi = parseAbi([
 ]);
 
 export const clickTokenAbi = parseAbi([
+  "function maxSupply() view returns (uint256)",
+  "function totalSupply() view returns (uint256)",
   "function game() view returns (address)",
   "function claimVested()",
   "function earlySpendPending(uint256 amount)",

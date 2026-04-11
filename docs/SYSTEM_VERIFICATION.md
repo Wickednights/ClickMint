@@ -6,7 +6,7 @@ Use this after each deployment or before mainnet. Work **top to bottom**. For ev
 
 1. **Environment:** `VERCEL_ENV` or local, commit SHA, `NEXT_PUBLIC_*` names you set (not values for secrets).
 2. **Chain:** Base Sepolia — wallet address you used (can truncate middle).
-3. **Deployed addresses:** `ClickPrintGame`, `CLICK` token, `Treasury`, `SecretPrizeWallet` (from your deploy log or `frontend/.env`).
+3. **Deployed addresses:** `ClickMintGame`, `CLICK` token, `Treasury`, `SecretPrizeWallet` (from your deploy log or `frontend/.env`).
 4. **Per-section results:** copy the checklist tables below filled in, plus any **Basescan** links for transactions you care about.
 
 **Do not** share private keys, seed phrases, or API keys in chat.
@@ -15,6 +15,8 @@ Use this after each deployment or before mainnet. Work **top to bottom**. For ev
 
 ## A. On-chain configuration (read-only)
 
+**Quick pass:** run **`contracts/scripts/verify-deployment.ts`** (see **`docs/POST_DEPLOY_VERIFICATION.md`**) with `CLICK_ADDRESS`, `GAME_ADDRESS`, optional `TROPHY_ADDRESS`, optional `EXPECTED_MAX_SUPPLY_WEI`.
+
 | # | Check | How you verify | Your result |
 |---|--------|----------------|-------------|
 | A1 | `CLICK.game` == `ClickMintGame` | Basescan: CLICK contract → Read `game` | |
@@ -22,6 +24,8 @@ Use this after each deployment or before mainnet. Work **top to bottom**. For ev
 | A3 | Treasury / secret wallet non-zero | Read `treasury`, `secretWallet` on game |    
 | A4 | `clickCostCredits` | Read on game — **1 wei** ⇒ huge UI credit counts; use `setEconomy` / `set-economy-round.ts` for readable test economics | |
 | A5 | `baseClickReward` | Read on game — `0` ⇒ no vesting from clicks | |
+| A6 | `CLICK.maxSupply` matches intent | Read `maxSupply` — testnet **1M** / mainnet-style **100B** token cap (wei = whole tokens × 1e18) | |
+| A7 | Pause state | Read `paused()` or **`isPaused()`** on game — both must agree | |
 
 ---
 
@@ -69,7 +73,7 @@ Use this after each deployment or before mainnet. Work **top to bottom**. For ev
 | # | Action | Expected | Your result |
 |---|--------|----------|-------------|
 | F1 | Note `currentPotEth` after deposits | Increases when deposits fund pot slice per contract | |
-| F2 | After UTC hour + buffer | Anyone can call `finalizeHour(prevHour)`; winner or carry per rules | |
+| F2 | After UTC hour + buffer | **Owner** calls `finalizeHour(prevHour)`; winner or carry per rules (permissionless settlement deferred until VRF/keeper design) | |
 
 ---
 
@@ -110,7 +114,7 @@ Game: 0x…
 CLICK: 0x…
 Frontend URL: …
 
-A1-A5: [short notes + Basescan read screenshots if stuck]
+A1-A7: [short notes + Basescan read screenshots if stuck]
 B: PASS/FAIL — …
 C: PASS/FAIL — …
 D: PASS/FAIL — …

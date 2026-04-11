@@ -3,12 +3,15 @@ pragma solidity ^0.8.24;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 import {CLICK} from "./CLICK.sol";
+import {BinaryTrophyNFT} from "./BinaryTrophyNFT.sol";
 
-/// @title ClickMintGame — ETH credits, fee split, rate-limited clicks, hourly CLICK POT (testnet-tuned).
+/// @title ClickMintGame — ETH credits, fee split, rate-limited clicks, hourly CLICK POT.
 /// @dev Randomness: block.prevrandao + salt — upgrade to Chainlink VRF for mainnet fairness.
-contract ClickMintGame is Ownable, ReentrancyGuard {
+/// Constructor economy + `clicksPerHashTier` are set at deploy from `DEPLOY_ECONOMY` (**testnet** vs **mainnet** in `scripts/config/economy.ts`). Owner may later `setEconomy` / `setAddresses`; hash tier stays immutable.
+contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     CLICK public immutable clickToken;
 
     address payable public treasury;
@@ -23,7 +26,7 @@ contract ClickMintGame is Ownable, ReentrancyGuard {
     uint256 public constant MIN_POT_CLICKS = 100;
     uint256 public constant MAX_CLICKS_PER_BLOCK = 2;
     /// @notice Global clicks per game hour — every N clicks adds one required leading-zero bit (cap 4) for click hash.
-    uint256 public constant CLICKS_PER_HASH_TIER = 5000;
+    uint256 public immutable clicksPerHashTier;
 
     mapping(uint256 hourId => uint256) public totalClicksInHour;
 
@@ -53,12 +56,30 @@ contract ClickMintGame is Ownable, ReentrancyGuard {
 
     mapping(address => mapping(uint256 => uint8)) internal _clicksInBlock;
 
+    /// @notice EOA (player) => smart account (or other executor) allowed to call `clickFor` / `depositFor` for them.
+    mapping(address => address) public clickExecutor;
+
+    /// @notice Optional trophy collection; zero disables on-chain trophy mints from the game.
+    BinaryTrophyNFT public trophyNft;
+
     event Deposited(address indexed user, uint256 ethIn, uint256 creditsOut);
     event Clicked(address indexed user, uint256 hourId, uint256 totalForUserHour, uint8 window);
     event PotWin(uint256 indexed hourId, address indexed winner, uint256 clickPayout, uint8 window, bytes32 entropy);
-    event AddressesUpdated(address treasury, address secret);
+    event AddressesUpdated(address indexed treasury, address indexed secret);
+    event EconomyUpdated(uint256 clickPerEthWei, uint256 clickCostCredits, uint256 baseClickReward);
+    event ClickExecutorSet(address indexed player, address indexed executor);
+    event TrophyNftSet(address indexed trophy);
+    event PotCarrySwept(address indexed to, uint256 amount);
+    /// @notice Emitted in addition to OpenZeppelin `Pausable` **Paused** event (same transition).
+    event GamePaused(address indexed by);
+    /// @notice Emitted in addition to OpenZeppelin `Pausable` **Unpaused** event (same transition).
+    event GameUnpaused(address indexed by);
+    event TrophyMintedViaGame(address indexed to, uint64 totalClicks, uint8 fragmentSlot);
+
+    error GameZeroTrophyAddr();
 
     error GameBadAddr();
+    error GameBadExecutor();
     error GameCooldown();
     error GameCredits();
     error GameFinalizeEarly();
@@ -71,27 +92,61 @@ contract ClickMintGame is Ownable, ReentrancyGuard {
         address payable secretWallet_,
         uint256 clickPerEthWei_,
         uint256 clickCostCredits_,
-        uint256 baseClickReward_
+        uint256 baseClickReward_,
+        uint256 clicksPerHashTier_
     ) Ownable(initialOwner) {
         if (address(click_) == address(0)) revert GameBadAddr();
+        if (clicksPerHashTier_ == 0) revert GameBadAddr();
         clickToken = click_;
         treasury = treasury_;
         secretWallet = secretWallet_;
         clickPerEthWei = clickPerEthWei_;
         clickCostCredits = clickCostCredits_;
         baseClickReward = baseClickReward_;
+        clicksPerHashTier = clicksPerHashTier_;
     }
 
-    function setAddresses(address payable treasury_, address payable secretWallet_) external onlyOwner {
+    function setAddresses(address payable treasury_, address payable secretWallet_) external onlyOwner whenNotPaused {
         treasury = treasury_;
         secretWallet = secretWallet_;
         emit AddressesUpdated(treasury_, secretWallet_);
     }
 
-    function setEconomy(uint256 clickPerEthWei_, uint256 clickCostCredits_, uint256 baseClickReward_) external onlyOwner {
+    function setEconomy(uint256 clickPerEthWei_, uint256 clickCostCredits_, uint256 baseClickReward_) external onlyOwner whenNotPaused {
         clickPerEthWei = clickPerEthWei_;
         clickCostCredits = clickCostCredits_;
         baseClickReward = baseClickReward_;
+        emit EconomyUpdated(clickPerEthWei_, clickCostCredits_, baseClickReward_);
+    }
+
+    function setTrophyNft(address trophy_) external onlyOwner whenNotPaused {
+        trophyNft = BinaryTrophyNFT(payable(trophy_));
+        emit TrophyNftSet(trophy_);
+    }
+
+    /// @notice Pause gameplay (`deposit`, clicks, `setClickExecutor`, `finalizeHour`, economy/trophy admin).
+    /// @dev Also emits OpenZeppelin **Paused(account)**; use **isPaused()** or `paused()` to read state.
+    function pause() external onlyOwner {
+        _pause();
+        emit GamePaused(msg.sender);
+    }
+
+    /// @notice Unpause; restores normal operation.
+    /// @dev Also emits OpenZeppelin **Unpaused(account)**.
+    function unpause() external onlyOwner {
+        _unpause();
+        emit GameUnpaused(msg.sender);
+    }
+
+    /// @return True if the game is emergency-paused (alias for `paused()`).
+    function isPaused() public view returns (bool) {
+        return paused();
+    }
+
+    /// @notice Link your EOA to a smart account for sponsored `clickFor` / `depositFor` (set `address(0)` to revoke).
+    function setClickExecutor(address executor) external whenNotPaused {
+        clickExecutor[msg.sender] = executor;
+        emit ClickExecutorSet(msg.sender, executor);
     }
 
     function gameHour(uint256 ts) public pure returns (uint256) {
@@ -119,9 +174,18 @@ contract ClickMintGame is Ownable, ReentrancyGuard {
         return 0;
     }
 
-    /// @notice Split fees, grant credits (deposit + tier bonus), accrue POT in ETH.
-    function deposit() external payable nonReentrant {
-        uint256 v = msg.value;
+    /// @notice Split fees, grant credits (deposit + tier bonus), accrue POT in ETH — credits `msg.sender`.
+    function deposit() external payable nonReentrant whenNotPaused {
+        _deposit(msg.sender, msg.value);
+    }
+
+    /// @notice Same as `deposit()` but credits `player` (EOA). Caller must be `player` or their `clickExecutor`.
+    function depositFor(address player) external payable nonReentrant whenNotPaused {
+        if (msg.sender != player && msg.sender != clickExecutor[player]) revert GameBadExecutor();
+        _deposit(player, msg.value);
+    }
+
+    function _deposit(address creditTo, uint256 v) internal {
         require(v > 0, "game: eth");
         uint256 ft = (v * FEE_EACH_BPS) / BPS;
         uint256 fp = (v * FEE_EACH_BPS) / BPS;
@@ -134,59 +198,73 @@ contract ClickMintGame is Ownable, ReentrancyGuard {
         require(okT && okS, "game: fee send");
 
         uint256 bonus = _depositBonusWei(v);
-        credits[msg.sender] += v + bonus;
+        credits[creditTo] += v + bonus;
 
         uint256 hid = gameHour(block.timestamp);
         potEthByHour[hid] += fp;
 
-        emit Deposited(msg.sender, v, v + bonus);
+        emit Deposited(creditTo, v, v + bonus);
     }
 
-    /// @notice One click: consumes credits, 2 per block max, records hourly stats + window activity.
-    function click() external nonReentrant {
+    /// @notice One click for `msg.sender` (typical EOA path).
+    function click() external nonReentrant whenNotPaused {
+        _click(msg.sender);
+    }
+
+    /// @notice Sponsored / smart-account path: applies click logic to `player` (must be `clickExecutor[player]`).
+    function clickFor(address player) external nonReentrant whenNotPaused {
+        if (msg.sender != clickExecutor[player]) revert GameBadExecutor();
+        _click(player);
+    }
+
+    function _click(address player) internal {
         uint256 cost = clickCostCredits;
         if (cost > 0) {
-            if (credits[msg.sender] < cost) revert GameCredits();
-            credits[msg.sender] -= cost;
+            if (credits[player] < cost) revert GameCredits();
+            credits[player] -= cost;
         }
 
         uint256 bn = block.number;
-        if (_clicksInBlock[msg.sender][bn] >= MAX_CLICKS_PER_BLOCK) revert GameCooldown();
+        if (_clicksInBlock[player][bn] >= MAX_CLICKS_PER_BLOCK) revert GameCooldown();
         unchecked {
-            _clicksInBlock[msg.sender][bn]++;
+            _clicksInBlock[player][bn]++;
         }
 
         uint256 hid = gameHour(block.timestamp);
         uint8 w = utcWindow(block.timestamp);
 
-        uint256 c = clicksInHour[hid][msg.sender] + 1;
-        clicksInHour[hid][msg.sender] = c;
+        uint256 c = clicksInHour[hid][player] + 1;
+        clicksInHour[hid][player] = c;
         totalClicksInHour[hid]++;
-        windowMask[hid][msg.sender] |= uint8(1 << w);
+        windowMask[hid][player] |= uint8(1 << w);
 
-        uint256 tier = totalClicksInHour[hid] / CLICKS_PER_HASH_TIER;
+        uint256 tier = totalClicksInHour[hid] / clicksPerHashTier;
         uint256 needBits = tier > 4 ? 4 : tier;
         if (needBits > 0) {
             uint256 h = uint256(
-                keccak256(abi.encodePacked(msg.sender, hid, c, block.number, block.timestamp, block.prevrandao))
+                keccak256(abi.encodePacked(player, hid, c, block.number, block.timestamp, block.prevrandao))
             );
             require(h >> (256 - needBits) == 0, "game: clickhash");
         }
 
-        if (!_hourListed[hid][msg.sender]) {
-            _hourListed[hid][msg.sender] = true;
-            _participants[hid].push(msg.sender);
+        if (!_hourListed[hid][player]) {
+            _hourListed[hid][player] = true;
+            _participants[hid].push(player);
         }
 
-        emit Clicked(msg.sender, hid, c, w);
+        emit Clicked(player, hid, c, w);
 
         uint256 reward = baseClickReward;
-        if (reward > 0) clickToken.grantVested(msg.sender, reward);
+        if (reward > 0) clickToken.grantVested(player, reward);
     }
 
-    /// @notice After a game hour ends (+ RESET_BUFFER), finalize POT for `hourId`.
-    /// @dev Pseudo-random window + winner — acceptable for testnet; VRF for production.
-    function finalizeHour(uint256 hourId) external nonReentrant {
+    /// @notice After a game hour ends (+ RESET_BUFFER), finalize POT for `hourId` (owner / ops only).
+    /// @dev **Why onlyOwner (MVP):** open `finalizeHour` lets anyone race to settle, which encourages MEV /
+    /// timing games around our **pseudo-random** entropy and can grief UX. Restricting to **owner** (later:
+    /// multisig, Chainlink Automation, Gelato, or a dedicated `FINALIZER_ROLE`) gives controlled, predictable
+    /// settlement until we ship **VRF** and an explicit keeper model. Acceptable for testnet; revisit before high-stakes mainnet.
+    /// Pseudo-random window + winner — acceptable for testnet; VRF for production randomness.
+    function finalizeHour(uint256 hourId) external nonReentrant onlyOwner whenNotPaused {
         uint256 cutoff = (hourId + 1) * 3600 + RESET_BUFFER;
         if (block.timestamp < cutoff) revert GameFinalizeEarly();
         if (hourFinalized[hourId]) revert GameAlreadyFinalized();
@@ -240,12 +318,22 @@ contract ClickMintGame is Ownable, ReentrancyGuard {
     }
 
     /// @notice Owner rescue for rolled POT carry only (does not touch user credit backing ETH).
+    /// @dev Allowed while paused so carry can be recovered if the game is frozen.
     function ownerSweepPotCarry(address payable to, uint256 amount) external onlyOwner {
         require(to != address(0), "game: zero");
         require(amount <= potCarry, "game: carry");
         potCarry -= amount;
         (bool ok,) = to.call{value: amount}("");
         require(ok, "game: sweep");
+        emit PotCarrySwept(to, amount);
+    }
+
+    /// @notice Ops: forward trophy mint through the game so `msg.sender` on the NFT is this contract (`onlyClickMintGame`).
+    /// @dev On-click probability can later call `trophyNft.mintTrophyForPlayer` from `_click` directly (same `msg.sender`).
+    function mintTrophyForPlayer(address to, uint64 totalClicks, uint8 fragmentSlot) external onlyOwner whenNotPaused {
+        if (address(trophyNft) == address(0)) revert GameZeroTrophyAddr();
+        trophyNft.mintTrophyForPlayer(to, totalClicks, fragmentSlot);
+        emit TrophyMintedViaGame(to, totalClicks, fragmentSlot);
     }
 
     receive() external payable {}

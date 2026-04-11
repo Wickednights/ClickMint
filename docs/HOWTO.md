@@ -32,6 +32,10 @@ cd contracts
 npx hardhat run scripts/deploy.ts --network <networkName>
 ```
 
+Deploy preset: **`DEPLOY_ECONOMY=testnet`** (default) or **`mainnet`**. **Testnet:** 1M CLICK cap, 10 trophies, 10m vesting, readable click costs. **Mainnet:** 100B cap, 10k trophies, 7d vesting, ~1¢/click at default `MAINNET_ETH_USD`. See **`docs/ECONOMY.md`** and **`contracts/scripts/config/economy.ts`** (`TESTNET_PRESET` / `MAINNET_PRESET`).
+
+Match the frontend header hint: **`NEXT_PUBLIC_DEPLOY_ECONOMY=testnet`** or **`mainnet`** in **`frontend/.env`**.
+
 Note the printed addresses for **CLICK**, **ClickMintGame**, **Treasury**, **SecretPrizeWallet**, **BinaryTrophyNFT**, **Escrow**.
 
 ### Link CLICK token to the game
@@ -45,6 +49,17 @@ npx hardhat run scripts/set-game.ts --network <networkName>
 
 (Adjust `set-game.ts` env / Hardhat vars so it knows CLICK and game addresses.)
 
+### Post-deploy verification (read-only)
+
+After redeploy, confirm wiring before updating frontend `.env`:
+
+```bash
+cd contracts
+CLICK_ADDRESS=0x... GAME_ADDRESS=0x... TROPHY_ADDRESS=0x... npm run verify:base-sepolia
+```
+
+Optional: set **`EXPECTED_MAX_SUPPLY_WEI`** to the deployed cap (mainnet-style **100B** tokens: `100000000000000000000000000000`; testnet **1M**: `1000000000000000000000000`). Full checklist: **`docs/POST_DEPLOY_VERIFICATION.md`**, **`docs/SYSTEM_VERIFICATION.md`**.
+
 ### Economy tuning (owner)
 
 On **ClickMintGame**, owner can call:
@@ -53,11 +68,11 @@ On **ClickMintGame**, owner can call:
 
 If **`baseClickReward`** is `0`, clicks do not add to users’ CLICK vesting vault; early spend will have no unvested balance.
 
-**Readable testnet numbers:** run (with `GAME_ADDRESS` and owner key in `.env`):
+**Readable testnet numbers** (or switch an existing game to mainnet-style pricing): run with `GAME_ADDRESS` and owner key in `.env`:
 
 ```bash
 cd contracts
-GAME_ADDRESS=0xYourGame npx hardhat run scripts/set-economy-round.ts --network baseSepolia
+GAME_ADDRESS=0xYourGame ECONOMY=testnet npx hardhat run scripts/set-economy-round.ts --network baseSepolia
 ```
 
 Defaults: `baseClickReward = 5` CLICK, `clickCostCredits = 0.001` ETH-worth of credits per click. Override with env vars documented in the script header.
@@ -124,5 +139,6 @@ Browsers require a user gesture (click/key) before audio unlocks.
 ## Related docs
 
 - `docs/ARCHITECTURE.md` — contract relationships  
+- `docs/POST_DEPLOY_VERIFICATION.md` — automated read-only checks after deploy  
 - `docs/KNOWN_ISSUES.md` — checklist  
 - `docs/DEVELOPMENT_LOG.md` — change history  

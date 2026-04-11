@@ -1,5 +1,11 @@
 import { parseEther } from "viem";
 
+/**
+ * Display helpers for on-chain wei-sized credits and $CLICK vaults.
+ * **Testnet** deploys use larger `clickCostCredits` (see `contracts/scripts/config/economy.ts` TESTNET_PRESET)
+ * so "plays left" stays readable. **Mainnet** preset uses ~1 cent/click scale; set `NEXT_PUBLIC_DEPLOY_ECONOMY`
+ * in the frontend to match your deploy for header copy only.
+ */
 const BPS = 10_000n;
 
 /**

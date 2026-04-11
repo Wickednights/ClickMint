@@ -4,11 +4,13 @@ pragma solidity ^0.8.24;
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-/// @title CLICK — capped supply, 1% transfer tax, vested “pending” rewards + 30/30/20/20 early spend.
-/// @dev Testnet: 1M max supply, 10-minute vesting (production: 7 days).
-contract CLICK is ERC20, ERC20Permit, Ownable {
-    uint256 public constant MAX_SUPPLY = 1_000_000 ether;
+/// @title CLICK — capped supply (immutable cap from deploy), 1% transfer tax, vested “pending” rewards + 30/30/20/20 early spend.
+/// @dev Constructor args come from the deploy preset in `scripts/config/economy.ts`: **testnet** = 1M × 1e18 cap + 600s vesting; **mainnet** = 100B × 1e18 + 604800s (7d). Immutable after deploy.
+/// All mint paths pre-check `totalSupply() + amount <= maxSupply` (strict) and use CLICKBadSupply on violation.
+contract CLICK is ERC20, ERC20Permit, Ownable, ReentrancyGuard {
+    uint256 public immutable maxSupply;
     uint256 public constant BPS = 10_000;
     uint256 public constant TRANSFER_TAX_BPS = 100; // 1%
     uint256 public constant EARLY_BURN_BPS = 3_000;
@@ -30,9 +32,14 @@ contract CLICK is ERC20, ERC20Permit, Ownable {
 
     mapping(address account => Vault) internal _vault;
 
+    event GameSet(address indexed game);
+    event TreasurySet(address indexed treasury);
+    event LpRecipientSet(address indexed lpRecipient);
+    event VestingDurationSet(uint256 seconds_);
+
     error CLICKUnauthorized();
-    error CLICKCap();
     error CLICKZeroAddr();
+    error CLICKBadSupply();
 
     modifier onlyGame() {
         if (msg.sender != game) revert CLICKUnauthorized();
@@ -43,38 +50,50 @@ contract CLICK is ERC20, ERC20Permit, Ownable {
         address initialOwner,
         address treasury_,
         address lpRecipient_,
-        uint256 vestingDuration_
+        uint256 vestingDuration_,
+        uint256 maxSupplyWei_
     ) ERC20("ClickMint", "CLICK") ERC20Permit("ClickMint") Ownable(initialOwner) {
         if (treasury_ == address(0) || lpRecipient_ == address(0)) revert CLICKZeroAddr();
+        if (maxSupplyWei_ == 0) revert CLICKBadSupply();
         treasury = treasury_;
         lpRecipient = lpRecipient_;
         vestingDuration = vestingDuration_;
+        maxSupply = maxSupplyWei_;
+    }
+
+    /// @dev Strict: revert before any mint if cap would be exceeded (including exact edge at `maxSupply`).
+    function _requireSupplyRoom(uint256 mintAmount) internal view {
+        if (mintAmount == 0) return;
+        if (totalSupply() + mintAmount > maxSupply) revert CLICKBadSupply();
     }
 
     function setGame(address game_) external onlyOwner {
         if (game_ == address(0)) revert CLICKZeroAddr();
         game = game_;
+        emit GameSet(game_);
     }
 
     function setTreasury(address t) external onlyOwner {
         if (t == address(0)) revert CLICKZeroAddr();
         treasury = t;
+        emit TreasurySet(t);
     }
 
     function setLpRecipient(address lp) external onlyOwner {
         if (lp == address(0)) revert CLICKZeroAddr();
         lpRecipient = lp;
+        emit LpRecipientSet(lp);
     }
 
     function setVestingDuration(uint256 seconds_) external onlyOwner {
         vestingDuration = seconds_;
+        emit VestingDurationSet(seconds_);
     }
 
-    /// @notice Grant vesting CLICK from gameplay; any instant unlock from sync is minted here (cap-checked).
-    function grantVested(address to, uint256 amount) external onlyGame {
+    /// @notice Grant vesting CLICK from gameplay; any instant unlock from sync is minted here (cap-checked before each mint).
+    function grantVested(address to, uint256 amount) external onlyGame nonReentrant {
         if (amount == 0) return;
         _syncAndGrant(to, amount);
-        if (totalSupply() > MAX_SUPPLY) revert CLICKCap();
     }
 
     function pendingVested(address account) external view returns (uint256 unvested) {
@@ -89,18 +108,18 @@ contract CLICK is ERC20, ERC20Permit, Ownable {
     }
 
     /// @notice Release linearly vested CLICK to liquid balance.
-    function claimVested() external {
+    function claimVested() external nonReentrant {
         Vault storage v = _vault[msg.sender];
         uint256 vested = _vested(v);
         uint256 rel = vested - v.claimed;
         if (rel == 0) return;
+        _requireSupplyRoom(rel);
         v.claimed = vested;
         _mint(msg.sender, rel);
-        require(totalSupply() <= MAX_SUPPLY, "click: cap");
     }
 
     /// @notice Early liquidate unvested pending with protocol split (30/30/20/20).
-    function earlySpendPending(uint256 amount) external {
+    function earlySpendPending(uint256 amount) external nonReentrant {
         Vault storage v = _vault[msg.sender];
         uint256 vested = _vested(v);
         uint256 unvested = v.total > vested ? v.total - vested : 0;
@@ -112,11 +131,13 @@ contract CLICK is ERC20, ERC20Permit, Ownable {
         uint256 toLp = amount * EARLY_LP_BPS / BPS;
         uint256 toUser = amount - burnAmt - toTreasury - toLp;
 
+        uint256 mintSum = burnAmt + toTreasury + toLp + toUser;
+        _requireSupplyRoom(mintSum);
+
         if (burnAmt > 0) _mint(address(0xdead), burnAmt);
         if (toTreasury > 0) _mint(treasury, toTreasury);
         if (toLp > 0) _mint(lpRecipient, toLp);
         if (toUser > 0) _mint(msg.sender, toUser);
-        require(totalSupply() <= MAX_SUPPLY, "click: cap");
     }
 
     function _vested(Vault memory v) internal view returns (uint256) {
@@ -131,6 +152,7 @@ contract CLICK is ERC20, ERC20Permit, Ownable {
         uint256 vested = _vested(v);
         uint256 rel = vested - v.claimed;
         if (rel > 0) {
+            _requireSupplyRoom(rel);
             v.claimed = vested;
             _mint(to, rel);
         }
@@ -151,9 +173,9 @@ contract CLICK is ERC20, ERC20Permit, Ownable {
         super._update(from, to, value);
     }
 
-    /// @dev Optional direct mint for POT / ops (game only), still respects cap at call sites.
-    function mint(address to, uint256 amount) external onlyGame {
+    /// @dev Optional direct mint for POT / ops (game only); pre-checks cap strictly before minting.
+    function mint(address to, uint256 amount) external onlyGame nonReentrant {
+        _requireSupplyRoom(amount);
         _mint(to, amount);
-        require(totalSupply() <= MAX_SUPPLY, "click: cap");
     }
 }

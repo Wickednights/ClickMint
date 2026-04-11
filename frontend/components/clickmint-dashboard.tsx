@@ -13,8 +13,12 @@ import {
   useConnect,
   useDisconnect,
   usePublicClient,
+  useWalletClient,
 } from "wagmi";
 import { WalletPickerDialog } from "@/components/wallet-picker-dialog";
+import { GaslessSessionDialog } from "@/components/gasless-session-dialog";
+import { useGaslessClickSession } from "@/hooks/use-gasless-click-session";
+import { isPimlicoConfigured } from "@/lib/account-abstraction";
 import {
   claimableVaultDisplay,
   clickCreditsFromDeposit,
@@ -41,6 +45,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { getClickAddress, getGameAddress, getTrophyNftAddress } from "@/lib/addresses";
+import { economyPresetHint, economyPresetShortLabel } from "@/lib/economy-preset";
 import { useClickMintAudio } from "@/hooks/use-clickmint-audio";
 
 const QUICK_BUY = ["0.001", "0.01", "0.1", "0.25", "0.5", "1"] as const;
@@ -136,6 +141,14 @@ export function ClickMintDashboard() {
   }, [playClickSuccess, playWin, playNft, playError, celebrateWin]);
 
   const { address, isConnected } = useAccount();
+  const { data: walletClient } = useWalletClient({ chainId: baseSepolia.id });
+  const gasless = useGaslessClickSession(gameAddr);
+  /** All ClickMint game balance / POT / vesting use the connected EOA; gasless uses a smart account only as tx executor. */
+  const playerAddress = address;
+
+  const [gaslessDialogOpen, setGaslessDialogOpen] = useState(false);
+  const [gaslessActionPending, setGaslessActionPending] = useState(false);
+
   const chainId = useChainId();
   const { isPending: connectPending } = useConnect();
   const { disconnect } = useDisconnect();
@@ -172,8 +185,8 @@ export function ClickMintDashboard() {
     address: gameAddr,
     abi: clickMintGameAbi,
     functionName: "credits",
-    args: address ? [address] : undefined,
-    query: { enabled: !!gameAddr && !!address },
+    args: playerAddress ? [playerAddress] : undefined,
+    query: { enabled: !!gameAddr && !!playerAddress },
   });
 
   const { data: clickCostCredits } = useReadContract({
@@ -223,9 +236,9 @@ export function ClickMintDashboard() {
     address: clickAddr,
     abi: clickTokenAbi,
     functionName: "claimable",
-    args: address ? [address] : undefined,
+    args: playerAddress ? [playerAddress] : undefined,
     query: {
-      enabled: !!clickAddr && !!address,
+      enabled: !!clickAddr && !!playerAddress,
       refetchInterval: 12_000,
       placeholderData: keepPreviousData,
     },
@@ -236,9 +249,9 @@ export function ClickMintDashboard() {
     address: clickAddr,
     abi: clickTokenAbi,
     functionName: "pendingVested",
-    args: address ? [address] : undefined,
+    args: playerAddress ? [playerAddress] : undefined,
     query: {
-      enabled: !!clickAddr && !!address,
+      enabled: !!clickAddr && !!playerAddress,
       refetchInterval: 12_000,
       placeholderData: keepPreviousData,
     },
@@ -306,6 +319,21 @@ export function ClickMintDashboard() {
     enabled: !!gameAddr,
   });
 
+  useEffect(() => {
+    if (!isConnected) gasless.clear();
+  }, [isConnected]); // eslint-disable-line react-hooks/exhaustive-deps -- clear gasless only on disconnect
+
+  useEffect(() => {
+    if (gasless.status === "ready" && gaslessDialogOpen) {
+      setGaslessDialogOpen(false);
+      toast.success("Gasless session active", {
+        description:
+          "Clicks are sponsored (no gas). All credits and $CLICK stay on your EOA — your smart account only submits clickFor(you).",
+        duration: 9000,
+      });
+    }
+  }, [gasless.status, gaslessDialogOpen]);
+
   useWatchContractEvent({
     address: trophyAddr,
     abi: binaryTrophyAbi,
@@ -333,13 +361,15 @@ export function ClickMintDashboard() {
 
   const onDeposit = async (eth: string) => {
     if (!gameAddr || wrongChain || !address || !publicClient) return;
+    const valueWei = parseEther(eth);
+
     try {
       const hash = await writeContractAsync({
         chainId: baseSepolia.id,
         address: gameAddr,
         abi: clickMintGameAbi,
         functionName: "deposit",
-        value: parseEther(eth),
+        value: valueWei,
       });
       await publicClient.waitForTransactionReceipt({ hash });
       await Promise.all([refetchCredits(), refetchPot()]);
@@ -386,6 +416,24 @@ export function ClickMintDashboard() {
     lastClientClick.current = now;
     try {
       if (!publicClient) throw new Error("No RPC client for Base Sepolia");
+
+      if (gasless.status === "ready" && address) {
+        try {
+          setGaslessActionPending(true);
+          const hash = await gasless.gaslessClick(address);
+          await publicClient.waitForTransactionReceipt({ hash });
+          await Promise.all([refetchCredits(), refetchUnvested(), refetchClaimable()]);
+          sfxRef.current.playClickSuccess();
+          toast.success("Click sent (gasless)");
+          return;
+        } catch (ge) {
+          console.warn("gasless click failed, falling back to wallet tx", ge);
+          toast.message("Gasless click failed — retrying with wallet signature.");
+        } finally {
+          setGaslessActionPending(false);
+        }
+      }
+
       const { request } = await publicClient.simulateContract({
         address: gameAddr,
         abi: clickMintGameAbi,
@@ -544,9 +592,10 @@ export function ClickMintDashboard() {
   const earlySpendWei = parsedEarlySpend.ok ? parsedEarlySpend.wei : 0n;
   const unvestedCap = unvestedWei ?? 0n;
 
-  const canAct = isConnected && !wrongChain && !writePending;
+  const canAct = isConnected && !wrongChain && !writePending && !gaslessActionPending;
   /** Allow CLICK on wrong chain so the handler can prompt a network switch. */
-  const canSendClick = isConnected && !writePending && !gameLinkPending && gameLinkOk;
+  const canSendClick =
+    isConnected && !writePending && !gaslessActionPending && !gameLinkPending && gameLinkOk;
 
   const terminalBody = (
     <>
@@ -590,6 +639,18 @@ export function ClickMintDashboard() {
             {cooldownLabel !== null ? <>RATE LIMIT: {cooldownLabel}s</> : <>READY</>}
           </span>
         </div>
+        {gasless.status === "ready" ? (
+          <p className="max-w-md px-2 text-center font-body text-[10px] leading-snug text-secondary">
+            <span className="font-semibold text-primary-fixed/90">Gasless mode active</span> — clicks are free of gas. Your
+            EOA receives all rewards and uses your existing credits. Executor:{" "}
+            <span className="font-mono text-primary-fixed/85">
+              {gasless.smartAccountAddress
+                ? `${gasless.smartAccountAddress.slice(0, 6)}…${gasless.smartAccountAddress.slice(-4)}`
+                : "—"}
+            </span>
+            .
+          </p>
+        ) : null}
       </div>
 
       {/* Deposit — collapsed; below hero */}
@@ -863,15 +924,26 @@ export function ClickMintDashboard() {
 
       {/* Header */}
       <header className="fixed left-0 top-0 z-50 flex w-full items-center justify-between gap-3 border-b border-outline-variant/20 bg-surface/90 px-4 py-3 font-headline uppercase tracking-tighter backdrop-blur-sm md:px-6 md:py-4">
-        <div className="flex min-w-0 items-center gap-2 md:block">
-          <span className="material-symbols-outlined shrink-0 text-primary-fixed md:hidden">token</span>
-          <span className="truncate text-lg font-black tracking-tighter text-white md:text-2xl">CLICKMINT</span>
-          <Link
-            href="/documentation"
-            className="ml-2 shrink-0 font-label text-[9px] uppercase tracking-widest text-primary-fixed/75 hover:text-primary-fixed md:ml-3"
+        <div className="flex min-w-0 flex-col gap-0.5 md:block">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="material-symbols-outlined shrink-0 text-primary-fixed md:hidden">token</span>
+            <span className="truncate text-lg font-black tracking-tighter text-white md:text-2xl">CLICKMINT</span>
+            <Link
+              href="/documentation"
+              className="ml-2 shrink-0 font-label text-[9px] uppercase tracking-widest text-primary-fixed/75 hover:text-primary-fixed md:ml-3"
+            >
+              Docs
+            </Link>
+          </div>
+          <p
+            className="max-w-[min(100%,28rem)] font-label text-[7px] uppercase leading-tight tracking-widest text-secondary/90 md:text-[8px]"
+            title={economyPresetHint()}
           >
-            Docs
-          </Link>
+            <span className="md:hidden">{economyPresetShortLabel()}</span>
+            <span className="hidden md:inline">
+              {economyPresetShortLabel()} — {economyPresetHint()}
+            </span>
+          </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5 md:gap-2">
           <button
@@ -921,6 +993,40 @@ export function ClickMintDashboard() {
                   Switch Base Sepolia
                 </button>
               )}
+              {isPimlicoConfigured() ? (
+                <div className="mt-1 flex max-w-[14rem] flex-col items-end gap-1 md:max-w-none">
+                  <p className="text-right font-label text-[8px] uppercase leading-tight tracking-widest text-secondary">
+                    {gasless.status === "ready"
+                      ? "Gasless mode active"
+                      : isConnected
+                        ? "Wallet connected — enable gasless"
+                        : "Connect wallet for gasless"}
+                  </p>
+                  <div className="flex flex-wrap justify-end gap-1">
+                    {gasless.status === "ready" ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          gasless.clear();
+                          toast.message("Gasless session cleared");
+                        }}
+                        className="border border-outline-variant/60 px-2 py-0.5 font-label text-[8px] uppercase tracking-widest text-secondary hover:border-primary-fixed hover:text-primary-fixed"
+                      >
+                        Disable gasless
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={!isConnected || wrongChain || !walletClient || gasless.status === "enabling"}
+                        onClick={() => setGaslessDialogOpen(true)}
+                        className="border border-primary-fixed/40 bg-primary-fixed/10 px-2 py-0.5 font-label text-[8px] uppercase tracking-widest text-primary-fixed hover:bg-primary-fixed/20 disabled:opacity-40"
+                      >
+                        Enable gasless clicks
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : null}
             </>
           ) : (
             <button
@@ -1068,6 +1174,23 @@ export function ClickMintDashboard() {
       <div className="pointer-events-none fixed inset-0 z-[100] opacity-[0.02] md:hidden bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(0,251,251,0.03)_2px,rgba(0,251,251,0.03)_4px)]" />
 
       <WalletPickerDialog open={walletOpen} onOpenChange={setWalletOpen} />
+      <GaslessSessionDialog
+        open={gaslessDialogOpen}
+        onOpenChange={setGaslessDialogOpen}
+        smartAccountAddress={gasless.smartAccountAddress}
+        status={
+          gasless.status === "enabling"
+            ? "enabling"
+            : gasless.status === "error"
+              ? "error"
+              : "idle"
+        }
+        errorMessage={gasless.errorMessage}
+        confirmingDisabled={!walletClient || wrongChain}
+        onConfirm={() => {
+          if (walletClient) void gasless.enable(walletClient);
+        }}
+      />
     </div>
   );
 }

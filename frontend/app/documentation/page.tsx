@@ -55,11 +55,12 @@ export default function DocumentationPage() {
         <Section id="click-token" title="$CLICK Token">
           <ul className="mt-3 list-disc space-y-2 pl-5 font-body text-sm leading-relaxed text-secondary md:text-base">
             <li>
-              Base reward: <strong className="text-white">10 $CLICK per click</strong> (dynamically reduced by Clickhash Rate
-              difficulty)
+              Base reward: <strong className="text-white">10 $CLICK per successful click</strong> (dynamic Clickhash Rate can
+              reject low-quality hashes; emission uses the full base on success)
             </li>
             <li>
-              Total supply cap: <strong className="text-white">1,000,000,000 $CLICK</strong>
+              Total supply cap:{" "}
+              <strong className="text-white">100,000,000,000 (100 billion) $CLICK</strong>
             </li>
             <li>1% transfer tax on every $CLICK movement (goes to protocol treasury)</li>
             <li>
@@ -138,7 +139,7 @@ export default function DocumentationPage() {
           <ul className="mt-3 list-disc space-y-2 pl-5 font-body text-sm leading-relaxed text-secondary md:text-base">
             <li>BTC-style difficulty curve that increases with global clicking activity</li>
             <li>Prevents the entire supply or all NFTs from being minted too quickly</li>
-            <li>Guarantees the full 1B $CLICK and 10k NFTs will take ~12+ months under realistic usage</li>
+            <li>Guarantees the full 100B $CLICK and 10k NFTs will take ~12+ months under realistic usage</li>
           </ul>
         </Section>
 
@@ -149,7 +150,7 @@ export default function DocumentationPage() {
           </p>
           <ul className="mt-2 list-disc space-y-1 pl-5 font-body text-sm text-secondary md:text-base">
             <li>10,000 Binary Trophy NFTs have been minted, and</li>
-            <li>1,000,000,000 $CLICK have been minted</li>
+            <li>100,000,000,000 $CLICK have been minted</li>
           </ul>
           <p className="mt-3 font-body text-sm text-secondary">Season 2 can be planned afterward.</p>
         </Section>
@@ -191,7 +192,8 @@ export default function DocumentationPage() {
             <li>Watch for hourly POT wins and NFT drops within minutes instead of hours/days</li>
           </ul>
           <p className="mt-4 font-body text-sm leading-relaxed text-secondary md:text-base">
-            When we move to mainnet, the economy numbers will automatically switch to the full 1B / 10k / 7-day values.
+            When we move to mainnet, the economy numbers will automatically switch to the full 100B $CLICK / 10k trophies /
+            7-day vesting values.
           </p>
         </Section>
 

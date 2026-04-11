@@ -17,12 +17,13 @@ Use this as a living QA list. Update checkboxes as you verify. **Maintenance:** 
 | Status | Item | Notes |
 |--------|------|--------|
 | [ ] | POT shows 0 with many clicks | **Expected** if no `deposit()` in *current* game hour — only deposits add to `potEthByHour`; see Architecture. |
-| [ ] | Hour / winner “auto” | **Not automatic** — requires `finalizeHour` (keeper or ops button). VRF = randomness upgrade, not cron. |
+| [ ] | Hour / winner “auto” | **Not automatic** — requires `finalizeHour` (**owner-only** since 2026-04-06; dashboard button reverts unless connected wallet is game owner). VRF = randomness upgrade, not cron. |
 | [ ] | `deposit()` credits user and splits fees | Verify on Base Sepolia with small ETH. |
 | [ ] | `click()` deducts credits when `clickCostCredits > 0` | Deploy script used `0` in sample; retest if owner changes economy. |
 | [ ] | `click()` grants vesting when `baseClickReward > 0` | If reward is `0`, UI correctly shows no unvested from clicks. |
 | [ ] | `finalizeHour()` after buffer | Needs enough clicks + window eligibility; min clicks constant in contract. |
 | [ ] | `CLICK.setGame(game)` matches deployed game | Run `set-game.ts` if needed; frontend “Game link OK” must be yes. |
+| [ ] | Post-deploy script | Run **`npm run verify:base-sepolia`** (or `hardhat run scripts/verify-deployment.ts`) with deployed addresses; optional **`EXPECTED_MAX_SUPPLY_WEI`** for 100B mainnet cap — see **`docs/POST_DEPLOY_VERIFICATION.md`**. |
 
 ## CLICK token & vesting
 

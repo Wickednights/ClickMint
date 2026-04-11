@@ -4,9 +4,11 @@
   "private": true,
   "scripts": {
     "compile": "hardhat compile",
+    "build": "hardhat compile",
     "test": "hardhat test",
     "deploy:base-sepolia": "hardhat run scripts/deploy.ts --network baseSepolia",
     "set-game:base-sepolia": "hardhat run scripts/set-game.ts --network baseSepolia",
+    "verify:base-sepolia": "hardhat run scripts/verify-deployment.ts --network baseSepolia",
     "peek:deployer-meta": "node scripts/peek-deployer-key-meta.cjs"
   },
   "devDependencies": {

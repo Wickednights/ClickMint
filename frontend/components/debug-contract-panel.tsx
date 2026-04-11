@@ -39,6 +39,27 @@ export function DebugContractPanel() {
     query: { enabled: !!gameAddr },
   });
 
+  const { data: clicksPerHashTier } = useReadContract({
+    address: gameAddr,
+    abi: clickMintGameAbi,
+    functionName: "clicksPerHashTier",
+    query: { enabled: !!gameAddr },
+  });
+
+  const { data: clickMaxSupply } = useReadContract({
+    address: clickAddr,
+    abi: clickTokenAbi,
+    functionName: "maxSupply",
+    query: { enabled: !!clickAddr },
+  });
+
+  const { data: clickTotalSupply } = useReadContract({
+    address: clickAddr,
+    abi: clickTokenAbi,
+    functionName: "totalSupply",
+    query: { enabled: !!clickAddr },
+  });
+
   const { data: gameClickTokenAddr } = useReadContract({
     address: gameAddr,
     abi: clickMintGameAbi,
@@ -123,6 +144,14 @@ export function DebugContractPanel() {
       <p>clickCostCredits (wei): {clickCostCredits !== undefined ? clickCostCredits.toString() : "—"}</p>
       <p>Click Credits (credits ÷ cost): {creditsWhole}</p>
       <p>baseClickReward / click: {baseClickReward !== undefined ? `${formatEther(baseClickReward)} $CLICK` : "—"}</p>
+      <p>clicksPerHashTier (game hour): {clicksPerHashTier !== undefined ? clicksPerHashTier.toString() : "—"}</p>
+      <p>
+        CLICK.maxSupply:{" "}
+        {clickMaxSupply !== undefined
+          ? `${formatEther(clickMaxSupply)} tokens · ${clickMaxSupply.toString()} wei`
+          : "—"}
+      </p>
+      <p>CLICK.totalSupply: {clickTotalSupply !== undefined ? `${formatEther(clickTotalSupply)} $CLICK` : "—"}</p>
       <p>pendingVested (unvested): {unvestedWei !== undefined ? `${formatEther(unvestedWei)} $CLICK` : "—"}</p>
       <p>claimable: {claimable !== undefined ? `${formatEther(claimable)} $CLICK` : "—"}</p>
       <p>$CLICK balance (liquid): {clickBalance !== undefined ? `${formatEther(clickBalance)} $CLICK` : "—"}</p>

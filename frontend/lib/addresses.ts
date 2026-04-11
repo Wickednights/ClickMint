@@ -2,12 +2,12 @@ import type { Address } from "viem";
 
 /** Base Sepolia — deployed ClickMint Phase 1. Override with `NEXT_PUBLIC_*` in `.env.local`. */
 export const baseSepoliaDeployed = {
-  click: "0xFf29E7fF7f72b155C49269Dc256eA691f79Ccb8B",
-  treasury: "0xC85658f98dF53A560877909b847e1FcE0fD50f99",
-  secretPrizeWallet: "0x136CAb0687A76614Ae1A9F9c33984C35168C082",
-  binaryTrophyNft: "0x74577adb4666C56f235bf5da3Dd85911C71F477f",
-  escrow: "0xF4d426E12b7a9E14CbDEba66d574EEc5835A2363",
-  game: "0x780EFFaf88111bDEEFF9052DdD85aC86c20b35b3",
+  click: "0x6CB127e069D98F6A0B1851585670495DA93cB5D5",
+  treasury: "0x3B04A33D89F114185FF7194a1f8b13b086999471",
+  secretPrizeWallet: "0xB4BD710d5691Dbb7BF02791ddAd9f818F4a47Af5",
+  binaryTrophyNft: "0xE367E485fF1C2946d4435bab6649C576Ca526476",
+  escrow: "0x2457623b777DE271CDC9d9D37E3a93f19fcc5960",
+  game: "0xEA612843365Cc1B53f9FC6988d6edD54aeD84013",
 } as const satisfies Record<string, Address>;
 
 function readAddr(primary?: string, alternatives: Array<string | undefined> = []): Address | undefined {

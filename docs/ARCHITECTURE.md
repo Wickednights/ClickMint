@@ -43,15 +43,21 @@ Central game contract. Holds **ETH credits** per user (`credits[address]`), hour
 | Function / area | Role |
 |-----------------|------|
 | `deposit()` | User sends ETH; 3× 1% fees to treasury, secret wallet, and POT; remainder credited **1:1 as wei** to `credits[msg.sender]`. |
-| `click()` | Optionally deducts `clickCostCredits` from credits; enforces per-block click limit; updates hour + 15m window bitmask; optional hash-tier gate; records participants for POT; if `baseClickReward > 0`, calls `CLICK.grantVested`. |
-| `finalizeHour(hourId)` | After hour end + buffer, picks pseudo-random window + winner among eligible players; mints POT payout via `CLICK.mint(winner, payout)`; may carry ETH forward. |
+| `click()` | EOA path; same core logic as `clickFor` but for `msg.sender`. |
+| `clickFor(player)` | Gasless / smart-account path: caller must be `clickExecutor[player]`; runs `_click(player)` so credits / POT / vesting stay on the EOA. |
+| `setClickExecutor(executor)` | EOA links its smart account (or revokes with `address(0)`). |
+| `depositFor(player)` | Credits `player` when caller is `player` or `clickExecutor[player]` (optional; UI uses EOA `deposit()`). |
+| `finalizeHour(hourId)` | **Owner-only (MVP):** after hour end + buffer, picks pseudo-random window + winner; mints POT payout via `CLICK.mint`; may carry ETH forward. NatSpec documents MEV/grief + entropy rationale; production → keeper/VRF. |
+| `pause` / `unpause` | Owner emergency stop (blocks deposits, clicks, executor linking, finalization; sweep still allowed). Emits **`GamePaused` / `GameUnpaused`** (and OpenZeppelin **`Paused` / `Unpaused`**). |
+| `isPaused()` | Alias for **`paused()`** — convenience for integrators. |
+| `setTrophyNft` / `mintTrophyForPlayer` | Link trophy contract; owner forwards mint to Binary Trophy; emits **`TrophyMintedViaGame`**. |
 | `setEconomy` / `setAddresses` | Owner tuning. |
 
-**Important view getters:** `credits`, `click_costCredits`, `baseClickReward`, `currentPotEth`, `gameHour`, `totalClicksInHour`, `hourFinalized`, etc.
+**Important view getters:** `credits`, `clickCostCredits`, `baseClickReward`, `clicksPerHashTier`, `currentPotEth`, `gameHour`, `totalClicksInHour`, `hourFinalized`, etc.
 
 ### CLICK (ERC20 + vesting)
 
-Token cap `MAX_SUPPLY`. Game is **`onlyGame`**: `grantVested` (vesting vault schedule) and `mint` (POT).
+Token cap `maxSupply` (**immutable**, set at deploy — mainnet target **100B**, testnet default **1M**). Game is **`onlyGame`**: `grantVested` (vesting vault schedule) and `mint` (POT).
 
 | Function | Role |
 |----------|------|
@@ -70,7 +76,7 @@ Simple **receive + owner sweep** contracts. Game sends fee slices on each `depos
 
 ### BinaryTrophyNFT
 
-ERC721 + EIP-2981 royalties; owner **`mint`** in MVP; contract can receive ETH and accrue **per-token holder** `pendingEth` for `claimRevenue`. Not wired into `click()` in the core game contract.
+ERC721 + EIP-2981 royalties; **`maxSupply`** is **immutable** at deploy (mainnet **10,000**, testnet **10**). **`receive()`** splits incoming ETH with an **O(1) reward accumulator**; trophy holders call **`claimRevenue(tokenId)`** to pull their share. Not wired into `click()` in the core game contract.
 
 ### Escrow
 
@@ -91,4 +97,5 @@ Holds ERC721 in a **hold**; beneficiary (or owner) **`claim`** to release. Optio
 
 - POT randomness uses block data + nonce — fine for testnet; production should use VRF or similar.
 - Owner powers: game economy, treasury/secret addresses, CLICK treasury/LP/game pointer, trophy minting.
+- Admin txs should surface in logs via dedicated events (**`GameSet`**, **`GamePaused`/`GameUnpaused`**, **`Swept`**, etc.). After deploy, run **`docs/POST_DEPLOY_VERIFICATION.md`** / **`verify-deployment.ts`**.
 - Users must trust contract audits and upgrade policy (immutable game + token in standard deploy).

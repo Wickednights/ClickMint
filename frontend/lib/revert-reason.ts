@@ -3,12 +3,15 @@ import { decodeErrorResult, parseAbi } from "viem";
 /** Custom errors from ClickMintGame + CLICK (must match Solidity). */
 export const revertErrorsAbi = parseAbi([
   "error GameBadAddr()",
+  "error GameBadExecutor()",
+  "error GameZeroTrophyAddr()",
+  "error TrophyNotGame()",
   "error GameCooldown()",
   "error GameCredits()",
   "error GameFinalizeEarly()",
   "error GameAlreadyFinalized()",
   "error CLICKUnauthorized()",
-  "error CLICKCap()",
+  "error CLICKBadSupply()",
   "error CLICKZeroAddr()",
 ]);
 
@@ -43,14 +46,20 @@ export function explainRevertData(data: `0x${string}` | undefined): string {
     switch (decoded.errorName) {
       case "CLICKUnauthorized":
         return "CLICK token rejected the game: CLICK.game is not set to this ClickMintGame (fix: owner calls CLICK.setGame(gameAddress)).";
-      case "CLICKCap":
-        return "CLICK max supply would be exceeded (CLICKCap).";
+      case "CLICKBadSupply":
+        return "CLICK supply constraint: zero cap at deploy, or any mint would exceed maxSupply (CLICKBadSupply).";
       case "GameCredits":
         return "Not enough credits for this click (GameCredits).";
       case "GameCooldown":
         return "Block click limit reached — max ~2 clicks per block (GameCooldown).";
       case "GameBadAddr":
         return "Game misconfigured address (GameBadAddr).";
+      case "GameBadExecutor":
+        return "This wallet is not your linked gasless executor — run Enable gasless again or call setClickExecutor(smartAccount) from your EOA (GameBadExecutor).";
+      case "TrophyNotGame":
+        return "Binary Trophy mint from game only — set clickMintGame on the NFT and call from ClickMintGame (TrophyNotGame).";
+      case "GameZeroTrophyAddr":
+        return "Trophy NFT not linked — owner must setTrophyNft on the game (GameZeroTrophyAddr).";
       case "GameFinalizeEarly":
         return "Too early to finalize this hour (GameFinalizeEarly).";
       case "GameAlreadyFinalized":
