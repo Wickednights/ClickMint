@@ -36,6 +36,7 @@ async function main() {
   const isPausedAlias = await game.isPaused();
   const clickTok = await game.clickToken();
   const trophyOnGame = await game.trophyNft();
+  const trophyDropBps = await game.trophyDropBps();
 
   console.log("--- ClickMint post-deploy verification ---");
   console.log("CLICK.address:", clickAddr);
@@ -59,6 +60,7 @@ async function main() {
   console.log("game.isPaused():", isPausedAlias);
   console.log("game.clickToken matches CLICK:", clickTok.toLowerCase() === clickAddr.toLowerCase());
   console.log("game.trophyNft():", trophyOnGame);
+  console.log("game.trophyDropBps():", trophyDropBps.toString());
 
   if (trophyAddr) {
     const trophy = await ethers.getContractAt("BinaryTrophyNFT", trophyAddr);

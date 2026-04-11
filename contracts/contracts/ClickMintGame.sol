@@ -35,7 +35,7 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
 
     uint256 public clickCostCredits;
     uint256 public baseClickReward;
-    /// @notice Trophy mint probability per successful click (basis points of `BPS`).0 = no auto-mints.
+    /// @notice Trophy mint probability per successful click (basis points of `BPS`). 0 = no auto-mints.
     uint256 public trophyDropBps;
 
     /// @notice Last pot settlement (game hour id).
@@ -71,6 +71,7 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     event EconomyUpdated(uint256 clickPerEthWei, uint256 clickCostCredits, uint256 baseClickReward);
     event ClickExecutorSet(address indexed player, address indexed executor);
     event TrophyNftSet(address indexed trophy);
+    event TrophyDropBpsUpdated(uint256 bps);
     event PotCarrySwept(address indexed to, uint256 amount);
     /// @notice Emitted in addition to OpenZeppelin `Pausable` **Paused** event (same transition).
     event GamePaused(address indexed by);
@@ -130,10 +131,11 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         emit TrophyNftSet(trophy_);
     }
 
-    /// @notice Tune per-click trophy drop rate (basis points of10_000). Use 0 to disable auto-mints.
+    /// @notice Tune per-click trophy drop rate (basis points of 10_000). Use 0 to disable auto-mints.
     function setTrophyDropBps(uint256 bps) external onlyOwner whenNotPaused {
         if (bps > BPS) revert GameBadBps();
         trophyDropBps = bps;
+        emit TrophyDropBpsUpdated(bps);
     }
 
     /// @notice Pause gameplay (`deposit`, clicks, `setClickExecutor`, `finalizeHour`, economy/trophy admin).

@@ -44,7 +44,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { getClickAddress, getGameAddress, getTrophyNftAddress } from "@/lib/addresses";
+import { EscrowPanel } from "@/components/escrow-panel";
+import { getClickAddress, getEscrowAddress, getGameAddress, getTrophyNftAddress } from "@/lib/addresses";
 import { economyPresetHint, economyPresetShortLabel } from "@/lib/economy-preset";
 import { useClickMintAudio } from "@/hooks/use-clickmint-audio";
 
@@ -143,6 +144,7 @@ export function ClickMintDashboard() {
   const gameAddr = getGameAddress();
   const clickAddr = getClickAddress();
   const trophyAddr = getTrophyNftAddress();
+  const escrowAddr = getEscrowAddress();
 
   const {
     musicOn,
@@ -660,12 +662,6 @@ export function ClickMintDashboard() {
   const canSendClick =
     isConnected && !writePending && !gaslessActionPending && !gameLinkPending && gameLinkOk;
 
-<<<<<<< HEAD
-  const terminalBody = (
-    <>
-      {/* Alerts */}
-      <div className="flex w-full max-w-xl flex-col items-center gap-2">
-=======
   const depositPanel = (
     <div className="flex w-full flex-col items-stretch border border-primary-fixed/20 bg-surface-container-low/60">
       <button
@@ -810,9 +806,8 @@ export function ClickMintDashboard() {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Setup / economy alerts */}
       <section className="mx-auto flex w-full max-w-sm flex-col items-center space-y-10 md:max-w-lg">
->>>>>>> cb156908ebe9a62a386237bb3879bc2056685d37
         {!gameLinkPending && !gameLinkOk && (
           <div className="w-full border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-center font-body text-[11px] text-amber-200 md:text-xs">
             Game not linked. Owner runs <span className="font-mono text-amber-100">CLICK.setGame({gameAddr})</span> (
@@ -836,7 +831,7 @@ export function ClickMintDashboard() {
             <span className="font-mono">contracts/scripts/set-economy-round.ts</span>.
           </p>
         )}
-      </div>
+      </section>
 
       {/* Hourly POT clock + 15m window */}
       <section className="w-full max-w-xl border border-outline-variant/25 bg-surface-container-low/40 px-4 py-3 text-center md:px-5">
@@ -991,60 +986,6 @@ export function ClickMintDashboard() {
         </div>
       </section>
 
-      {/* Hero CLICK — centered */}
-      <div className="relative flex w-full max-w-3xl flex-col items-center justify-center space-y-4 py-2 md:mx-auto md:py-8">
-        <div className="absolute inset-0 flex items-center justify-center opacity-10 md:hidden">
-          <div className="pulse-ring h-64 w-64 rounded-full border border-primary-container" />
-        </div>
-        <button
-          type="button"
-          disabled={!canSendClick}
-          onClick={() => void onClick()}
-          className={cn(
-            "relative z-10 flex h-56 w-56 flex-col items-center justify-center font-headline font-black uppercase transition-transform active:scale-90",
-            "md:h-[17rem] md:w-[17rem]",
-            "rounded-full border-4 border-primary-container bg-surface-container md:rounded-none md:border-0 md:bg-primary-fixed md:text-on-primary-fixed md:neon-pulse",
-            wrongChain && "ring-2 ring-amber-400/80"
-          )}
-        >
-          <span className="absolute inset-0 bg-gradient-to-tr from-primary-container/20 to-transparent md:hidden" />
-          <span className="relative z-20 font-headline text-5xl font-extrabold tracking-tighter text-white glitch-text md:text-6xl md:text-on-primary-fixed md:[text-shadow:none]">
-            CLICK
-          </span>
-          <span className="relative z-20 mt-1 font-label text-[10px] font-medium tracking-[0.3em] text-primary-fixed md:hidden">
-            EXECUTE
-          </span>
-        </button>
-        {wrongChain && (
-          <p className="max-w-xs text-center font-body text-[9px] uppercase tracking-wider text-amber-200/90">
-            Wrong network — tap CLICK to switch to Base Sepolia, or use the header link.
-          </p>
-        )}
-        <div className="border border-outline-variant/30 bg-surface-container-low px-4 py-2 font-label text-[10px] uppercase tracking-widest text-primary-fixed">
-          <span className="inline-flex items-center gap-2">
-            <span
-              className="material-symbols-outlined text-xs"
-              style={{ fontVariationSettings: `"FILL" 1, "wght" 400` } as CSSProperties}
-            >
-              bolt
-            </span>
-            {cooldownLabel !== null ? <>RATE LIMIT: {cooldownLabel}s</> : <>READY</>}
-          </span>
-        </div>
-        {gasless.status === "ready" ? (
-          <p className="max-w-md px-2 text-center font-body text-[10px] leading-snug text-secondary">
-            <span className="font-semibold text-primary-fixed/90">Gasless mode active</span> — clicks are free of gas. Your
-            EOA receives all rewards and uses your existing credits. Executor:{" "}
-            <span className="font-mono text-primary-fixed/85">
-              {gasless.smartAccountAddress
-                ? `${gasless.smartAccountAddress.slice(0, 6)}…${gasless.smartAccountAddress.slice(-4)}`
-                : "—"}
-            </span>
-            .
-          </p>
-        ) : null}
-      </div>
-
       <section className="mx-auto w-full max-w-sm space-y-3">
         <div className="flex justify-between font-label text-[11px] uppercase tracking-widest text-secondary md:text-xs">
           <span className="text-left">Hourly POT · {potEthStr} ETH</span>
@@ -1070,6 +1011,10 @@ export function ClickMintDashboard() {
           Finalize hour (ops)
         </button>
       </section>
+
+      <div className="mx-auto flex w-full max-w-xl justify-center px-1">
+        <EscrowPanel escrowAddr={escrowAddr} trophyAddr={trophyAddr} />
+      </div>
 
       {/* Minimal footer strip */}
       <section className="flex max-w-lg flex-col items-center gap-4 text-center">
@@ -1392,7 +1337,7 @@ export function ClickMintDashboard() {
               Trophy room
             </h2>
             <p className="mb-4 font-body text-[10px] text-secondary opacity-80">
-              Winner log from this session. Binary Trophy NFT claims ship in a later phase.
+              POT winners from this session. Trophies mint on lucky clicks (game odds) or via escrow on the Terminal tab.
             </p>
             <WinnerTable rows={potRows} />
           </section>
