@@ -47,7 +47,7 @@ Central game contract. Holds **ETH credits** per user (`credits[address]`), hour
 | `clickFor(player)` | Gasless / smart-account path: caller must be `clickExecutor[player]`; runs `_click(player)` so credits / POT / vesting stay on the EOA. |
 | `setClickExecutor(executor)` | EOA links its smart account (or revokes with `address(0)`). |
 | `depositFor(player)` | Credits `player` when caller is `player` or `clickExecutor[player]` (optional; UI uses EOA `deposit()`). |
-| `finalizeHour(hourId)` | **Owner-only (MVP):** after hour end + buffer, picks pseudo-random window + winner; mints POT payout via `CLICK.mint`; may carry ETH forward. NatSpec documents MEV/grief + entropy rationale; production → keeper/VRF. |
+| `finalizeHour(hourId)` | After hour end + buffer, picks pseudo-random window + winner; mints POT payout via `CLICK.mint`; may carry ETH forward. Callable by **`owner`** or optional **`potKeeper`** (`setPotKeeper`) for automation. See **`docs/LP_AERODROME_AND_AUTOMATION.md`**. |
 | `pause` / `unpause` | Owner emergency stop (blocks deposits, clicks, executor linking, finalization; sweep still allowed). Emits **`GamePaused` / `GameUnpaused`** (and OpenZeppelin **`Paused` / `Unpaused`**). |
 | `isPaused()` | Alias for **`paused()`** — convenience for integrators. |
 | `setTrophyNft` / `mintTrophyForPlayer` | Link trophy contract; owner forwards mint to Binary Trophy; emits **`TrophyMintedViaGame`**. |

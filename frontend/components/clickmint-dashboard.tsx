@@ -381,6 +381,7 @@ export function ClickMintDashboard() {
   const [mobileTab, setMobileTab] = useState<MobileTab>("terminal");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const lastClientClick = useRef(0);
   const [cooldownMs, setCooldownMs] = useState(0);
 
@@ -1047,154 +1048,151 @@ export function ClickMintDashboard() {
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-primary-container/[0.04]" />
       </div>
 
-      {/* Header — md: 3-col grid; overflow contained (long preset = tooltip only on md) */}
-      <header className="fixed left-0 top-0 z-50 max-w-[100vw] flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-2 overflow-x-hidden border-b border-outline-variant/20 bg-surface/90 px-3 py-3 font-headline uppercase tracking-tighter backdrop-blur-sm sm:px-4 md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center md:gap-x-3 md:px-4 md:py-4 lg:px-6">
-        <div className="min-w-0 max-w-[100%] flex-col gap-0.5 overflow-hidden md:block md:justify-self-start">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="material-symbols-outlined shrink-0 text-primary-fixed md:hidden">token</span>
-            <span className="truncate text-lg font-black tracking-tighter text-white md:text-2xl">CLICKMINT</span>
-            <Link
-              href="/documentation"
-              className="ml-1 shrink-0 font-label text-[9px] uppercase tracking-widest text-primary-fixed/75 hover:text-primary-fixed md:ml-2"
-            >
-              Docs
-            </Link>
-          </div>
-          <p
-            className="truncate font-label text-[7px] uppercase leading-tight tracking-widest text-secondary/90 md:text-[8px]"
-            title={`${economyPresetShortLabel()} — ${economyPresetHint()}`}
-          >
-            {economyPresetShortLabel()}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-1 md:justify-self-center md:gap-1.5">
-          <button
-            type="button"
-            aria-expanded={depositOpen}
-            aria-controls="header-deposit-panel"
-            id="header-add-credits"
-            title="Add ETH for click credits"
-            onClick={() => setDepositOpen((o) => !o)}
-            className={cn(
-              "inline-flex items-center gap-1 border px-2 py-1 font-label text-[8px] font-bold tracking-widest transition-colors md:gap-1.5 md:px-2.5 md:text-[9px]",
-              depositOpen
-                ? "border-primary-fixed bg-primary-fixed/15 text-primary-fixed"
-                : "border-primary-fixed/40 bg-primary-fixed/10 text-primary-fixed hover:bg-primary-fixed/20"
-            )}
-          >
-            <Icon name="add_circle" className="text-sm opacity-90" />
-            <span className="hidden sm:inline">Credits</span>
-          </button>
-          <button
-            type="button"
-            aria-pressed={musicOn}
-            aria-label="Background music"
-            title="Background music"
-            onClick={() => setMusicOn(!musicOn)}
-            className={cn(
-              "border border-outline-variant/50 px-2 py-1 font-label text-[8px] font-bold tracking-widest transition-colors md:px-2.5 md:text-[9px]",
-              musicOn ? "border-primary-fixed text-primary-fixed" : "text-secondary opacity-60 hover:text-primary-fixed"
-            )}
-          >
-            BGM
-          </button>
-          <button
-            type="button"
-            aria-pressed={sfxOn}
-            aria-label="Click sounds"
-            title="Click sounds"
-            onClick={() => setSfxOn(!sfxOn)}
-            className={cn(
-              "border border-outline-variant/50 px-2 py-1 font-label text-[8px] font-bold tracking-widest transition-colors md:px-2.5 md:text-[9px]",
-              sfxOn ? "border-primary-fixed text-primary-fixed" : "text-secondary opacity-60 hover:text-primary-fixed"
-            )}
-          >
-            SFX
-          </button>
-        </div>
-        <div className="flex min-w-0 max-w-full flex-col items-end gap-1 overflow-hidden md:max-w-[min(18rem,32vw)] md:justify-self-end">
-          {isConnected ? (
-            <>
-              <button
-                type="button"
-                onClick={() => disconnect()}
-                className="max-w-full truncate bg-primary-container px-2 py-1.5 font-headline text-[10px] font-bold tracking-widest text-on-primary-fixed transition-all hover:brightness-110 active:scale-95 sm:px-3 md:max-w-[13rem] md:px-4 md:text-xs"
+      {/* Header — centered controls (md+); credits open a Dialog (fixes overflow clipping). Mobile: wallet + menu. */}
+      <header className="fixed left-0 top-0 z-50 w-full overflow-visible border-b border-outline-variant/20 bg-surface/90 font-headline uppercase tracking-tighter backdrop-blur-sm">
+        <div className="mx-auto flex max-w-[100vw] flex-wrap items-center justify-between gap-x-2 gap-y-2 px-3 py-3 sm:px-4 md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center md:gap-x-4 md:px-4 md:py-3 lg:px-6">
+          <div className="min-w-0 max-w-[min(100%,14rem)] flex-col gap-0.5 sm:max-w-none md:justify-self-start">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="material-symbols-outlined shrink-0 text-primary-fixed md:hidden">token</span>
+              <span className="truncate text-lg font-black tracking-tighter text-white md:text-2xl">CLICKMINT</span>
+              <Link
+                href="/documentation"
+                className="ml-1 hidden shrink-0 font-label text-[9px] uppercase tracking-widest text-primary-fixed/75 hover:text-primary-fixed sm:inline md:ml-2"
               >
-                {address?.slice(0, 6)}…{address?.slice(-4)}
-              </button>
-              {wrongChain && (
-                <button
-                  type="button"
-                  disabled={switchPending}
-                  onClick={() => switchChain({ chainId: baseSepolia.id })}
-                  className="font-label text-[9px] uppercase tracking-widest text-primary-fixed underline"
-                >
-                  Switch Base Sepolia
-                </button>
-              )}
-              {isPimlicoConfigured() ? (
-                <div className="mt-1 flex w-full max-w-full flex-col items-end gap-1 overflow-hidden md:max-w-[13rem]">
-                  <p className="w-full truncate text-right font-label text-[8px] uppercase leading-tight tracking-widest text-secondary">
-                    {gasless.status === "ready"
-                      ? "Gasless mode active"
-                      : isConnected
-                        ? "Wallet connected — enable gasless"
-                        : "Connect wallet for gasless"}
-                  </p>
-                  <div className="flex flex-wrap justify-end gap-1">
-                    {gasless.status === "ready" ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          gasless.clear();
-                          toast.message("Gasless session cleared");
-                        }}
-                        className="border border-outline-variant/60 px-2 py-0.5 font-label text-[8px] uppercase tracking-widest text-secondary hover:border-primary-fixed hover:text-primary-fixed"
-                      >
-                        Disable gasless
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        disabled={!isConnected || wrongChain || !walletClient || gasless.status === "enabling"}
-                        onClick={() => setGaslessDialogOpen(true)}
-                        className="border border-primary-fixed/40 bg-primary-fixed/10 px-2 py-0.5 font-label text-[8px] uppercase tracking-widest text-primary-fixed hover:bg-primary-fixed/20 disabled:opacity-40"
-                      >
-                        Enable gasless clicks
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ) : null}
-            </>
-          ) : (
+                Docs
+              </Link>
+            </div>
+            <p
+              className="hidden truncate font-label text-[7px] uppercase leading-tight tracking-widest text-secondary/90 sm:block md:text-[8px]"
+              title={`${economyPresetShortLabel()} — ${economyPresetHint()}`}
+            >
+              {economyPresetShortLabel()}
+            </p>
+          </div>
+
+          <div className="hidden w-full shrink-0 flex-wrap items-center justify-center gap-1.5 md:flex md:w-auto md:justify-self-center">
             <button
               type="button"
-              disabled={connectPending}
-              onClick={() => setWalletOpen(true)}
-              className="bg-primary-container px-4 py-1.5 font-headline text-[11px] font-bold tracking-widest text-on-primary-fixed transition-all hover:brightness-110 active:scale-95 md:px-6 md:text-xs"
+              id="header-add-credits"
+              aria-expanded={depositOpen}
+              aria-haspopup="dialog"
+              title="Add ETH for click credits"
+              onClick={() => setDepositOpen(true)}
+              className={cn(
+                "inline-flex items-center gap-1 border px-2 py-1 font-label text-[8px] font-bold tracking-widest transition-colors md:gap-1.5 md:px-2.5 md:text-[9px]",
+                depositOpen
+                  ? "border-primary-fixed bg-primary-fixed/15 text-primary-fixed"
+                  : "border-primary-fixed/40 bg-primary-fixed/10 text-primary-fixed hover:bg-primary-fixed/20"
+              )}
             >
-              <span className="hidden sm:inline">Connect Wallet</span>
-              <span className="sm:hidden">Connect</span>
+              <Icon name="add_circle" className="text-sm opacity-90" />
+              <span>Credits</span>
             </button>
-          )}
-        </div>
-        {depositOpen ? (
-          <div
-            id="header-deposit-panel"
-            role="region"
-            aria-labelledby="header-add-credits"
-            className="pointer-events-auto absolute left-0 right-0 top-full z-[60] max-h-[min(75vh,calc(100dvh-5rem))] overflow-y-auto border-b border-outline-variant/40 bg-surface/97 px-4 py-4 shadow-[0_16px_48px_rgba(0,0,0,0.45)] backdrop-blur-md md:px-8"
-          >
-            <p className="mb-3 text-center font-body text-[12px] leading-snug text-secondary md:text-sm">
-              In-game Click Credits (not $CLICK). Bonuses apply on larger single deposits.
-            </p>
-            {clickCostCredits === 0n && (
-              <p className="mb-3 text-center font-body text-[11px] text-secondary opacity-80">
-                0 credits charged per click on this deployment.
-              </p>
+            <button
+              type="button"
+              aria-pressed={musicOn}
+              aria-label="Background music"
+              title="Background music"
+              onClick={() => setMusicOn(!musicOn)}
+              className={cn(
+                "border border-outline-variant/50 px-2 py-1 font-label text-[8px] font-bold tracking-widest transition-colors md:px-2.5 md:text-[9px]",
+                musicOn ? "border-primary-fixed text-primary-fixed" : "text-secondary opacity-60 hover:text-primary-fixed"
+              )}
+            >
+              BGM
+            </button>
+            <button
+              type="button"
+              aria-pressed={sfxOn}
+              aria-label="Click sounds"
+              title="Click sounds"
+              onClick={() => setSfxOn(!sfxOn)}
+              className={cn(
+                "border border-outline-variant/50 px-2 py-1 font-label text-[8px] font-bold tracking-widest transition-colors md:px-2.5 md:text-[9px]",
+                sfxOn ? "border-primary-fixed text-primary-fixed" : "text-secondary opacity-60 hover:text-primary-fixed"
+              )}
+            >
+              SFX
+            </button>
+            {isPimlicoConfigured() ? (
+              gasless.status === "ready" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    gasless.clear();
+                    toast.message("Gasless session cleared");
+                  }}
+                  className="border border-outline-variant/60 px-2 py-1 font-label text-[8px] uppercase tracking-widest text-secondary hover:border-primary-fixed hover:text-primary-fixed md:px-2.5 md:text-[9px]"
+                >
+                  Gasless off
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled={!isConnected || wrongChain || !walletClient || gasless.status === "enabling"}
+                  onClick={() => setGaslessDialogOpen(true)}
+                  className="border border-primary-fixed/40 bg-primary-fixed/10 px-2 py-1 font-label text-[8px] uppercase tracking-widest text-primary-fixed hover:bg-primary-fixed/20 disabled:opacity-40 md:px-2.5 md:text-[9px]"
+                >
+                  Gasless
+                </button>
+              )
+            ) : null}
+          </div>
+
+          <div className="flex min-w-0 flex-1 items-center justify-end gap-2 md:min-w-0 md:flex-none md:justify-self-end">
+            <button
+              type="button"
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center border border-outline-variant/50 text-primary-fixed md:hidden"
+              aria-label="Open menu"
+              onClick={() => setMobileMenuOpen(true)}
+            >
+              <span className="material-symbols-outlined text-xl">menu</span>
+            </button>
+            {isConnected ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => disconnect()}
+                  className="max-w-[11rem] truncate bg-primary-container px-2 py-1.5 font-headline text-[10px] font-bold tracking-widest text-on-primary-fixed transition-all hover:brightness-110 active:scale-95 sm:max-w-[13rem] sm:px-3 md:max-w-[14rem] md:px-4 md:text-xs"
+                >
+                  {address?.slice(0, 6)}…{address?.slice(-4)}
+                </button>
+                {wrongChain && (
+                  <button
+                    type="button"
+                    disabled={switchPending}
+                    onClick={() => switchChain({ chainId: baseSepolia.id })}
+                    className="hidden font-label text-[9px] uppercase tracking-widest text-primary-fixed underline sm:inline"
+                  >
+                    Switch network
+                  </button>
+                )}
+              </>
+            ) : (
+              <button
+                type="button"
+                disabled={connectPending}
+                onClick={() => setWalletOpen(true)}
+                className="bg-primary-container px-3 py-1.5 font-headline text-[11px] font-bold tracking-widest text-on-primary-fixed transition-all hover:brightness-110 active:scale-95 md:px-6 md:text-xs"
+              >
+                Connect
+              </button>
             )}
-            <div className="mx-auto grid max-w-lg grid-cols-3 gap-2">
+          </div>
+        </div>
+
+        <Dialog open={depositOpen} onOpenChange={setDepositOpen}>
+          <DialogContent className="max-h-[min(90dvh,32rem)] overflow-y-auto sm:max-w-lg" aria-describedby="deposit-dialog-desc">
+            <DialogHeader>
+              <DialogTitle>Add click credits</DialogTitle>
+              <DialogDescription id="deposit-dialog-desc" className="text-left font-body text-sm text-secondary">
+                Deposit ETH for in-game credits (not $CLICK). Larger single deposits may include tier bonuses.
+              </DialogDescription>
+            </DialogHeader>
+            {clickCostCredits !== undefined && clickCostCredits === 0n && (
+              <p className="text-center font-body text-[11px] text-secondary opacity-80">Zero credits charged per click on this deployment.</p>
+            )}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {QUICK_BUY.map((e) => {
                 const depWei = parseEther(e);
                 const bonusLine = depositBonusLabel(depWei);
@@ -1244,12 +1242,12 @@ export function ClickMintDashboard() {
               })}
             </div>
             {tinyClickCost && (
-              <p className="mt-2 text-center font-body text-[10px] text-secondary opacity-80">
+              <p className="text-center font-body text-[10px] text-secondary opacity-80">
                 *Credit count explodes when per-click cost is ~1 wei. Use repo{" "}
                 <span className="font-mono text-primary-fixed/80">set-economy-round.ts</span>.
               </p>
             )}
-            <p className="mt-3 text-center">
+            <p className="text-center">
               <Link
                 href="/documentation#click-credits"
                 className="font-label text-[10px] uppercase tracking-widest text-primary-fixed/80 underline-offset-2 hover:underline"
@@ -1257,8 +1255,113 @@ export function ClickMintDashboard() {
                 How credits work
               </Link>
             </p>
-          </div>
-        ) : null}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+          <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-md" aria-describedby="mobile-menu-desc">
+            <DialogHeader>
+              <DialogTitle>Menu</DialogTitle>
+              <DialogDescription id="mobile-menu-desc" className="sr-only">
+                Credits, audio, gasless, and documentation
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex flex-col gap-3 font-headline uppercase tracking-widest">
+              <p
+                className="truncate font-label text-[9px] leading-tight text-secondary normal-case"
+                title={`${economyPresetShortLabel()} — ${economyPresetHint()}`}
+              >
+                {economyPresetShortLabel()}
+              </p>
+              <button
+                type="button"
+                className="border border-primary-fixed/40 bg-primary-fixed/10 px-3 py-2 text-left text-[11px] text-primary-fixed"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setDepositOpen(true);
+                }}
+              >
+                + Add credits
+              </button>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  aria-pressed={musicOn}
+                  onClick={() => setMusicOn(!musicOn)}
+                  className={cn(
+                    "border border-outline-variant/50 px-3 py-2 text-[10px]",
+                    musicOn ? "border-primary-fixed text-primary-fixed" : "text-secondary"
+                  )}
+                >
+                  BGM {musicOn ? "on" : "off"}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={sfxOn}
+                  onClick={() => setSfxOn(!sfxOn)}
+                  className={cn(
+                    "border border-outline-variant/50 px-3 py-2 text-[10px]",
+                    sfxOn ? "border-primary-fixed text-primary-fixed" : "text-secondary"
+                  )}
+                >
+                  SFX {sfxOn ? "on" : "off"}
+                </button>
+              </div>
+              {isPimlicoConfigured() ? (
+                <div className="border border-outline-variant/30 bg-surface-container-low/50 px-3 py-2">
+                  <p className="mb-2 font-label text-[9px] text-secondary normal-case">
+                    {gasless.status === "ready" ? "Gasless mode on" : "Gasless clicks"}
+                  </p>
+                  {gasless.status === "ready" ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        gasless.clear();
+                        toast.message("Gasless session cleared");
+                        setMobileMenuOpen(false);
+                      }}
+                      className="border border-outline-variant/60 px-3 py-2 text-[10px] text-secondary"
+                    >
+                      Turn off gasless
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={!isConnected || wrongChain || !walletClient || gasless.status === "enabling"}
+                      onClick={() => {
+                        setMobileMenuOpen(false);
+                        setGaslessDialogOpen(true);
+                      }}
+                      className="border border-primary-fixed/40 bg-primary-fixed/10 px-3 py-2 text-[10px] text-primary-fixed disabled:opacity-40"
+                    >
+                      Enable gasless
+                    </button>
+                  )}
+                </div>
+              ) : null}
+              {wrongChain && (
+                <button
+                  type="button"
+                  disabled={switchPending}
+                  onClick={() => {
+                    void switchChain({ chainId: baseSepolia.id });
+                    setMobileMenuOpen(false);
+                  }}
+                  className="border border-amber-500/50 py-2 text-[11px] text-amber-200"
+                >
+                  Switch to Base Sepolia
+                </button>
+              )}
+              <Link
+                href="/documentation"
+                className="border border-outline-variant/40 py-2 text-center text-[11px] text-primary-fixed"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Documentation
+              </Link>
+            </div>
+          </DialogContent>
+        </Dialog>
       </header>
 
       {/* Desktop sidebar */}
