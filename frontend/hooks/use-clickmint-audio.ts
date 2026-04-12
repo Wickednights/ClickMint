@@ -7,7 +7,7 @@ const MUSIC_PREF = "clickmint-pref-music";
 const SFX_PREF = "clickmint-pref-sfx";
 
 const SRC = {
-  sfx: "/sounds/button_click.mp3",
+  sfx: "/sounds/clickmint_crystal_chime.wav",
   ambient: "/sounds/cyberpunkbg.mp3",
 } as const;
 

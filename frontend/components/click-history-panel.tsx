@@ -88,7 +88,7 @@ function ClickCard({ r, animate }: { r: ClickLogRow; animate: boolean }) {
   return (
     <div
       className={cn(
-        "border border-outline-variant/25 bg-surface-container-low/50 px-3 py-2 font-mono text-[10px] text-on-surface",
+        "border border-outline-variant/25 bg-surface-container-low/50 px-3 py-2 font-mono text-[11px] text-on-surface",
         animate && "clickmint-feed-item--enter"
       )}
     >
@@ -96,15 +96,21 @@ function ClickCard({ r, animate }: { r: ClickLogRow; animate: boolean }) {
         <span>#{r.blockNumber.toString()}</span>
         <span className="text-primary-fixed/90">{formatMinuteUtc(r.minute)} UTC</span>
       </div>
-      <div className="mt-1 truncate text-[11px]" title={r.user}>
+      <div className="mt-1 truncate text-[12px]" title={r.user}>
         {r.user.slice(0, 8)}…{r.user.slice(-6)}
       </div>
-      <div className="mt-0.5 text-[10px] text-secondary">Round #{r.hourId.toString()}</div>
+      <div className="mt-0.5 text-[11px] text-secondary">Round #{r.hourId.toString()}</div>
     </div>
   );
 }
 
-export function ClickHistoryPanel({ gameAddr }: { gameAddr: Address }) {
+type ClickHistoryPanelProps = {
+  gameAddr: Address;
+  /** Narrow sidebar: hide heatmap, tighter spacing (desktop sidebar). */
+  compact?: boolean;
+};
+
+export function ClickHistoryPanel({ gameAddr, compact = false }: ClickHistoryPanelProps) {
   const publicClient = usePublicClient({ chainId: baseSepolia.id });
   const [rows, setRows] = useState<ClickLogRow[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
@@ -224,24 +230,30 @@ export function ClickHistoryPanel({ gameAddr }: { gameAddr: Address }) {
   }, [archivePage, archivePageCount]);
 
   return (
-    <section className="w-full max-w-2xl space-y-4 pt-4">
-      <div>
-        <h2 className="mb-1 font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary-fixed">Click history</h2>
-        <p className="font-body text-[11px] leading-snug text-secondary md:text-xs">
-          Live feed (newest first). Heatmap: 5-minute UTC buckets. Settlement uses exact minutes for POT overlap.
-        </p>
+    <section className={cn("w-full space-y-4", compact ? "max-w-none space-y-3 pt-0" : "max-w-2xl pt-4")}>
+      <div className={cn(compact && "text-center")}>
+        <h2 className="mb-1 font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary-fixed">
+          {compact ? "Recent clicks" : "Click history"}
+        </h2>
+        {!compact ? (
+          <p className="font-body text-[12px] leading-snug text-secondary md:text-sm">
+            Live feed (newest first). Heatmap: 5-minute UTC buckets. Settlement uses exact minutes for POT overlap.
+          </p>
+        ) : (
+          <p className="font-body text-[11px] leading-snug text-secondary">Newest first · live</p>
+        )}
       </div>
 
       {status === "loading" && rows.length === 0 ? (
-        <p className="font-body text-[11px] text-secondary">Loading…</p>
+        <p className="font-body text-[12px] text-secondary">Loading…</p>
       ) : null}
       {status === "error" ? (
-        <p className="rounded border border-amber-500/35 bg-amber-500/10 px-3 py-2 font-body text-[11px] text-amber-100/95">
+        <p className="rounded border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-center font-body text-[12px] text-amber-100/95">
           Older history could not be loaded. New clicks may still show up below.
         </p>
       ) : null}
 
-      {heatmap.hourKeys.length > 0 ? (
+      {!compact && heatmap.hourKeys.length > 0 ? (
         <div className="space-y-2">
           <p className="font-label text-[9px] uppercase tracking-widest text-secondary">5-min UTC buckets</p>
           <div className="space-y-2">
@@ -274,12 +286,12 @@ export function ClickHistoryPanel({ gameAddr }: { gameAddr: Address }) {
             })}
           </div>
         </div>
-      ) : status !== "loading" ? (
-        <p className="font-body text-[11px] text-secondary opacity-80">No clicks in the recent window yet.</p>
+      ) : !compact && status !== "loading" ? (
+        <p className="font-body text-[12px] text-secondary opacity-80">No clicks in the recent window yet.</p>
       ) : null}
 
       <div>
-        <p className="mb-2 font-label text-[9px] uppercase tracking-widest text-secondary">Latest clicks</p>
+        <p className="mb-2 font-label text-[10px] uppercase tracking-widest text-secondary md:text-[11px]">Latest clicks</p>
         <div className="space-y-2">
           {liveRows.map((r) => (
             <ClickCard key={r.key} r={r} animate={enterKey === r.key} />
@@ -287,7 +299,7 @@ export function ClickHistoryPanel({ gameAddr }: { gameAddr: Address }) {
         </div>
       </div>
 
-      {archiveTail.length > 0 ? (
+      {!compact && archiveTail.length > 0 ? (
         <div className="space-y-2 border-t border-outline-variant/20 pt-4">
           <p className="font-label text-[9px] uppercase tracking-widest text-secondary">Older</p>
           <div className="hidden max-h-none overflow-visible border border-outline-variant/25 md:block">
