@@ -24,6 +24,7 @@ import {
   clickCreditsFromDeposit,
   creditsGrantedOnDeposit,
   depositBonusLabel,
+  formatClickDisplayWei,
   formatWholeCredits,
   isTinyClickCostWei,
   onChainPlaysRemaining,
@@ -430,7 +431,7 @@ export function ClickMintDashboard() {
         sfxRef.current.playWin();
         sfxRef.current.celebrateWin();
         toast.success("POT WIN", {
-          description: `${args.winner.slice(0, 10)}… +${formatEther(args.clickPayout)} $CLICK`,
+          description: `${args.winner.slice(0, 10)}… +${formatClickDisplayWei(args.clickPayout)} $CLICK`,
           duration: 8000,
         });
         void refetchPot();
@@ -622,7 +623,7 @@ export function ClickMintDashboard() {
         description:
           cap === 0n
             ? "You have 0 unvested $CLICK in the vesting vault. Clicks must grant baseClickReward, or wait for vesting after rewards."
-            : `Max early claim now: ${formatEther(cap)} $CLICK (unvested). Wallets often say "rejected" when simulation reverts.`,
+            : `Max early claim now: ${formatClickDisplayWei(cap)} $CLICK (unvested). Wallets often say "rejected" when simulation reverts.`,
       });
       return;
     }
@@ -651,7 +652,7 @@ export function ClickMintDashboard() {
       const data = extractRevertData(e);
       let msg = data ? explainRevertData(data) : (e as Error).message;
       if (/unvested/i.test(msg) || msg.includes("click: unvested")) {
-        msg = `On-chain: amount must be ≤ unvested (${formatEther(cap)} $CLICK). ${msg}`;
+        msg = `On-chain: amount must be ≤ unvested (${formatClickDisplayWei(cap)} $CLICK). ${msg}`;
       }
       if (/user rejected|denied|rejected/i.test(msg)) {
         msg = `${msg.slice(0, 120)} — If you did not cancel, the wallet may be hiding a revert; try a smaller amount.`;
@@ -681,7 +682,10 @@ export function ClickMintDashboard() {
     }
   };
 
-  const potEthStr = potWei !== undefined ? Number(formatEther(potWei)).toLocaleString("en-US", { maximumFractionDigits: 4 }) : "0";
+  const potEthStr =
+    potWei !== undefined
+      ? Number(formatEther(potWei)).toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 0 })
+      : "0";
   const potFillPct = useMemo(() => {
     if (potWei === undefined || POT_BAR_DISPLAY_MAX === 0n) return 0;
     if (potWei >= POT_BAR_DISPLAY_MAX) return 100;
@@ -967,7 +971,7 @@ export function ClickMintDashboard() {
           )}
           {canAct && parsedEarlySpend.ok && earlySpendWei > unvestedCap && unvestedCap > 0n && (
             <p className="mt-1 font-body text-[10px] text-amber-200/90 md:text-[11px]">
-              Amount exceeds unvested ({formatEther(unvestedCap)} $CLICK max). Try Max.
+              Amount exceeds unvested ({formatClickDisplayWei(unvestedCap)} $CLICK max). Try Max.
             </p>
           )}
           {canAct && unvestedCap === 0n && (

@@ -10,6 +10,7 @@ Use this file to **record suggestions** from GitHub Copilot, Cursor, or human re
 
 | Date (UTC) | Area | Summary | Status | Notes / files |
 |------------|------|---------|--------|----------------|
+| 2026-04-12 | `ClickMintGame.sol` | Gate `setPotKeeper` with `whenNotPaused` (consistent with `setEconomy`, `setAddresses`, etc.) | Done | Incident response: cannot rotate keeper while paused |
 | 2026-04-12 | `account-abstraction.ts` | Preserve parse errors: `catch (e)` + `throw new Error(..., { cause: e })` for Pimlico fee parsing | Done | `pimlicoEstimateFeesPerGas` |
 | 2026-04-12 | `clickmint-dashboard.tsx` | Stabilize `gameHour` RPC args: bucket `ts` by **on-chain** hour `(ts - RESET_BUFFER) / 3600`, not per-second `tickSec` | Done | Reduces cache churn; differs from naive `floor(ts/3600)*3600` |
 | 2026-04-12 | `clickmint-dashboard.tsx` | Remove redundant `void timerTick` in `useMemo`; rely on deps | Done | Superseded by `tickSec` |

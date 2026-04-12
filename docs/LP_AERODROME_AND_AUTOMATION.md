@@ -64,11 +64,22 @@ The contract supports an optional **`potKeeper`** address:
 
 **Typical setup:**
 
-1. Deploy **Gelato** / **Chainlink Automation** / **OpenZeppelin Defender** / custom cron with a **dedicated EOA** or **relay**.
-2. Schedule a task **after each hour boundary + buffer** that calls **`finalizeHour(previousHourId)`** from that wallet.
-3. **`setPotKeeper(relayOrBotAddress)`** on the game.
+1. Create a **dedicated wallet** (or use the vendor’s **relay** address) that will submit `finalizeHour`.
+2. **`setPotKeeper(thatAddress)`** on the game (owner). **`finalizeHour`** may then be sent by **owner** or **`potKeeper`**.
+3. Schedule a job **after each UTC hour + `RESET_BUFFER` (20s)** that calls **`finalizeHour` for the hour that just ended** (same `hourId` logic the UI uses for “previous round”).
 
-You still pay **gas** for that transaction (or sponsor it via your own paymaster). This does **not** require VRF — VRF is a separate upgrade for **stronger randomness**, not for cron.
+**Choosing Gelato vs Chainlink Automation vs Defender (high level):**
+
+| Option | Notes |
+|--------|--------|
+| **Gelato** | Popular for “call this contract on an interval / condition”; good DX and used widely for keepers on L2s. |
+| **Chainlink Automation** | Mature registry of **upkeeps**; you pay in **LINK** (or native where supported); strong if you already use Chainlink. |
+| **OpenZeppelin Defender** | **Relayers + Autotasks** (serverless JS) + optional timelock/multisig workflows; fits teams already on Defender for ops. |
+| **Self-hosted cron** | A small script + your own key works, but you manage uptime and key security. |
+
+Any of these can hold or use the **`potKeeper`** key; the contract only checks **`msg.sender == potKeeper`**.
+
+You still pay **gas** for each finalization (or sponsor via your own paymaster). This does **not** require VRF — VRF is a separate upgrade for **stronger randomness**, not for scheduling.
 
 ---
 
