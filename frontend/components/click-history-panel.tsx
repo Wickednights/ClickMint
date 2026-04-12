@@ -175,6 +175,13 @@ export function ClickHistoryPanel({
   const [enterKey, setEnterKey] = useState<string | null>(null);
   const [blockTs, setBlockTs] = useState<Record<string, number>>({});
   const blockTsInFlightRef = useRef(new Set<string>());
+  const blockTsMountedRef = useRef(true);
+  useEffect(() => {
+    blockTsMountedRef.current = true;
+    return () => {
+      blockTsMountedRef.current = false;
+    };
+  }, []);
 
   const ingestLogs = useCallback((logs: Parameters<typeof decodeClickedLogs>[0]) => {
     const decoded = decodeClickedLogs(logs);
@@ -247,13 +254,11 @@ export function ClickHistoryPanel({
     const toFetch = ids.filter((id) => blockTs[id] === undefined && !blockTsInFlightRef.current.has(id));
     if (toFetch.length === 0) return;
     toFetch.forEach((id) => blockTsInFlightRef.current.add(id));
-    let cancelled = false;
 
     const run = async () => {
       const next: Record<string, number> = {};
       try {
         for (let i = 0; i < toFetch.length; i += BLOCK_TS_FETCH_CONCURRENCY) {
-          if (cancelled) break;
           const chunk = toFetch.slice(i, i + BLOCK_TS_FETCH_CONCURRENCY);
           const chunkResults = await Promise.all(
             chunk.map(async (id) => {
@@ -274,15 +279,12 @@ export function ClickHistoryPanel({
           blockTsInFlightRef.current.delete(id);
         }
       }
-      if (!cancelled && Object.keys(next).length > 0) {
+      if (Object.keys(next).length > 0 && blockTsMountedRef.current) {
         setBlockTs((p) => ({ ...p, ...next }));
       }
     };
 
     void run();
-    return () => {
-      cancelled = true;
-    };
   }, [publicClient, rows, blockTs]);
 
   const liveRows = useMemo(() => rows.slice(0, liveCap), [rows, liveCap]);

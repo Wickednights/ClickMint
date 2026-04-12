@@ -496,8 +496,28 @@ export function ClickMintDashboard() {
   const [earlyClaimInfoOpen, setEarlyClaimInfoOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [heroClickFlash, setHeroClickFlash] = useState(false);
+  const heroClickFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastClientClick = useRef(0);
   const [cooldownMs, setCooldownMs] = useState(0);
+
+  const triggerHeroClickFlash = useCallback(() => {
+    if (heroClickFlashTimerRef.current) {
+      clearTimeout(heroClickFlashTimerRef.current);
+      heroClickFlashTimerRef.current = null;
+    }
+    setHeroClickFlash(true);
+    heroClickFlashTimerRef.current = setTimeout(() => {
+      setHeroClickFlash(false);
+      heroClickFlashTimerRef.current = null;
+    }, 480);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (heroClickFlashTimerRef.current) clearTimeout(heroClickFlashTimerRef.current);
+    };
+  }, []);
 
   const gameLinkOk = useMemo(() => {
     if (!gameAddr || clickTokenLinkedGame === undefined) return false;
@@ -1047,19 +1067,40 @@ export function ClickMintDashboard() {
         )}
       </section>
 
-      {/* Centered CLICK hero — Add credits directly under status */}
-      <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center justify-center space-y-2 px-1 py-1 md:py-4">
+      {/* Centered CLICK hero — desktop: round/since launch sits above button (aligned with main column). */}
+      <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center justify-center space-y-2 px-1 py-1 md:space-y-3 md:py-4">
+        {gameHourNow !== undefined ? (
+          <div className="hidden w-full flex-col items-center pb-0.5 text-center md:flex">
+            <p
+              className={cn("font-mono text-4xl font-black tabular-nums leading-none md:text-5xl", NEON_MAGENTA_TEXT)}
+              title={
+                roundsSinceLaunch !== undefined
+                  ? "Rounds since this game contract was deployed."
+                  : "Raw on-chain hour bucket (epoch). Add NEXT_PUBLIC_GAME_GENESIS_UNIX or NEXT_PUBLIC_GAME_DEPLOY_BLOCK for “rounds since launch.”"
+              }
+            >
+              {roundsSinceLaunch !== undefined ? roundsSinceLaunch.toString() : `#${gameHourNow.toString()}`}
+            </p>
+            <p className="mt-1 max-w-[14rem] font-label text-[10px] uppercase tracking-widest text-secondary md:text-[11px]">
+              {roundsSinceLaunch !== undefined ? "Since launch" : "Game hour index (chain)"}
+            </p>
+          </div>
+        ) : null}
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-10 md:hidden">
           <div className="pulse-ring h-64 w-64 rounded-full border border-primary-container" />
         </div>
         <button
           type="button"
           disabled={!canSendClick}
-          onClick={() => void onClick()}
+          onClick={() => {
+            triggerHeroClickFlash();
+            void onClick();
+          }}
           className={cn(
             "relative z-10 flex h-56 w-56 flex-col items-center justify-center font-headline font-black uppercase transition-transform active:scale-90",
             "md:h-[17rem] md:w-[17rem] md:shrink-0",
-            "rounded-full border-4 border-primary-container bg-surface-container md:rounded-none md:border-0 md:bg-primary-fixed md:text-on-primary-fixed md:neon-pulse",
+            "neon-pulse rounded-full border-4 border-primary-container bg-surface-container md:rounded-none md:border-0 md:bg-primary-fixed md:text-on-primary-fixed",
+            heroClickFlash && "click-hero-flash",
             wrongChain && "ring-2 ring-amber-400/80"
           )}
         >
@@ -1378,9 +1419,9 @@ export function ClickMintDashboard() {
           {gameHourNow !== undefined ? (
             <div className="pointer-events-none absolute inset-y-0 left-1/2 z-10 flex -translate-x-1/2 items-center md:left-[calc(18rem+min(56rem,100vw-18rem)/2)]">
               <div className="pointer-events-auto flex max-h-full flex-col items-center justify-center gap-1 py-1 md:gap-1.5 md:py-0">
-                <div className="flex flex-col items-center gap-0.5 text-center">
+                <div className="flex flex-col items-center gap-0.5 text-center md:hidden">
                   <p
-                    className={cn("font-mono text-xl font-black tabular-nums leading-none md:text-3xl", NEON_MAGENTA_TEXT)}
+                    className={cn("font-mono text-xl font-black tabular-nums leading-none", NEON_MAGENTA_TEXT)}
                     title={
                       roundsSinceLaunch !== undefined
                         ? "Rounds since this game contract was deployed."
@@ -1389,7 +1430,7 @@ export function ClickMintDashboard() {
                   >
                     {roundsSinceLaunch !== undefined ? roundsSinceLaunch.toString() : `#${gameHourNow.toString()}`}
                   </p>
-                  <p className="max-w-[14rem] font-label text-[7px] uppercase tracking-widest text-secondary md:text-[10px]">
+                  <p className="max-w-[14rem] font-label text-[7px] uppercase tracking-widest text-secondary">
                     {roundsSinceLaunch !== undefined ? "Since launch" : "Game hour index (chain)"}
                   </p>
                 </div>
@@ -1752,7 +1793,7 @@ export function ClickMintDashboard() {
             Documentation
           </Link>
         </nav>
-        <div className="mt-4 space-y-4 border-t border-outline-variant/25 px-4 pb-8 pt-4">
+        <div className="mt-4 space-y-4 border-t border-outline-variant/25 px-4 pb-36 pt-4 md:pb-44">
           <div className="mx-auto w-full max-w-[17rem]">{resetTimerStrip}</div>
           <div className="mx-auto flex w-full max-w-[17rem] justify-center">{hourlyPotCard}</div>
           <div className="border-t border-outline-variant/20 pt-4">

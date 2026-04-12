@@ -26,19 +26,42 @@ body {
 }
 
 .neon-pulse {
-  box-shadow: 0 0 20px rgba(0, 251, 251, 0.4);
-  animation: pulse-glow 2s infinite ease-in-out;
+  box-shadow: 0 0 24px rgba(0, 251, 251, 0.45);
+  animation: pulse-glow 1.35s infinite ease-in-out;
 }
 
 @keyframes pulse-glow {
   0%,
   100% {
-    box-shadow: 0 0 15px rgba(0, 251, 251, 0.3);
+    box-shadow: 0 0 12px rgba(0, 251, 251, 0.35), 0 0 28px rgba(0, 251, 251, 0.2);
     transform: scale(1);
   }
   50% {
-    box-shadow: 0 0 40px rgba(0, 251, 251, 0.6);
-    transform: scale(1.02);
+    box-shadow: 0 0 32px rgba(0, 251, 251, 0.75), 0 0 56px rgba(0, 251, 251, 0.45);
+    transform: scale(1.035);
+  }
+}
+
+/** One-shot burst when the hero CLICK button is pressed (class toggled from React). */
+.click-hero-flash {
+  animation: click-hero-burst 0.48s ease-out;
+}
+
+@keyframes click-hero-burst {
+  0% {
+    box-shadow: 0 0 20px rgba(0, 251, 251, 0.5);
+    transform: scale(1);
+    filter: brightness(1);
+  }
+35% {
+    box-shadow: 0 0 50px rgba(255, 46, 232, 0.55), 0 0 80px rgba(0, 251, 251, 0.65);
+    transform: scale(0.94);
+    filter: brightness(1.15);
+  }
+  100% {
+    box-shadow: 0 0 24px rgba(0, 251, 251, 0.45);
+    transform: scale(1);
+    filter: brightness(1);
   }
 }
 
