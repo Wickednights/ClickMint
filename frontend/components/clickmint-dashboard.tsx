@@ -188,13 +188,15 @@ export function ClickMintDashboard() {
   const { writeContractAsync, isPending: writePending } = useWriteContract();
   const publicClient = usePublicClient({ chainId: baseSepolia.id });
 
-  const nowTs = BigInt(Math.floor(Date.now() / 1000));
+  /** One wall-clock second bucket for reads + countdowns — avoids refetch thrash from `Date.now()` on unrelated renders. */
+  const [tickSec, setTickSec] = useState(() => Math.floor(Date.now() / 1000));
+  const nowTs = BigInt(tickSec);
   const { data: gameHourNow } = useReadContract({
     address: gameAddr,
     abi: clickMintGameAbi,
     functionName: "gameHour",
     args: [nowTs],
-    query: { enabled: !!gameAddr },
+    query: { enabled: !!gameAddr, placeholderData: keepPreviousData },
   });
 
   const prevHour = useMemo(() => {
@@ -218,15 +220,13 @@ export function ClickMintDashboard() {
     query: { enabled: !!gameAddr && prevHour !== undefined && !!prevFinalized },
   });
 
-  const [timerTick, setTimerTick] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setTimerTick((t) => t + 1), 1000);
+    const id = setInterval(() => setTickSec(Math.floor(Date.now() / 1000)), 1000);
     return () => clearInterval(id);
   }, []);
 
   const potClock = useMemo(() => {
-    void timerTick;
-    const now = Math.floor(Date.now() / 1000);
+    const now = tickSec;
     if (gameHourNow === undefined) return null;
     const nextBoundary = (gameHourNow + 1n) * 3600n + BigInt(GAME_RESET_BUFFER_SEC);
     const secToHourEnd = Math.max(0, Number(nextBoundary - BigInt(now)));
@@ -243,7 +243,7 @@ export function ClickMintDashboard() {
       currentQuarter: utcWindowFromUnix(now),
       gameHourId: gameHourNow,
     };
-  }, [gameHourNow, timerTick]);
+  }, [gameHourNow, tickSec]);
 
   const { data: credits, refetch: refetchCredits } = useReadContract({
     address: gameAddr,
@@ -968,9 +968,9 @@ export function ClickMintDashboard() {
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-primary-container/[0.04]" />
       </div>
 
-      {/* Header */}
-      <header className="fixed left-0 top-0 z-50 flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-outline-variant/20 bg-surface/90 px-4 py-3 font-headline uppercase tracking-tighter backdrop-blur-sm md:flex-nowrap md:px-6 md:py-4">
-        <div className="flex min-w-0 flex-col gap-0.5 md:block">
+      {/* Header — md: true center for Credits/BGM/SFX via3-column grid */}
+      <header className="fixed left-0 top-0 z-50 flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-outline-variant/20 bg-surface/90 px-4 py-3 font-headline uppercase tracking-tighter backdrop-blur-sm md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center md:gap-x-4 md:px-6 md:py-4">
+        <div className="flex min-w-0 flex-col gap-0.5 md:block md:justify-self-start">
           <div className="flex min-w-0 items-center gap-2">
             <span className="material-symbols-outlined shrink-0 text-primary-fixed md:hidden">token</span>
             <span className="truncate text-lg font-black tracking-tighter text-white md:text-2xl">CLICKMINT</span>
@@ -991,7 +991,7 @@ export function ClickMintDashboard() {
             </span>
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-1 md:gap-1.5">
+        <div className="flex shrink-0 items-center gap-1 md:justify-self-center md:gap-1.5">
           <button
             type="button"
             aria-expanded={depositOpen}
@@ -1036,7 +1036,7 @@ export function ClickMintDashboard() {
             SFX
           </button>
         </div>
-        <div className="flex min-w-0 flex-col items-end gap-1">
+        <div className="flex min-w-0 flex-col items-end gap-1 md:justify-self-end">
           {isConnected ? (
             <>
               <button

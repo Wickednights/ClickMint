@@ -52,29 +52,47 @@ export function getPimlicoBundlerUrl(): string {
 
 type PimlicoGasPriceTier = { maxFeePerGas: Hex; maxPriorityFeePerGas: Hex };
 
-type PimlicoGasPriceResult = {
-  slow: PimlicoGasPriceTier;
-  standard: PimlicoGasPriceTier;
-  fast: PimlicoGasPriceTier;
-};
-
 /**
  * Pimlico bundlers use `pimlico_getUserOperationGasPrice`. `@zerodev/sdk`'s default
  * `estimateFeesPerGas` calls `zd_getUserOperationGasPrice`, which Pimlico does not support.
  */
+function isGasPriceTier(v: unknown): v is PimlicoGasPriceTier {
+  if (typeof v !== "object" || v === null) return false;
+  const o = v as Record<string, unknown>;
+  return (
+    typeof o.maxFeePerGas === "string" &&
+    typeof o.maxPriorityFeePerGas === "string" &&
+    o.maxFeePerGas.startsWith("0x") &&
+    o.maxPriorityFeePerGas.startsWith("0x")
+  );
+}
+
 export async function pimlicoEstimateFeesPerGas(parameters: {
   bundlerClient: Client;
 }): Promise<{ maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }> {
   const { bundlerClient } = parameters;
-  const result = (await bundlerClient.request({
+  const raw = await bundlerClient.request({
     method: "pimlico_getUserOperationGasPrice",
     params: [],
-  } as Parameters<Client["request"]>[0])) as PimlicoGasPriceResult;
-  const tier = result.standard ?? result.fast ?? result.slow;
-  return {
-    maxFeePerGas: hexToBigInt(tier.maxFeePerGas),
-    maxPriorityFeePerGas: hexToBigInt(tier.maxPriorityFeePerGas),
-  };
+  } as Parameters<Client["request"]>[0]);
+  if (typeof raw !== "object" || raw === null) {
+    throw new Error("pimlico_getUserOperationGasPrice: expected object response");
+  }
+  const result = raw as Record<string, unknown>;
+  const tierRaw = result.standard ?? result.fast ?? result.slow;
+  if (!isGasPriceTier(tierRaw)) {
+    throw new Error(
+      "pimlico_getUserOperationGasPrice: missing or invalid standard/fast/slow tier (need maxFeePerGas / maxPriorityFeePerGas hex)"
+    );
+  }
+  try {
+    return {
+      maxFeePerGas: hexToBigInt(tierRaw.maxFeePerGas),
+      maxPriorityFeePerGas: hexToBigInt(tierRaw.maxPriorityFeePerGas),
+    };
+  } catch {
+    throw new Error("pimlico_getUserOperationGasPrice: could not parse fee fields as hex bigint");
+  }
 }
 
 /** Optional — set if your Pimlico dashboard requires a sponsorship policy for `pm_getPaymasterData`. */
