@@ -50,7 +50,7 @@ This repository **does not** include that helper yet; it is a small dedicated co
 ## How hourly POT settlement works today
 
 1. **`finalizeHour(hourId)`** on **ClickMintGame** runs **after** the game hour ends and the **`RESET_BUFFER`** (20s) has passed — see `GameFinalizeEarly` in the contract.
-2. It derives **pseudo-random** entropy from **`block.prevrandao`** and other fields, picks a **winning 15-minute window**, then **eligible** players (min clicks + clicked in that window). Mints CLICK POT payout if there is a winner; otherwise carries ETH forward.
+2. It derives **pseudo-random** entropy from **`block.prevrandao`** and other fields, picks a **winning 15-minute UTC span** with a **random start minute 0–44** (so the span stays inside the hour), then **eligible** players (min clicks + at least one click whose **minute-of-hour** falls in that span). Mints CLICK POT payout if there is a winner; otherwise carries ETH forward.
 3. Previously **only `owner`** could call `finalizeHour` (MEV/grief mitigation in comments).
 
 ### Automatic settlement (no manual owner click)

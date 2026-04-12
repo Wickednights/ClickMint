@@ -113,8 +113,10 @@ export default function DocumentationPage() {
             </li>
             <li>Eligibility: Must have clicked at least 100 times during the hour</li>
             <li>
-              Winner selection: A random 15-minute slice of the hour is chosen at settlement, then a random eligible clicker
-              from that slice wins
+              Winner selection: At settlement, a random 15-minute span is chosen — it can start at any UTC minute{" "}
+              <strong className="text-white">0 through 44</strong> (so it never crosses the hour). Each of your clicks tags the
+              exact minute it was mined; you must have at least one click in that winning span (and meet the hourly click
+              minimum) to be eligible.
             </li>
             <li>Timing uses a short buffer after each UTC hour so the pot can reset cleanly</li>
             <li>Winners see a live notification when a round pays out</li>

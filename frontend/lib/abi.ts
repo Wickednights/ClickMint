@@ -22,14 +22,15 @@ export const clickMintGameAbi = parseAbi([
   "function hourPayout(uint256 hourId) view returns (uint256)",
   "function hourFinalized(uint256 hourId) view returns (bool)",
   "function hourWinWindow(uint256 hourId) view returns (uint8)",
+  "function minuteOfUtcHour(uint256 ts) pure returns (uint8)",
   "function trophyDropBps() view returns (uint256)",
   "function setTrophyDropBps(uint256 bps)",
   "function potKeeper() view returns (address)",
   "function setPotKeeper(address k)",
   "function finalizeHour(uint256 hourId)",
   "event Deposited(address indexed user, uint256 ethIn, uint256 creditsOut)",
-  "event Clicked(address indexed user, uint256 hourId, uint256 totalForUserHour, uint8 window)",
-  "event PotWin(uint256 indexed hourId, address indexed winner, uint256 clickPayout, uint8 window, bytes32 entropy)",
+  "event Clicked(address indexed user, uint256 hourId, uint256 totalForUserHour, uint8 minute)",
+  "event PotWin(uint256 indexed hourId, address indexed winner, uint256 clickPayout, uint8 winStartMinute, bytes32 entropy)",
 ]);
 
 export const binaryTrophyAbi = parseAbi([
