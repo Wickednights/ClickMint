@@ -1,10 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { type Address, getAddress, isAddress } from "viem";
 import { useAccount, usePublicClient, useReadContracts, useWriteContract } from "wagmi";
 import { baseSepolia } from "wagmi/chains";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { binaryTrophyAbi, escrowAbi } from "@/lib/abi";
 import { explainRevertData, extractRevertData } from "@/lib/revert-reason";
 import { cn } from "@/lib/utils";
@@ -70,6 +79,9 @@ export function EscrowPanel({ escrowAddr, trophyAddr }: Props) {
 
   const [depositBeneficiary, setDepositBeneficiary] = useState("");
   const [depositTokenId, setDepositTokenId] = useState("");
+  const [introOpen, setIntroOpen] = useState(false);
+  const [claimHelpOpen, setClaimHelpOpen] = useState(false);
+  const [depositHelpOpen, setDepositHelpOpen] = useState(false);
 
   const canAct = isConnected && !!address;
 
@@ -159,31 +171,81 @@ export function EscrowPanel({ escrowAddr, trophyAddr }: Props) {
         "w-full max-w-xl space-y-3 border border-outline-variant/25 bg-surface-container-low/30 px-4 py-4"
       )}
     >
-      <h3 className="text-center font-label text-[10px] uppercase tracking-[0.2em] text-primary-fixed">
-        Trophies & escrow
-      </h3>
-      <div className="space-y-2 text-center font-body text-[10px] leading-relaxed text-secondary">
-        <p>
-          <span className="font-semibold text-on-surface/90">Random click wins</span> mint a Binary Trophy{" "}
-          <span className="text-primary-fixed/90">straight to your wallet</span>
-          — there is nothing to &quot;claim&quot; here for drops. Use your wallet or a block explorer to see the NFT; you may
-          get a toast when a mint arrives.
-        </p>
-        <p>
-          This panel is for <span className="font-semibold text-on-surface/90">escrow only</span>: someone (including you) can
-          lock a trophy they already own so a <span className="font-semibold text-on-surface/90">beneficiary</span> pulls it
-          with <span className="font-mono text-[9px] text-primary-fixed/80">claim</span>. That is separate from winning via
-          CLICK.
+      <div className="flex flex-col items-center gap-2">
+        <h3 className="text-center font-label text-[10px] uppercase tracking-[0.2em] text-primary-fixed">
+          Trophies & escrow
+        </h3>
+        <p className="text-center font-body text-[10px] leading-snug text-secondary">
+          Random trophy mints go to your wallet. Revenue-sharing trophies + optional escrow transfers —{" "}
+          <Dialog open={introOpen} onOpenChange={setIntroOpen}>
+            <DialogTrigger asChild>
+              <button
+                type="button"
+                className="font-label text-primary-fixed underline-offset-2 hover:underline"
+              >
+                More info
+              </button>
+            </DialogTrigger>
+            <DialogContent className="max-h-[min(90dvh,28rem)] overflow-y-auto border-outline-variant/40">
+              <DialogHeader>
+                <DialogTitle>Trophies & escrow</DialogTitle>
+                <DialogDescription className="sr-only">How Binary Trophies, revenue share, and escrow interact</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 text-left font-body text-sm text-secondary">
+                <p>
+                  <span className="font-semibold text-on-surface/95">Revenue share:</span> each Binary Trophy you hold can
+                  earn an ongoing share of protocol fees (details in docs). Winning via CLICK can mint one straight to your
+                  wallet.
+                </p>
+                <p>
+                  <span className="font-semibold text-on-surface/95">Random click wins</span> mint a Binary Trophy{" "}
+                  <span className="text-primary-fixed/90">straight to your wallet</span>
+                  — there is nothing to &quot;claim&quot; here for drops. Use your wallet or a block explorer to see the NFT;
+                  you may get a toast when a mint arrives.
+                </p>
+                <p>
+                  This panel is for <span className="font-semibold text-on-surface/95">escrow only</span>: someone (including
+                  you) can lock a trophy they already own so a{" "}
+                  <span className="font-semibold text-on-surface/95">beneficiary</span> pulls it with{" "}
+                  <span className="font-mono text-xs text-primary-fixed/85">claim</span>. That is separate from winning via
+                  CLICK.
+                </p>
+                <p>
+                  <Link href="/documentation#trophies" className="text-primary-fixed underline-offset-2 hover:underline">
+                    Full trophy &amp; revenue docs
+                  </Link>
+                </p>
+              </div>
+            </DialogContent>
+          </Dialog>
         </p>
       </div>
 
       <div className="space-y-2 border-t border-outline-variant/20 pt-3">
-        <p className="text-center font-label text-[9px] uppercase tracking-[0.2em] text-primary-fixed">
-          Claim from escrow
-        </p>
-        <p className="text-center font-body text-[10px] text-secondary opacity-80">
-          If another wallet deposited a Binary Trophy for you, claim it below (recent holds scanned).
-        </p>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <p className="text-center font-label text-[9px] uppercase tracking-[0.2em] text-primary-fixed">
+            Claim from escrow
+          </p>
+          <Dialog open={claimHelpOpen} onOpenChange={setClaimHelpOpen}>
+            <DialogTrigger asChild>
+              <button
+                type="button"
+                className="font-label text-[9px] uppercase tracking-widest text-secondary underline-offset-2 hover:text-primary-fixed hover:underline"
+              >
+                More info
+              </button>
+            </DialogTrigger>
+            <DialogContent className="border-outline-variant/40">
+              <DialogHeader>
+                <DialogTitle>Claim from escrow</DialogTitle>
+                <DialogDescription className="text-secondary">
+                  If another wallet deposited a Binary Trophy for you into escrow, claim it here. The list scans only the
+                  most recent holds (gas-friendly); very old holds may not appear — use the contract directly if needed.
+                </DialogDescription>
+              </DialogHeader>
+            </DialogContent>
+          </Dialog>
+        </div>
         {myOpenHolds.length > 0 ? (
           <ul className="space-y-1">
             {myOpenHolds.map((h) => (
@@ -213,12 +275,31 @@ export function EscrowPanel({ escrowAddr, trophyAddr }: Props) {
       </div>
 
       <div className="border-t border-outline-variant/20 pt-3">
-        <p className="mb-1 text-center font-label text-[9px] uppercase tracking-[0.2em] text-secondary">
-          Optional — deposit for someone else
-        </p>
-        <p className="mb-2 text-center font-body text-[10px] text-secondary opacity-80">
-          You must already own the token ID. Leave beneficiary blank to escrow to yourself (advanced / testing).
-        </p>
+        <div className="mb-2 flex flex-wrap items-center justify-center gap-2">
+          <p className="text-center font-label text-[9px] uppercase tracking-[0.2em] text-secondary">
+            Optional — deposit for someone else
+          </p>
+          <Dialog open={depositHelpOpen} onOpenChange={setDepositHelpOpen}>
+            <DialogTrigger asChild>
+              <button
+                type="button"
+                className="font-label text-[9px] uppercase tracking-widest text-secondary underline-offset-2 hover:text-primary-fixed hover:underline"
+              >
+                More info
+              </button>
+            </DialogTrigger>
+            <DialogContent className="border-outline-variant/40">
+              <DialogHeader>
+                <DialogTitle>Deposit into escrow</DialogTitle>
+                <DialogDescription className="text-secondary">
+                  You must already own the trophy token ID. Approve once, then deposit. Leave beneficiary blank to escrow to
+                  your own wallet (advanced / testing). The beneficiary claims with <span className="font-mono text-xs">claim</span> when
+                  ready.
+                </DialogDescription>
+              </DialogHeader>
+            </DialogContent>
+          </Dialog>
+        </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
           <label className="flex flex-1 flex-col gap-1 font-body text-[10px] text-secondary">
             Token ID

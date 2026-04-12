@@ -51,7 +51,13 @@ import { EscrowPanel } from "@/components/escrow-panel";
 import { getClickAddress, getEscrowAddress, getGameAddress, getTrophyNftAddress } from "@/lib/addresses";
 import { economyPresetHint, economyPresetShortLabel } from "@/lib/economy-preset";
 import { useClickMintAudio } from "@/hooks/use-clickmint-audio";
-import { gameHourIndexFromUnixSec, readGenesisGameHourFromEnv, GAME_RESET_BUFFER_SEC } from "@/lib/game-genesis";
+import {
+  gameHourIndexFromUnixSec,
+  hourIdForDisplay,
+  potRoundKind,
+  readGenesisGameHourFromEnv,
+  GAME_RESET_BUFFER_SEC,
+} from "@/lib/game-genesis";
 
 const QUICK_BUY = ["0.001", "0.01", "0.1", "0.25", "0.5", "1"] as const;
 
@@ -129,7 +135,7 @@ function Icon({ name, className }: { name: string; className?: string }) {
   );
 }
 
-function WinnerTable({ rows }: { rows: PotRow[] }) {
+function WinnerTable({ rows, genesisGameHour }: { rows: PotRow[]; genesisGameHour: bigint | null }) {
   if (rows.length === 0) {
     return (
       <p className="font-body text-[10px] leading-relaxed text-secondary opacity-70">
@@ -137,12 +143,13 @@ function WinnerTable({ rows }: { rows: PotRow[] }) {
       </p>
     );
   }
+  const col = potRoundKind(genesisGameHour);
   return (
     <div className="max-h-[min(50vh,20rem)] overflow-auto">
       <table className="w-full text-left font-body text-[10px] text-on-surface">
         <thead>
           <tr className="font-label uppercase tracking-widest text-secondary">
-            <th className="pb-2 pr-2">Hr</th>
+            <th className="pb-2 pr-2">{col}</th>
             <th className="pb-2 pr-2">Span</th>
             <th className="pb-2 pr-2">Winner</th>
             <th className="pb-2">$CLICK</th>
@@ -151,7 +158,7 @@ function WinnerTable({ rows }: { rows: PotRow[] }) {
         <tbody>
           {rows.map((r) => (
             <tr key={`${r.hourId}-${r.entropy ?? ""}`} className="border-t border-outline-variant/20">
-              <td className="py-2 pr-2 text-primary-fixed">{r.hourId.toString()}</td>
+              <td className="py-2 pr-2 text-primary-fixed">{hourIdForDisplay(r.hourId, genesisGameHour)}</td>
               <td className="py-2 pr-2 font-mono text-[9px] text-secondary">
                 {utcPotSpanLabel(Number(r.winStartMinute))}
               </td>
@@ -166,8 +173,9 @@ function WinnerTable({ rows }: { rows: PotRow[] }) {
 }
 
 /** Desktop sidebar: last 5 POT wins (same live session state as full POT history). */
-function SidebarPotWinners({ rows }: { rows: PotRow[] }) {
+function SidebarPotWinners({ rows, genesisGameHour }: { rows: PotRow[]; genesisGameHour: bigint | null }) {
   const shown = rows.slice(0, 5);
+  const rk = potRoundKind(genesisGameHour);
   return (
     <div className="border-t border-outline-variant/20 pt-4">
       <h3 className="mb-2 text-center font-headline text-xs font-bold uppercase tracking-[0.2em] text-emerald-300/90">
@@ -184,7 +192,9 @@ function SidebarPotWinners({ rows }: { rows: PotRow[] }) {
               key={`${r.hourId}-${r.entropy ?? ""}`}
               className="rounded border border-emerald-500/25 bg-emerald-500/[0.07] px-2 py-2 text-center"
             >
-              <div className="font-label text-[9px] uppercase tracking-wider text-secondary">Hour {r.hourId.toString()}</div>
+              <div className="font-label text-[9px] uppercase tracking-wider text-secondary">
+                {rk} {hourIdForDisplay(r.hourId, genesisGameHour)}
+              </div>
               <div className="mt-0.5 truncate font-mono text-[11px] text-primary-fixed" title={r.winner}>
                 {r.winner.slice(0, 6)}…{r.winner.slice(-4)}
               </div>
@@ -284,9 +294,11 @@ export function ClickMintDashboard() {
   useEffect(() => {
     const blockStr = typeof process !== "undefined" ? process.env.NEXT_PUBLIC_GAME_DEPLOY_BLOCK?.trim() : undefined;
     if (!blockStr || !publicClient) return;
+    if (!/^\d+$/.test(blockStr)) return;
+    const blockNumber = BigInt(blockStr);
     let cancelled = false;
     void publicClient
-      .getBlock({ blockNumber: BigInt(blockStr) })
+      .getBlock({ blockNumber })
       .then((b) => {
         if (!cancelled) setGenesisGameHour(gameHourIndexFromUnixSec(Number(b.timestamp)));
       })
@@ -313,6 +325,17 @@ export function ClickMintDashboard() {
     functionName: "gameHour",
     args: [gameHourReadTs],
     query: { enabled: !!gameAddr, placeholderData: keepPreviousData },
+  });
+
+  const { data: totalClicksThisHour } = useReadContract({
+    address: gameAddr,
+    abi: clickMintGameAbi,
+    functionName: "totalClicksInHour",
+    args: gameHourNow !== undefined ? [gameHourNow] : undefined,
+    query: {
+      enabled: !!gameAddr && gameHourNow !== undefined,
+      refetchInterval: 4_000,
+    },
   });
 
   /** 1-based round counter since contract deploy (requires genesis env). */
@@ -469,6 +492,7 @@ export function ClickMintDashboard() {
   const [earlyAmt, setEarlyAmt] = useState("");
   const [mobileTab, setMobileTab] = useState<MobileTab>("terminal");
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [earlyClaimInfoOpen, setEarlyClaimInfoOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const lastClientClick = useRef(0);
@@ -790,7 +814,9 @@ export function ClickMintDashboard() {
         functionName: "finalizeHour",
         args: [prevHour],
       });
-      toast.message(`Finalize hour ${prevHour.toString()} sent`);
+      toast.message(
+        `Finalize ${potRoundKind(genesisGameHour)} ${hourIdForDisplay(prevHour, genesisGameHour)} sent`
+      );
     } catch (e) {
       sfxRef.current.playError();
       const data = extractRevertData(e);
@@ -909,7 +935,7 @@ export function ClickMintDashboard() {
         </p>
         {prevHour !== undefined && prevFinalized !== undefined ? (
           <p className="mt-2 text-[11px] text-secondary md:text-xs">
-            Last round #{prevHour.toString()}{" "}
+            Last {potRoundKind(genesisGameHour)} {hourIdForDisplay(prevHour, genesisGameHour)}{" "}
             {prevFinalized ? (
               <span className="text-emerald-300/90">settled</span>
             ) : (
@@ -929,14 +955,14 @@ export function ClickMintDashboard() {
             ) : potClock.secUntilFinalizeGate !== null ? (
               potClock.secUntilFinalizeGate > 0 ? (
                 <p className="text-secondary">
-                  Settlement #{prevHour.toString()} in{" "}
+                  Settlement — {potRoundKind(genesisGameHour)} {hourIdForDisplay(prevHour, genesisGameHour)} in{" "}
                   <span className="font-semibold tabular-nums text-primary-fixed">
                     {formatCountdown(potClock.secUntilFinalizeGate)}
                   </span>
                 </p>
               ) : (
                 <p className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100/95 md:text-xs">
-                  Round #{prevHour.toString()} ready to settle (operators).
+                  {potRoundKind(genesisGameHour)} {hourIdForDisplay(prevHour, genesisGameHour)} ready to settle (operators).
                 </p>
               )
             ) : null}
@@ -950,12 +976,22 @@ export function ClickMintDashboard() {
   const terminalBody = (
     <>
       {/* One-line objective for new players */}
-      <section className="mx-auto w-full max-w-xl px-2">
-        <p className="mx-auto max-w-xl text-center font-body text-[13px] leading-relaxed text-secondary md:text-sm">
+      <section className="mx-auto w-full max-w-xl space-y-3 px-2 text-center">
+        <p className="mx-auto max-w-xl font-body text-[13px] leading-relaxed text-secondary md:text-sm">
           <span className="font-semibold text-on-surface/95">Objective:</span> spend credits to{" "}
           <span className="text-primary-fixed/95">CLICK</span> each hour, earn $CLICK (vesting), and compete for the hourly
           ETH pot. Use <span className="text-primary-fixed/90">Claim vested</span> for time-unlocked tokens, or{" "}
-          <span className="text-primary-fixed/90">Early claim</span> to exit locked balance early (see below).
+          <span className="text-primary-fixed/90">Early claim</span> to exit locked balance early — details under the amount
+          field (<span className="font-semibold text-primary-fixed/85">More info</span>).
+        </p>
+        <p className="mx-auto max-w-xl font-body text-[12px] leading-relaxed text-secondary md:text-[13px]">
+          <span className="font-semibold text-on-surface/95">Trophies:</span> lucky clicks can mint{" "}
+          <span className="text-primary-fixed/90">Binary Trophy</span> NFTs to your wallet. Each one can earn ongoing{" "}
+          <span className="font-semibold text-primary-fixed/85">revenue share</span> from protocol fees.{" "}
+          <Link href="/documentation#trophies" className="text-primary-fixed underline-offset-2 hover:underline">
+            Read how trophies &amp; revenue work
+          </Link>
+          .
         </p>
       </section>
 
@@ -1043,6 +1079,15 @@ export function ClickMintDashboard() {
               )}
             </span>
           </div>
+          {totalClicksThisHour !== undefined ? (
+            <p
+              className="max-w-sm px-2 text-center font-mono text-[11px] tabular-nums text-primary-fixed/90 md:text-xs"
+              title="All players’ clicks recorded on-chain for the current game hour bucket."
+            >
+              Total clicks this {genesisGameHour !== null ? "round" : "hour"}:{" "}
+              <span className="font-semibold text-on-surface/95">{totalClicksThisHour.toString()}</span>
+            </p>
+          ) : null}
           <button
             type="button"
             id="hero-add-credits"
@@ -1158,17 +1203,52 @@ export function ClickMintDashboard() {
             </button>
             </div>
           </div>
-          <p className="mx-auto mt-2 max-w-md text-center font-body text-[12px] leading-snug text-secondary opacity-95 md:text-sm">
-            <span className="font-semibold text-on-surface/90">Early claim</span> is different from{" "}
-            <span className="font-semibold">Claim vested</span>: you cash out{" "}
-            <span className="font-semibold">locked (unvested)</span> $CLICK now. Part stays in the protocol (burn, treasury,
-            liquidity); you receive roughly <span className="font-semibold text-primary-fixed/90">one fifth</span> of the
-            amount you exit as liquid $CLICK. Details in{" "}
-            <Link href="/documentation#early-claim" className="text-primary-fixed/90 underline-offset-2 hover:underline">
-              docs
-            </Link>
-            .
-          </p>
+          <div className="mx-auto mt-2 flex max-w-md flex-col items-center gap-2">
+            <p className="text-center font-body text-[12px] leading-snug text-secondary md:text-sm">
+              Cash out <span className="font-semibold text-on-surface/90">unvested</span> early — not the same as{" "}
+              <span className="font-semibold">Claim vested</span>.
+            </p>
+            <button
+              type="button"
+              onClick={() => setEarlyClaimInfoOpen(true)}
+              className="font-label text-[11px] uppercase tracking-wider text-primary-fixed underline-offset-2 hover:underline"
+            >
+              More info
+            </button>
+          </div>
+          <Dialog open={earlyClaimInfoOpen} onOpenChange={setEarlyClaimInfoOpen}>
+            <DialogContent className="max-h-[min(90dvh,32rem)] overflow-y-auto border-outline-variant/40">
+              <DialogHeader>
+                <DialogTitle>Early claim</DialogTitle>
+                <DialogDescription className="text-left text-secondary">
+                  How unvested exit differs from claiming time-unlocked tokens.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3 text-left font-body text-sm leading-relaxed text-secondary">
+                <p>
+                  <span className="font-semibold text-on-surface/95">Early claim</span> uses your{" "}
+                  <span className="font-semibold">locked (unvested)</span> balance.{" "}
+                  <span className="font-semibold text-on-surface/95">Claim vested</span> only releases tokens that have
+                  finished vesting on schedule.
+                </p>
+                <p>
+                  When you early-claim, part of what you exit stays in the protocol (burn, treasury, liquidity pools). You
+                  keep roughly <span className="font-semibold text-primary-fixed/90">one fifth</span> of the amount you exit
+                  as liquid <span className="text-primary-fixed/90">$CLICK</span> in your wallet — exact amounts follow
+                  on-chain rules.
+                </p>
+                <p>
+                  The <span className="font-semibold">Preview</span> line under the form (when you enter an amount) estimates
+                  liquid $CLICK from your input.
+                </p>
+                <p>
+                  <Link href="/documentation#early-claim" className="text-primary-fixed underline-offset-2 hover:underline">
+                    Full early-claim documentation
+                  </Link>
+                </p>
+              </div>
+            </DialogContent>
+          </Dialog>
           {earlyLiquidPreview !== null && canAct && parsedEarlySpend.ok && (
             <p className="mx-auto mt-2 max-w-md text-center font-body text-[12px] leading-snug text-primary-fixed/95 md:text-sm">
               Preview: exiting {formatClickDisplayWei(earlyLiquidPreview.spend)} unvested → about{" "}
@@ -1216,7 +1296,7 @@ export function ClickMintDashboard() {
               <DialogTitle>POT winners</DialogTitle>
               <DialogDescription className="sr-only">Hourly pot payout history from this browser session</DialogDescription>
             </DialogHeader>
-            <WinnerTable rows={potRows} />
+            <WinnerTable rows={potRows} genesisGameHour={genesisGameHour} />
           </DialogContent>
         </Dialog>
         <p className="font-body text-[11px] text-secondary opacity-65 md:text-xs">
@@ -1237,27 +1317,10 @@ export function ClickMintDashboard() {
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-primary-container/[0.04]" />
       </div>
 
-      {/* Header — centered controls (md+); credits open a Dialog (fixes overflow clipping). Mobile: wallet + menu. */}
+      {/* Header — center cluster aligned with main content (desktop: offset by half sidebar w-72). */}
       <header className="fixed left-0 top-0 z-50 w-full overflow-visible border-b border-outline-variant/20 bg-surface/90 font-headline uppercase tracking-tighter backdrop-blur-sm">
-        <div className="relative mx-auto flex max-w-[100vw] flex-wrap items-center justify-between gap-x-2 gap-y-1.5 px-3 py-2 sm:px-4 md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center md:gap-x-4 md:px-4 md:py-2.5 lg:px-6">
-          {gameHourNow !== undefined ? (
-            <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center md:hidden">
-              <span
-                className={cn("font-mono text-xl font-black tabular-nums leading-none", NEON_MAGENTA_TEXT)}
-                title={
-                  roundsSinceLaunch !== undefined
-                    ? "Rounds completed since this game contract was deployed (set NEXT_PUBLIC_GAME_GENESIS_UNIX or NEXT_PUBLIC_GAME_DEPLOY_BLOCK if missing)."
-                    : "On-chain game hour index. Set NEXT_PUBLIC_GAME_GENESIS_UNIX (deploy time, seconds) or NEXT_PUBLIC_GAME_DEPLOY_BLOCK to show rounds since launch."
-                }
-              >
-                {roundsSinceLaunch !== undefined ? roundsSinceLaunch.toString() : `#${gameHourNow.toString()}`}
-              </span>
-              <span className="mt-0.5 max-w-[10rem] text-center font-label text-[7px] uppercase leading-tight tracking-wider text-secondary">
-                {roundsSinceLaunch !== undefined ? "Since launch" : "Hour index"}
-              </span>
-            </div>
-          ) : null}
-          <div className="min-w-0 max-w-[min(100%,14rem)] flex-col gap-0.5 sm:max-w-none md:justify-self-start">
+        <div className="relative mx-auto flex min-h-[3.5rem] max-w-[100vw] items-center justify-between gap-x-2 px-3 py-2 sm:px-4 md:min-h-[4rem] md:px-4 md:py-2.5 lg:px-6">
+          <div className="relative z-20 flex min-w-0 max-w-[min(100%,14rem)] flex-col gap-0.5 sm:max-w-[min(100%,11rem)] md:max-w-none">
             <div className="flex min-w-0 items-center gap-2">
               <span className="material-symbols-outlined shrink-0 text-primary-fixed md:hidden">token</span>
               <span className="truncate text-lg font-black tracking-tighter text-white md:text-2xl">CLICKMINT</span>
@@ -1276,78 +1339,80 @@ export function ClickMintDashboard() {
             </p>
           </div>
 
-          <div className="hidden w-full shrink-0 flex-col flex-wrap items-center justify-center gap-1.5 md:flex md:w-auto md:justify-self-center">
-            {gameHourNow !== undefined ? (
-              <div className="flex flex-col items-center gap-0.5 text-center">
-                <p
-                  className={cn("font-mono text-2xl font-black tabular-nums leading-none md:text-3xl", NEON_MAGENTA_TEXT)}
-                  title={
-                    roundsSinceLaunch !== undefined
-                      ? "Rounds since this game contract was deployed."
-                      : "Raw on-chain hour bucket (epoch). Add NEXT_PUBLIC_GAME_GENESIS_UNIX or NEXT_PUBLIC_GAME_DEPLOY_BLOCK for “rounds since launch.”"
-                  }
-                >
-                  {roundsSinceLaunch !== undefined ? roundsSinceLaunch.toString() : `#${gameHourNow.toString()}`}
-                </p>
-                <p className="max-w-[14rem] font-label text-[9px] uppercase tracking-widest text-secondary md:text-[10px]">
-                  {roundsSinceLaunch !== undefined ? "Since launch" : "Game hour index (chain)"}
-                </p>
+          {gameHourNow !== undefined ? (
+            <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center md:left-[calc(50vw+9rem)]">
+              <div className="pointer-events-auto flex flex-col items-center gap-1 md:gap-1.5">
+                <div className="flex flex-col items-center gap-0.5 text-center">
+                  <p
+                    className={cn("font-mono text-xl font-black tabular-nums leading-none md:text-3xl", NEON_MAGENTA_TEXT)}
+                    title={
+                      roundsSinceLaunch !== undefined
+                        ? "Rounds since this game contract was deployed."
+                        : "Raw on-chain hour bucket (epoch). Add NEXT_PUBLIC_GAME_GENESIS_UNIX or NEXT_PUBLIC_GAME_DEPLOY_BLOCK for “rounds since launch.”"
+                    }
+                  >
+                    {roundsSinceLaunch !== undefined ? roundsSinceLaunch.toString() : `#${gameHourNow.toString()}`}
+                  </p>
+                  <p className="max-w-[14rem] font-label text-[7px] uppercase tracking-widest text-secondary md:text-[10px]">
+                    {roundsSinceLaunch !== undefined ? "Since launch" : "Game hour index (chain)"}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-1.5">
+                  <button
+                    type="button"
+                    aria-pressed={musicOn}
+                    aria-label="Background music"
+                    title="Background music"
+                    onClick={() => setMusicOn(!musicOn)}
+                    className={cn(
+                      "border border-outline-variant/50 px-2 py-1 font-label text-[8px] font-bold tracking-widest transition-colors md:px-2.5 md:text-[9px]",
+                      musicOn ? "border-primary-fixed text-primary-fixed" : "text-secondary opacity-60 hover:text-primary-fixed"
+                    )}
+                  >
+                    BGM
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={sfxOn}
+                    aria-label="Click sounds"
+                    title="Click sounds"
+                    onClick={() => setSfxOn(!sfxOn)}
+                    className={cn(
+                      "border border-outline-variant/50 px-2 py-1 font-label text-[8px] font-bold tracking-widest transition-colors md:px-2.5 md:text-[9px]",
+                      sfxOn ? "border-primary-fixed text-primary-fixed" : "text-secondary opacity-60 hover:text-primary-fixed"
+                    )}
+                  >
+                    SFX
+                  </button>
+                  {isPimlicoConfigured() ? (
+                    gasless.status === "ready" ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          gasless.clear();
+                          toast.message("Gasless session cleared");
+                        }}
+                        className="border border-outline-variant/60 px-2 py-1 font-label text-[8px] uppercase tracking-widest text-secondary hover:border-primary-fixed hover:text-primary-fixed md:px-2.5 md:text-[9px]"
+                      >
+                        Gasless off
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={!isConnected || wrongChain || !walletClient || gasless.status === "enabling"}
+                        onClick={() => setGaslessDialogOpen(true)}
+                        className="border border-primary-fixed/40 bg-primary-fixed/10 px-2 py-1 font-label text-[8px] uppercase tracking-widest text-primary-fixed hover:bg-primary-fixed/20 disabled:opacity-40 md:px-2.5 md:text-[9px]"
+                      >
+                        Gasless
+                      </button>
+                    )
+                  ) : null}
+                </div>
               </div>
-            ) : null}
-            <div className="flex flex-wrap items-center justify-center gap-1.5">
-            <button
-              type="button"
-              aria-pressed={musicOn}
-              aria-label="Background music"
-              title="Background music"
-              onClick={() => setMusicOn(!musicOn)}
-              className={cn(
-                "border border-outline-variant/50 px-2 py-1 font-label text-[8px] font-bold tracking-widest transition-colors md:px-2.5 md:text-[9px]",
-                musicOn ? "border-primary-fixed text-primary-fixed" : "text-secondary opacity-60 hover:text-primary-fixed"
-              )}
-            >
-              BGM
-            </button>
-            <button
-              type="button"
-              aria-pressed={sfxOn}
-              aria-label="Click sounds"
-              title="Click sounds"
-              onClick={() => setSfxOn(!sfxOn)}
-              className={cn(
-                "border border-outline-variant/50 px-2 py-1 font-label text-[8px] font-bold tracking-widest transition-colors md:px-2.5 md:text-[9px]",
-                sfxOn ? "border-primary-fixed text-primary-fixed" : "text-secondary opacity-60 hover:text-primary-fixed"
-              )}
-            >
-              SFX
-            </button>
-            {isPimlicoConfigured() ? (
-              gasless.status === "ready" ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    gasless.clear();
-                    toast.message("Gasless session cleared");
-                  }}
-                  className="border border-outline-variant/60 px-2 py-1 font-label text-[8px] uppercase tracking-widest text-secondary hover:border-primary-fixed hover:text-primary-fixed md:px-2.5 md:text-[9px]"
-                >
-                  Gasless off
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={!isConnected || wrongChain || !walletClient || gasless.status === "enabling"}
-                  onClick={() => setGaslessDialogOpen(true)}
-                  className="border border-primary-fixed/40 bg-primary-fixed/10 px-2 py-1 font-label text-[8px] uppercase tracking-widest text-primary-fixed hover:bg-primary-fixed/20 disabled:opacity-40 md:px-2.5 md:text-[9px]"
-                >
-                  Gasless
-                </button>
-              )
-            ) : null}
             </div>
-          </div>
+          ) : null}
 
-          <div className="flex min-w-0 flex-1 items-center justify-end gap-2 md:min-w-0 md:flex-none md:justify-self-end">
+          <div className="relative z-20 flex min-w-0 shrink-0 items-center justify-end gap-2 md:min-w-0">
             <button
               type="button"
               className="inline-flex h-9 w-9 shrink-0 items-center justify-center border border-outline-variant/50 text-primary-fixed md:hidden"
@@ -1585,7 +1650,7 @@ export function ClickMintDashboard() {
       </header>
 
       {/* Desktop sidebar */}
-      <aside className="fixed left-0 top-0 z-40 hidden h-full w-72 flex-col overflow-y-auto border-r border-outline-variant/30 bg-surface-container-lowest pt-20 md:flex">
+      <aside className="fixed left-0 top-0 z-40 hidden h-full w-72 flex-col overflow-y-auto border-r border-outline-variant/30 bg-surface-container-lowest pt-28 md:flex">
         <div className="mb-6 shrink-0 px-6">
           <h3 className="font-label text-xs uppercase tracking-[0.15em] text-primary-fixed">Operations</h3>
           <p className="text-[11px] text-secondary opacity-55">BASE_NETWORK_ACTIVE</p>
@@ -1662,7 +1727,7 @@ export function ClickMintDashboard() {
               liveFeedMax={5}
             />
           </div>
-          <SidebarPotWinners rows={potRows} />
+          <SidebarPotWinners rows={potRows} genesisGameHour={genesisGameHour} />
           <SidebarTrophyMints rows={trophyMintRows} />
         </div>
       </aside>
@@ -1670,7 +1735,7 @@ export function ClickMintDashboard() {
       {/* Main */}
       <main
         className={cn(
-          "relative z-10 mx-auto flex max-w-4xl flex-col items-center space-y-8 px-4 pb-24 pt-20 md:ml-72 md:mr-0 md:pb-16 md:pt-24",
+          "relative z-10 mx-auto flex max-w-4xl flex-col items-center space-y-8 px-4 pb-24 pt-28 md:ml-72 md:mr-0 md:pb-16 md:pt-32",
           mobileTab !== "terminal" && "md:space-y-6"
         )}
       >
@@ -1681,7 +1746,7 @@ export function ClickMintDashboard() {
             <h2 className="mb-4 font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary-fixed">
               POT history
             </h2>
-            <WinnerTable rows={potRows} />
+            <WinnerTable rows={potRows} genesisGameHour={genesisGameHour} />
           </section>
         )}
 
@@ -1693,7 +1758,7 @@ export function ClickMintDashboard() {
             <p className="mb-4 font-body text-[10px] text-secondary opacity-80">
               POT winners from this session. Trophies mint on lucky clicks (game odds) or via escrow on the Terminal tab.
             </p>
-            <WinnerTable rows={potRows} />
+            <WinnerTable rows={potRows} genesisGameHour={genesisGameHour} />
           </section>
         )}
 

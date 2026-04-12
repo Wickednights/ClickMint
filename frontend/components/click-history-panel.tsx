@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { decodeEventLog, type Address } from "viem";
-import { usePublicClient, useWatchContractEvent } from "wagmi";
+import { useAccount, usePublicClient, useWatchContractEvent } from "wagmi";
 import { baseSepolia } from "wagmi/chains";
 import { clickMintGameAbi } from "@/lib/abi";
+import { hourIdForDisplay } from "@/lib/game-genesis";
 import { cn } from "@/lib/utils";
 
 /** Smaller range avoids `eth_getLogs` range limits on some RPCs (e.g. QuickNode). */
@@ -26,7 +27,7 @@ export type ClickLogRow = {
   user: Address;
   hourId: bigint;
   totalForUserHour: bigint;
-  /** UTC minute 0–59 within the game hour. */
+  /** UTC minute 0–59 within the UTC wall-clock hour when the block was mined (same as on-chain `minuteOfUtcHour`). */
   minute: number;
 };
 
@@ -80,28 +81,44 @@ function decodeClickedLogs(
   return out;
 }
 
-/** Minute 0–59 within the *game hour* when the tx landed — not “now”. */
-function formatClickMinuteLine(m: number): string {
+/** On-chain field: minute 0–59 of the UTC hour at block time (not your local timezone). */
+function formatClickMinuteUtc(m: number): string {
   const mm = Math.min(59, Math.max(0, m));
-  return `:${String(mm).padStart(2, "0")} in hour`;
+  return `:${String(mm).padStart(2, "0")} UTC`;
 }
 
-const MINUTE_IN_HOUR_HELP =
-  "UTC minute (0–59) within that game hour when the click was mined — not the current clock.";
+/** Local wall-clock minute when the block was mined (viewer timezone). */
+function formatClickedAtLocalMin(blockTimestampSec: number | undefined): string {
+  if (blockTimestampSec === undefined) return "…";
+  const m = new Date(blockTimestampSec * 1000).getMinutes();
+  return `Clicked at: Min ${m}`;
+}
+
+/** Same minute, for compact “your last click” copy. */
+function localWallMinuteOnly(blockTimestampSec: number | undefined): string {
+  if (blockTimestampSec === undefined) return "…";
+  return `Min ${new Date(blockTimestampSec * 1000).getMinutes()}`;
+}
+
+const MINUTE_UTC_HELP =
+  "On-chain minute is UTC at block time. “Clicked at” uses your device clock from the block timestamp.";
 
 function ClickCard({
   r,
   animate,
   genesisGameHour,
+  blockTs,
 }: {
   r: ClickLogRow;
   animate: boolean;
   genesisGameHour: bigint | null;
+  blockTs: Record<string, number>;
 }) {
+  const ts = blockTs[r.blockNumber.toString()];
   const roundLine =
     genesisGameHour !== null
-      ? `Round ${(r.hourId >= genesisGameHour ? r.hourId - genesisGameHour + 1n : 1n).toString()}`
-      : `Hour #${r.hourId.toString()}`;
+      ? `Round ${hourIdForDisplay(r.hourId, genesisGameHour)}`
+      : `Hour #${hourIdForDisplay(r.hourId, null)}`;
   return (
     <div
       className={cn(
@@ -111,8 +128,11 @@ function ClickCard({
     >
       <div className="flex justify-between gap-2 text-secondary">
         <span className="truncate">#{r.blockNumber.toString()}</span>
-        <span className="shrink-0 text-primary-fixed/90" title={MINUTE_IN_HOUR_HELP}>
-          {formatClickMinuteLine(r.minute)}
+        <span
+          className="shrink-0 text-right text-[10px] text-primary-fixed/90 md:text-[11px]"
+          title={`${formatClickedAtLocalMin(ts)} · chain UTC ${formatClickMinuteUtc(r.minute)}`}
+        >
+          {formatClickedAtLocalMin(ts)}
         </span>
       </div>
       <div className="mt-1 truncate text-[12px]" title={r.user}>
@@ -145,11 +165,14 @@ export function ClickHistoryPanel({
   liveFeedMax: liveFeedMaxProp,
 }: ClickHistoryPanelProps) {
   const liveCap = liveFeedMaxProp ?? DEFAULT_LIVE_FEED_MAX;
+  const { address: viewerAddress } = useAccount();
   const publicClient = usePublicClient({ chainId: baseSepolia.id });
   const [rows, setRows] = useState<ClickLogRow[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [archivePage, setArchivePage] = useState(0);
   const [enterKey, setEnterKey] = useState<string | null>(null);
+  const [blockTs, setBlockTs] = useState<Record<string, number>>({});
+  const blockTsInFlightRef = useRef(new Set<string>());
 
   const ingestLogs = useCallback((logs: Parameters<typeof decodeClickedLogs>[0]) => {
     const decoded = decodeClickedLogs(logs);
@@ -216,9 +239,49 @@ export function ClickHistoryPanel({
     return () => clearTimeout(t);
   }, [topKey]);
 
-  const liveRows = rows.slice(0, liveCap);
-  const archiveTail = rows.length > liveCap ? rows.slice(liveCap) : [];
-  const archivePageCount = Math.max(1, Math.ceil(archiveTail.length / ARCHIVE_PAGE_SIZE));
+  useEffect(() => {
+    if (!publicClient) return;
+    const ids = [...new Set(rows.map((r) => r.blockNumber.toString()))];
+    const toFetch = ids.filter((id) => blockTs[id] === undefined && !blockTsInFlightRef.current.has(id));
+    if (toFetch.length === 0) return;
+    toFetch.forEach((id) => blockTsInFlightRef.current.add(id));
+    let cancelled = false;
+    void Promise.all(
+      toFetch.map(async (id) => {
+        try {
+          const b = await publicClient.getBlock({ blockNumber: BigInt(id) });
+          return [id, Number(b.timestamp)] as const;
+        } catch {
+          blockTsInFlightRef.current.delete(id);
+          return null;
+        }
+      })
+    ).then((results) => {
+      if (cancelled) return;
+      const next: Record<string, number> = {};
+      for (const pair of results) {
+        if (pair) {
+          next[pair[0]] = pair[1];
+          blockTsInFlightRef.current.delete(pair[0]);
+        }
+      }
+      if (Object.keys(next).length > 0) setBlockTs((p) => ({ ...p, ...next }));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [publicClient, rows, blockTs]);
+
+  const liveRows = useMemo(() => rows.slice(0, liveCap), [rows, liveCap]);
+
+  const archiveTail = useMemo(() => {
+    return rows.length > liveCap ? rows.slice(liveCap) : [];
+  }, [rows, liveCap]);
+
+  const archivePageCount = useMemo(
+    () => Math.max(1, Math.ceil(archiveTail.length / ARCHIVE_PAGE_SIZE)),
+    [archiveTail]
+  );
 
   useEffect(() => {
     setArchivePage((p) => Math.min(p, Math.max(0, archivePageCount - 1)));
@@ -263,6 +326,15 @@ export function ClickHistoryPanel({
     return out;
   }, [archivePage, archivePageCount]);
 
+  const yourLastClickRow = useMemo(() => {
+    if (!viewerAddress) return undefined;
+    const a = viewerAddress.toLowerCase();
+    return rows.find((r) => r.user.toLowerCase() === a);
+  }, [rows, viewerAddress]);
+
+  const yourLastClickTs =
+    yourLastClickRow !== undefined ? blockTs[yourLastClickRow.blockNumber.toString()] : undefined;
+
   return (
     <section className={cn("w-full space-y-4", compact ? "max-w-none space-y-3 pt-0" : "max-w-2xl pt-4")}>
       <div className={cn(compact && "text-center")}>
@@ -273,12 +345,30 @@ export function ClickHistoryPanel({
           <p className="font-body text-[12px] leading-snug text-secondary md:text-sm">
             Live feed (newest first). Heatmap: 5-minute UTC buckets. Settlement uses exact minutes for POT overlap.
           </p>
-        ) : (
-          <p className="font-body text-[11px] leading-snug text-secondary">
-            Newest first · live · “:MM in hour” = minute within that game hour when the tx mined (not current time).
-          </p>
-        )}
+        ) : null}
       </div>
+
+      {viewerAddress ? (
+        <p
+          className={cn("font-mono text-[11px] tabular-nums text-primary-fixed/95 md:text-xs", compact && "text-center")}
+          title="Most recent CLICK from your wallet in the history loaded here (local minute when the block was mined)."
+        >
+          <span className="font-label font-bold uppercase tracking-wider text-secondary">Your last click: </span>
+          {yourLastClickRow ? (
+            <span className="text-on-surface/95">{localWallMinuteOnly(yourLastClickTs)}</span>
+          ) : status === "loading" && rows.length === 0 ? (
+            <span className="text-secondary">…</span>
+          ) : (
+            <span className="font-body normal-case tracking-normal text-secondary">
+              none in loaded window (~{LOOKBACK_BLOCKS.toLocaleString()} blocks)
+            </span>
+          )}
+        </p>
+      ) : (
+        <p className={cn("font-body text-[11px] text-secondary opacity-90 md:text-xs", compact && "text-center")}>
+          Connect a wallet to see your last click here.
+        </p>
+      )}
 
       {status === "loading" && rows.length === 0 ? (
         <p className="font-body text-[12px] text-secondary">Loading…</p>
@@ -297,7 +387,9 @@ export function ClickHistoryPanel({
               const counts = heatmap.byHour.get(hid)!;
               return (
                 <div key={hid} className="flex flex-wrap items-center gap-2">
-                  <span className="w-16 shrink-0 font-mono text-[10px] text-primary-fixed/90 md:w-20">#{hid}</span>
+                  <span className="w-16 shrink-0 font-mono text-[10px] text-primary-fixed/90 md:w-20">
+                    {genesisGameHour !== null ? `${hourIdForDisplay(BigInt(hid), genesisGameHour)}` : `#${hid}`}
+                  </span>
                   <div className="flex min-w-0 flex-1 flex-wrap gap-0.5">
                     {counts.map((c, wi) => (
                       <div
@@ -334,7 +426,13 @@ export function ClickHistoryPanel({
         ) : null}
         <div className="space-y-2">
           {liveRows.map((r) => (
-            <ClickCard key={r.key} r={r} animate={enterKey === r.key} genesisGameHour={genesisGameHour} />
+            <ClickCard
+              key={r.key}
+              r={r}
+              animate={enterKey === r.key}
+              genesisGameHour={genesisGameHour}
+              blockTs={blockTs}
+            />
           ))}
         </div>
       </div>
@@ -349,8 +447,8 @@ export function ClickHistoryPanel({
                   <th className="px-2 py-2">Block</th>
                   <th className="px-2 py-2">Player</th>
                   <th className="px-2 py-2">Round</th>
-                  <th className="px-2 py-2" title={MINUTE_IN_HOUR_HELP}>
-                    In-hour min
+                  <th className="px-2 py-2" title={MINUTE_UTC_HELP}>
+                    Clicked at
                   </th>
                 </tr>
               </thead>
@@ -363,11 +461,11 @@ export function ClickHistoryPanel({
                     </td>
                     <td className="px-2 py-1.5 text-[#ff2ee8]">
                       {genesisGameHour !== null
-                        ? (r.hourId >= genesisGameHour ? r.hourId - genesisGameHour + 1n : 1n).toString()
-                        : `#${r.hourId.toString()}`}
+                        ? hourIdForDisplay(r.hourId, genesisGameHour)
+                        : `#${hourIdForDisplay(r.hourId, null)}`}
                     </td>
-                    <td className="px-2 py-1.5" title={MINUTE_IN_HOUR_HELP}>
-                      {formatClickMinuteLine(r.minute)}
+                    <td className="px-2 py-1.5" title={`${formatClickedAtLocalMin(blockTs[r.blockNumber.toString()])} · ${formatClickMinuteUtc(r.minute)}`}>
+                      {formatClickedAtLocalMin(blockTs[r.blockNumber.toString()])}
                     </td>
                   </tr>
                 ))}
@@ -376,7 +474,7 @@ export function ClickHistoryPanel({
           </div>
           <div className="space-y-2 md:hidden">
             {archiveSlice.map((r) => (
-              <ClickCard key={r.key} r={r} animate={false} genesisGameHour={genesisGameHour} />
+              <ClickCard key={r.key} r={r} animate={false} genesisGameHour={genesisGameHour} blockTs={blockTs} />
             ))}
           </div>
 
