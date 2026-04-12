@@ -88,6 +88,12 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     error GameFinalizeEarly();
     error GameAlreadyFinalized();
     error GameBadBps();
+    error GameUnauthorizedCaller();
+
+    /// @notice Optional address allowed to call `finalizeHour` (e.g. Gelato / Chainlink Automation forwarder). Zero = owner only.
+    address public potKeeper;
+
+    event PotKeeperSet(address indexed keeper);
 
     constructor(
         address initialOwner,
@@ -117,6 +123,22 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         treasury = treasury_;
         secretWallet = secretWallet_;
         emit AddressesUpdated(treasury_, secretWallet_);
+    }
+
+    /// @notice Set who may call `finalizeHour` besides `owner`. Use a dedicated automation/relayer address; set to zero to disable.
+    function setPotKeeper(address k) external onlyOwner {
+        potKeeper = k;
+        emit PotKeeperSet(k);
+    }
+
+    modifier onlyOwnerOrPotKeeper() {
+        if (msg.sender == owner()) {
+            _;
+        } else if (potKeeper != address(0) && msg.sender == potKeeper) {
+            _;
+        } else {
+            revert GameUnauthorizedCaller();
+        }
     }
 
     function setEconomy(uint256 clickPerEthWei_, uint256 clickCostCredits_, uint256 baseClickReward_) external onlyOwner whenNotPaused {
@@ -286,12 +308,10 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     }
 
     /// @notice After a game hour ends (+ RESET_BUFFER), finalize POT for `hourId` (owner / ops only).
-    /// @dev **Why onlyOwner (MVP):** open `finalizeHour` lets anyone race to settle, which encourages MEV /
-    /// timing games around our **pseudo-random** entropy and can grief UX. Restricting to **owner** (later:
-    /// multisig, Chainlink Automation, Gelato, or a dedicated `FINALIZER_ROLE`) gives controlled, predictable
-    /// settlement until we ship **VRF** and an explicit keeper model. Acceptable for testnet; revisit before high-stakes mainnet.
-    /// Pseudo-random window + winner — acceptable for testnet; VRF for production randomness.
-    function finalizeHour(uint256 hourId) external nonReentrant onlyOwner whenNotPaused {
+    /// @dev Open `finalizeHour` for everyone would encourage MEV races around pseudo-random entropy. **`owner`** or
+    /// **`potKeeper`** (automation relay) may finalize. Set `potKeeper` to a Gelato/Chainlink forwarder or dedicated bot.
+    /// Pseudo-random window + winner — acceptable for testnet; VRF optional for stronger mainnet fairness.
+    function finalizeHour(uint256 hourId) external nonReentrant onlyOwnerOrPotKeeper whenNotPaused {
         uint256 cutoff = (hourId + 1) * 3600 + RESET_BUFFER;
         if (block.timestamp < cutoff) revert GameFinalizeEarly();
         if (hourFinalized[hourId]) revert GameAlreadyFinalized();

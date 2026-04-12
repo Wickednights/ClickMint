@@ -24,6 +24,8 @@ export const clickMintGameAbi = parseAbi([
   "function hourWinWindow(uint256 hourId) view returns (uint8)",
   "function trophyDropBps() view returns (uint256)",
   "function setTrophyDropBps(uint256 bps)",
+  "function potKeeper() view returns (address)",
+  "function setPotKeeper(address k)",
   "function finalizeHour(uint256 hourId)",
   "event Deposited(address indexed user, uint256 ethIn, uint256 creditsOut)",
   "event Clicked(address indexed user, uint256 hourId, uint256 totalForUserHour, uint8 window)",

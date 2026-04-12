@@ -17,7 +17,7 @@ Use this as a living QA list. Update checkboxes as you verify. **Maintenance:** 
 | Status | Item | Notes |
 |--------|------|--------|
 | [ ] | POT shows 0 with many clicks | **Expected** if no `deposit()` in *current* game hour — only deposits add to `potEthByHour`; see Architecture. |
-| [ ] | Hour / winner “auto” | **Not automatic** — requires `finalizeHour` (**owner-only** since 2026-04-06; dashboard button reverts unless connected wallet is game owner). VRF = randomness upgrade, not cron. |
+| [ ] | Hour / winner “auto” | **`finalizeHour` is not cron by default** — run manually or set **`potKeeper`** to a Gelato/Automation relay (see **`docs/LP_AERODROME_AND_AUTOMATION.md`**). VRF = randomness upgrade, not scheduling. |
 | [ ] | `deposit()` credits user and splits fees | Verify on Base Sepolia with small ETH. |
 | [ ] | `click()` deducts credits when `clickCostCredits > 0` | Deploy script used `0` in sample; retest if owner changes economy. |
 | [ ] | `click()` grants vesting when `baseClickReward > 0` | If reward is `0`, UI correctly shows no unvested from clicks. |
