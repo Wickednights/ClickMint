@@ -662,97 +662,10 @@ export function ClickMintDashboard() {
   const canSendClick =
     isConnected && !writePending && !gaslessActionPending && !gameLinkPending && gameLinkOk;
 
-  const depositPanel = (
-    <div className="flex w-full flex-col items-stretch border border-primary-fixed/20 bg-surface-container-low/60">
-      <button
-        type="button"
-        aria-expanded={depositOpen}
-        onClick={() => setDepositOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left font-headline text-sm font-bold uppercase tracking-[0.15em] text-primary-fixed transition-colors hover:bg-surface-container-low"
-      >
-        <span className="inline-flex items-center gap-2">
-          <Icon name="add_circle" className="text-lg" />
-          Add credits (ETH)
-        </span>
-        <Icon name={depositOpen ? "expand_less" : "expand_more"} className="text-xl opacity-80" />
-      </button>
-      {depositOpen ? (
-        <div className="border-t border-outline-variant/20 px-4 pb-4 pt-3 max-h-[min(28rem,52svh)] overflow-y-auto overscroll-y-contain md:max-h-[min(32rem,70vh)] md:overscroll-auto lg:max-h-none lg:overflow-visible">
-            <p className="mb-3 text-center font-body text-[12px] leading-snug text-secondary md:text-sm">
-              In-game Click Credits (not $CLICK). Bonuses apply on larger single deposits.
-            </p>
-            {clickCostCredits === 0n && (
-              <p className="mb-3 text-center font-body text-[11px] text-secondary opacity-80">0 credits charged per click on this deployment.</p>
-            )}
-            <div className="grid grid-cols-3 gap-2">
-              {QUICK_BUY.map((e) => {
-                const depWei = parseEther(e);
-                const bonusLine = depositBonusLabel(depWei);
-                const credPreview =
-                  clickCostCredits === undefined
-                    ? undefined
-                    : unlimitedClicks
-                      ? creditsGrantedOnDeposit(depWei)
-                      : clickCreditsFromDeposit(depWei, clickCostCredits);
-                const creditLine =
-                  credPreview === undefined
-                    ? "…"
-                    : unlimitedClicks
-                      ? `${formatWholeCredits(credPreview)} to balance`
-                      : tinyClickCost && credPreview > 500_000n
-                        ? "Fix click cost*"
-                        : `${formatWholeCredits(credPreview)} credits`;
-                return (
-                  <button
-                    key={e}
-                    type="button"
-                    disabled={!canAct}
-                    onClick={() => void onDeposit(e)}
-                    className={cn(
-                      "flex flex-col items-center justify-center border border-outline-variant/30 bg-surface-container py-3 font-label text-[11px] font-bold uppercase tracking-widest text-on-surface transition-colors md:text-xs",
-                      "hover:border-primary-fixed/50 hover:text-primary-fixed active:scale-[0.98] disabled:opacity-30"
-                    )}
-                  >
-                    <span>{e} ETH</span>
-                    <span
-                      className="mt-1 break-words px-0.5 text-center font-body text-[10px] font-medium normal-case tracking-normal text-primary-fixed/90 md:text-[11px]"
-                      title={tinyClickCost && credPreview !== undefined && credPreview > 500_000n ? "Owner: setEconomy on game so clickCostCredits isn’t 1 wei." : undefined}
-                    >
-                      {creditLine}
-                    </span>
-                    {bonusLine ? (
-                      <span className="mt-1 font-label text-[10px] font-bold uppercase tracking-wide text-secondary opacity-90 md:text-[11px]">
-                        {bonusLine}
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
-            {tinyClickCost && (
-              <p className="mt-2 text-center font-body text-[10px] text-secondary opacity-80">
-                *Credit count explodes when per-click cost is ~1 wei. Use repo{" "}
-                <span className="font-mono text-primary-fixed/80">set-economy-round.ts</span>.
-              </p>
-            )}
-            <p className="mt-3 text-center">
-              <Link href="/documentation#click-credits" className="font-label text-[10px] uppercase tracking-widest text-primary-fixed/80 underline-offset-2 hover:underline">
-                How credits work
-              </Link>
-            </p>
-          </div>
-        ) : null}
-    </div>
-  );
-
   const terminalBody = (
     <>
-      {/* Deposit (top on mobile, left column on md+) + centered CLICK hero */}
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-1 md:flex-row md:items-start md:justify-center md:gap-8 lg:gap-12">
-        <aside className="mx-auto w-full max-w-sm shrink-0 md:mx-0 md:w-[17.5rem] lg:w-80 md:sticky md:top-28 md:z-[5] md:self-start">
-          {depositPanel}
-        </aside>
-        <div className="relative flex min-w-0 flex-1 flex-col items-center justify-center space-y-4 py-2 md:py-8">
+      {/* Centered CLICK hero — deposits only via header Credits */}
+      <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center justify-center space-y-4 px-1 py-2 md:py-8">
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-10 md:hidden">
             <div className="pulse-ring h-64 w-64 rounded-full border border-primary-container" />
           </div>
@@ -803,7 +716,6 @@ export function ClickMintDashboard() {
               .
             </p>
           ) : null}
-        </div>
       </div>
 
       {/* Setup / economy alerts */}

@@ -15,6 +15,7 @@ Work **top to bottom**. For each step, record **PASS / FAIL**, **tx hash** (if a
 | A.3 | **`NEXT_PUBLIC_QUICKNODE_RPC`** (or rely on public Base Sepolia RPC). Pimlico + wagmi need a reliable JSON-RPC. | |
 | A.4 | From **`contracts/`**, run **`npm run verify:base-sepolia`** (or `hardhat run scripts/verify-deployment.ts`) with **`CLICK_ADDRESS`**, **`GAME_ADDRESS`**, **`TROPHY_ADDRESS`**, and testnet **`EXPECTED_MAX_SUPPLY_WEI=1000000000000000000000000`**. All checks must pass. | |
 | A.5 | Fund your test wallet with **Base Sepolia ETH** (faucet). You need gas for: deposits, EOA clicks, **`setClickExecutor`** (one-time for gasless), claims, owner ops. | |
+| A.6 | **New `ClickMintGame` only (same CLICK + trophy):** from **`contracts/`**, set **`CLICK_ADDRESS`**, **`TROPHY_ADDRESS`**, **`TREASURY_ADDRESS`**, **`SECRET_WALLET_ADDRESS`**, then **`npm run deploy-game:base-sepolia`**. Updates **`CLICK.game`**, **`trophy.clickMintGame`**, and **`game.setTrophyNft`**. **All player credits and hour/POT state on the old game are left behind** — testers re-deposit on the new game. Point **`NEXT_PUBLIC_GAME_ADDRESS`** at the new game and re-run **A.4**. | |
 
 ---
 
@@ -75,7 +76,7 @@ Use **Base Sepolia** explorer: `https://sepolia.basescan.org/address/<0x…>`
 | C.3 | **BinaryTrophyNFT** | trophy from game or env | **Read**: `clickMintGame`, `maxSupply`, royalty info. |
 | C.4 | **Treasury** | env or deploy log | Contract exists; optional **Read** owner. |
 | C.5 | **SecretPrizeWallet** | env or deploy log | Contract exists. |
-| C.6 | **Escrow** | env or deploy log | Contract exists (**product UI does not drive Escrow yet**). |
+| C.6 | **Escrow** | env or deploy log | Contract exists; Terminal tab includes **Escrow** (deposit / claim) when addresses are set. |
 | C.7 | **Your EOA** | wallet | Native ETH balance decreases with txs; token balances for **CLICK** if applicable. |
 | C.8 | **Smart account** (if gasless) | shown in UI after enable | Shows as **contract** address; has no CLICK credits — credits stay on **EOA** by design. |
 
@@ -155,7 +156,7 @@ Use **Base Sepolia** explorer: `https://sepolia.basescan.org/address/<0x…>`
 
 | Step | Action | Expected | Pass? |
 |------|--------|----------|-------|
-| D.10.1 | Understand minting | **Random on-click trophy drops are not wired in `ClickMintGame._click` today.** Minting is via **game owner** calling **`mintTrophyForPlayer`** on the game (forwards to NFT) or **NFT owner** calling **`mint`** — see `BinaryTrophyNFT.sol` / `ClickMintGame.sol`. | |
+| D.10.1 | Understand minting | **`ClickMintGame._click`** may call **`trophyNft.mintTrophyForPlayer`** with probability **`trophyDropBps`** / 10_000 (failures are swallowed so the click still succeeds). **Owner** may still call **`mintTrophyForPlayer`** on the game or **`mint`** on the NFT for QA. Redeploy or use **`contracts/scripts/deploy-game-and-relink.ts`** if your on-chain game predates `trophyDropBps`. | |
 | D.10.2 | After a mint to your wallet | **`/debug`** or dashboard listens for **`Transfer`** mints; toast **“Trophy NFT received”** may fire. | |
 | D.10.3 | Basescan → **Read Contract** → **`tokenURI(tokenId)`** | Returns **`data:application/json;base64,...`** (on-chain JSON), **not** `ipfs://`. Decode base64 JSON — **`image`** is **`data:image/svg+xml;base64,...`** (on-chain SVG). | |
 | D.10.4 | Wallet / OpenSea test | NFT appears with **SVG** image from chain (marketplace support for data-URIs varies). | |
@@ -187,11 +188,10 @@ Use **Base Sepolia** explorer: `https://sepolia.basescan.org/address/<0x…>`
 
 | Item | What to do if you need it |
 |------|---------------------------|
-| **Escrow** user flow | Contract may be deployed; **no full dashboard flow** — test via direct contract calls if required. |
-| **Automatic trophy drop on each click** | Not in current **`_click`** path; use **owner** `mintTrophyForPlayer` for QA or extend the contract. |
-| **IPFS / external metadata** | Trophy uses **on-chain** `tokenURI`; migrating needs a **new** metadata scheme + contract or upgrade. |
+| **IPFS / external trophy images** | Trophy **`tokenURI`** is **on-chain** (base64 JSON + SVG). IPFS or static hosting is **optional polish** after core flows pass; changing it needs a **new** metadata approach (not required for Phase 1 testing). |
 | **VRF / trustless POT randomness** | MVP uses pseudo-random; documented in architecture. |
 | **Permissionless `finalizeHour`** | Owner-only in current design. |
+| **Trustless on-click trophy randomness** | Drops use the same block-entropy family as POT (miner-influenced); upgrade if you need VRF-level fairness. |
 
 ---
 
