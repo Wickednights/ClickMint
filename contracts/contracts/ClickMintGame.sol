@@ -126,7 +126,7 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     }
 
     /// @notice Set who may call `finalizeHour` besides `owner`. Use a dedicated automation/relayer address; set to zero to disable.
-    function setPotKeeper(address k) external onlyOwner {
+    function setPotKeeper(address k) external onlyOwner whenNotPaused {
         potKeeper = k;
         emit PotKeeperSet(k);
     }

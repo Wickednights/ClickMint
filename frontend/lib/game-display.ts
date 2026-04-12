@@ -82,13 +82,26 @@ export function trimEtherString(s: string): string {
 }
 
 /**
+ * Human-readable **$CLICK** from wei for UI (avoids 18-decimal noise). Display-only; on-chain values are exact.
+ */
+export function formatClickDisplayWei(wei: bigint, maxFractionDigits = 2): string {
+  if (wei === 0n) return "0";
+  const n = Number(formatEther(wei));
+  if (!Number.isFinite(n)) return "—";
+  return n.toLocaleString("en-US", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: maxFractionDigits,
+  });
+}
+
+/**
  * Vault balances are **wei**; linear vesting means amounts are usually **not** whole multiples of
  * `baseClickReward`. Showing `wei / baseReward` as a “grant count” mislabels balances (e.g. “1 grant”
  * when the real claimable amount is fractional in grant units).
  */
 function vaultAmountHeadline(wei: bigint): string {
   if (wei === 0n) return "0";
-  return trimEtherString(formatEther(wei));
+  return formatClickDisplayWei(wei, 2);
 }
 
 function grantHint(wei: bigint, baseRewardWei?: bigint): string | null {

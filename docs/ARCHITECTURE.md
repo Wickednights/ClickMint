@@ -68,6 +68,8 @@ Token cap `maxSupply` (**immutable**, set at deploy — mainnet target **100B**,
 | `claimable(account)` | Vested amount not yet claimed (can call `claimVested`). |
 | `mint` | Game-only; used for POT winner payout (liquid mint, not vault). |
 
+**Why claimable / unvested jump on every click:** `grantVested` uses `_syncAndGrant`: it first **mints** any slice that has already vested under the current schedule, then sets **`v.total = oldUnvested + newReward`** and **`v.start = block.timestamp`**. Vesting **restarts from “now”** each time you earn new rewards, so on-chain numbers move in steps (not a smooth clock independent of clicks).
+
 Transfer tax (if enabled) sends a BPS slice to `treasury`.
 
 ### Treasury & SecretPrizeWallet
