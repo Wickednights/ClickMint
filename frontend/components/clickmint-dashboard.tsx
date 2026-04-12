@@ -1099,12 +1099,18 @@ export function ClickMintDashboard() {
           className={cn(
             "relative z-10 flex h-56 w-56 flex-col items-center justify-center font-headline font-black uppercase transition-transform active:scale-90",
             "md:h-[17rem] md:w-[17rem] md:shrink-0",
-            "neon-pulse rounded-full border-4 border-primary-container bg-surface-container md:rounded-none md:border-0 md:bg-primary-fixed md:text-on-primary-fixed",
-            heroClickFlash && "click-hero-flash",
+            "rounded-full border-4 border-primary-container bg-surface-container md:rounded-none md:border-0 md:bg-primary-fixed md:text-on-primary-fixed",
             wrongChain && "ring-2 ring-amber-400/80"
           )}
         >
-          <span className="absolute inset-0 bg-gradient-to-tr from-primary-container/20 to-transparent md:hidden" />
+          <span
+            aria-hidden
+            className={cn(
+              "pointer-events-none absolute inset-0 z-0 rounded-full md:rounded-none neon-pulse",
+              heroClickFlash && "click-hero-flash"
+            )}
+          />
+          <span className="absolute inset-0 z-[1] bg-gradient-to-tr from-primary-container/20 to-transparent md:hidden" />
           <span className="relative z-20 font-headline text-5xl font-extrabold tracking-tighter text-white glitch-text md:text-6xl md:text-on-primary-fixed md:[text-shadow:none]">
             CLICK
           </span>
