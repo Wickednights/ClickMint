@@ -31,6 +31,7 @@ async function main() {
     trophyMaxSupply: caps.trophyMaxSupply.toString(),
     clicksPerHashTier: caps.clicksPerHashTier.toString(),
     trophyDropBps: caps.trophyDropBps.toString(),
+    minPotClicks: caps.minPotClicks.toString(),
     vestingSeconds: vestingSec.toString(),
   });
 
@@ -86,7 +87,8 @@ async function main() {
     clickCostCredits,
     baseClickReward,
     caps.clicksPerHashTier,
-    caps.trophyDropBps
+    caps.trophyDropBps,
+    caps.minPotClicks
   );
   await game.waitForDeployment();
   await (await click.setGame(await game.getAddress())).wait();

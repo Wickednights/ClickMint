@@ -24,6 +24,7 @@ import {
   clickCreditsFromDeposit,
   creditsGrantedOnDeposit,
   depositBonusLabel,
+  earlySpendLiquidWei,
   formatClickDisplayWei,
   formatWholeCredits,
   isTinyClickCostWei,
@@ -81,25 +82,6 @@ function formatEpochLocalShort(epochSec: number): string {
     hour: "numeric",
     minute: "2-digit",
   });
-}
-
-/** Matches `ClickMintGame.gameHour`: hour id H covers unix seconds roughly [H*3600+21, (H+1)*3600+19]. */
-function gameHourUtcSlotLabel(hourId: bigint): string {
-  const H = Number(hourId);
-  if (!Number.isFinite(H) || H < 0) return "—";
-  const startSec = H * 3600 + 21;
-  const endSec = (H + 1) * 3600 + 19;
-  const fmt = (s: number) =>
-    new Date(s * 1000).toLocaleString("en-US", {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone: "UTC",
-      timeZoneName: "short",
-    });
-  return `${fmt(startSec)} → ${fmt(endSec)}`;
 }
 
 function formatCountdown(totalSec: number): string {
@@ -310,6 +292,19 @@ export function ClickMintDashboard() {
   const unlimitedClicks = clickCostCredits !== undefined && clickCostCredits === 0n;
   const tinyClickCost = isTinyClickCostWei(clickCostCredits);
 
+  /** True when the player cannot afford a single click (credits loaded). */
+  const needsBuyCredits = useMemo(
+    () =>
+      isConnected &&
+      !!address &&
+      !unlimitedClicks &&
+      clickCostCredits !== undefined &&
+      clickCostCredits > 0n &&
+      credits !== undefined &&
+      playsRemainingBig === 0n,
+    [isConnected, address, unlimitedClicks, clickCostCredits, credits, playsRemainingBig]
+  );
+
   const { data: gameClickTokenAddr } = useReadContract({
     address: gameAddr,
     abi: clickMintGameAbi,
@@ -335,6 +330,13 @@ export function ClickMintDashboard() {
     address: gameAddr,
     abi: clickMintGameAbi,
     functionName: "baseClickReward",
+    query: { enabled: !!gameAddr },
+  });
+
+  const { data: minPotClicks } = useReadContract({
+    address: gameAddr,
+    abi: clickMintGameAbi,
+    functionName: "minPotClicks",
     query: { enabled: !!gameAddr },
   });
 
@@ -467,7 +469,17 @@ export function ClickMintDashboard() {
   const wrongChain = isConnected && chainId !== baseSepolia.id;
 
   const onDeposit = async (eth: string) => {
-    if (!gameAddr || wrongChain || !address || !publicClient) return;
+    if (!gameAddr || !address || !publicClient) return;
+    if (wrongChain) {
+      try {
+        await switchChainAsync({ chainId: baseSepolia.id });
+      } catch {
+        toast.error("Switch to Base Sepolia", {
+          description: "Deposits must be signed on chain 84532. Choose Base Sepolia in your wallet, then try again.",
+        });
+        return;
+      }
+    }
     const valueWei = parseEther(eth);
 
     try {
@@ -485,9 +497,12 @@ export function ClickMintDashboard() {
     } catch (e) {
       sfxRef.current.playError();
       const data = extractRevertData(e);
-      const msg = data ? explainRevertData(data) : (e as Error).message;
+      let msg = data ? explainRevertData(data) : (e as Error).message;
+      if (/8453|84532|chain id|invalid chain|wrong chain/i.test(msg)) {
+        msg = `${msg.slice(0, 160)} — Use Base Sepolia (84532). If your wallet shows Sepolia but errors persist, set the RPC to https://sepolia.base.org (some custom RPCs confuse the signer).`;
+      }
       console.error("deposit() failed", e);
-      toast.error("Deposit failed", { description: msg.slice(0, 220) });
+      toast.error("Deposit failed", { description: msg.slice(0, 320) });
     }
   };
 
@@ -511,6 +526,13 @@ export function ClickMintDashboard() {
         description:
           "On-chain CLICK.game is zero or points elsewhere. Deploy owner must run: CLICK.setGame(<ClickMintGame address>). See repo contracts/scripts/set-game.ts",
         duration: 12_000,
+      });
+      return;
+    }
+    if (needsBuyCredits) {
+      setDepositOpen(true);
+      toast.message("Add ETH for click credits", {
+        description: "Deposits fund your credit balance so each CLICK can burn the per-click cost.",
       });
       return;
     }
@@ -703,15 +725,119 @@ export function ClickMintDashboard() {
   const earlySpendWei = parsedEarlySpend.ok ? parsedEarlySpend.wei : 0n;
   const unvestedCap = unvestedWei ?? 0n;
 
+  const earlyLiquidPreview = useMemo(() => {
+    if (!parsedEarlySpend.ok || unvestedCap === 0n) return null;
+    const t = earlyAmt.trim();
+    const spend =
+      t === "" ? unvestedCap : earlySpendWei > unvestedCap ? null : earlySpendWei === 0n ? null : earlySpendWei;
+    if (spend === null || spend === 0n) return null;
+    return { spend, liquid: earlySpendLiquidWei(spend) };
+  }, [parsedEarlySpend.ok, earlyAmt, earlySpendWei, unvestedCap]);
+
   const canAct = isConnected && !wrongChain && !writePending && !gaslessActionPending;
   /** Allow CLICK on wrong chain so the handler can prompt a network switch. */
   const canSendClick =
     isConnected && !writePending && !gaslessActionPending && !gameLinkPending && gameLinkOk;
 
+  const hourlyPotCard = (
+    <div className="w-full max-w-[17rem] space-y-2 rounded border border-outline-variant/25 bg-surface-container-low/50 px-3 py-2.5 text-left shadow-sm shadow-black/20">
+      <p className="font-label text-[9px] uppercase tracking-[0.2em] text-primary-fixed/90">Hourly POT</p>
+      <div className="flex justify-between font-label text-[10px] uppercase tracking-widest text-secondary">
+        <span>{potEthStr} ETH</span>
+        <span className="text-primary-fixed">{potFillPct.toFixed(0)}%</span>
+      </div>
+      <div className="h-px w-full overflow-hidden bg-surface-container-highest">
+        <div
+          className="h-full bg-primary-fixed transition-all duration-700 shadow-[0_0_12px_#00fbfb]"
+          style={{ width: `${potFillPct}%` }}
+        />
+      </div>
+      <p className="font-body text-[9px] leading-snug text-secondary opacity-85">
+        {minPotClicks !== undefined ? (
+          <>
+            Qualify: ≥{minPotClicks.toString()} clicks/hr + overlap with winning 15-min span.{" "}
+          </>
+        ) : null}
+        <Link href="/documentation#pot" className="text-primary-fixed/90 underline-offset-2 hover:underline">
+          Rules
+        </Link>
+      </p>
+      <button
+        type="button"
+        disabled={!canAct || prevHour === undefined || !!prevFinalized}
+        onClick={() => void onFinalize()}
+        className="w-full font-label text-[9px] uppercase tracking-widest text-secondary opacity-80 hover:text-primary-fixed disabled:opacity-20"
+      >
+        Settle previous round
+      </button>
+    </div>
+  );
+
+  const resetTimerStrip =
+    potClock !== null ? (
+      <div className="w-full max-w-lg rounded border border-outline-variant/20 bg-surface-container-low/30 px-3 py-2.5 text-center font-body text-[11px] leading-snug text-secondary md:text-xs">
+        <p className="font-headline text-sm font-bold tabular-nums text-white md:text-base">
+          Next reset <span className="text-primary-fixed">{formatCountdown(potClock.secToHourEnd)}</span>
+        </p>
+        <p className="mt-1 text-[10px] text-on-surface/75 md:text-[11px]">
+          ~{formatEpochLocalShort(potClock.nextBoundaryEpochSec)} your time
+        </p>
+        <p className="mt-2 font-semibold text-primary-fixed">
+          :{String(potClock.currentMinuteUtc).padStart(2, "0")} UTC
+          <span className="mx-1.5 font-normal text-outline-variant">·</span>
+          <span className="font-normal text-on-surface/85">
+            {new Date(tickSec * 1000).toLocaleTimeString(undefined, {
+              hour: "numeric",
+              minute: "2-digit",
+              second: "2-digit",
+            })}{" "}
+            local
+          </span>
+        </p>
+        {prevHour !== undefined && prevFinalized !== undefined ? (
+          <p className="mt-2 text-[10px] text-secondary">
+            Last round #{prevHour.toString()}{" "}
+            {prevFinalized ? (
+              <span className="text-emerald-300/90">settled</span>
+            ) : (
+              <span className="text-amber-200/90">awaiting settlement</span>
+            )}
+          </p>
+        ) : null}
+        {prevHour !== undefined ? (
+          <div className="mt-1 text-[10px] leading-snug">
+            {prevFinalized ? (
+              <p className="text-secondary">
+                Last span:{" "}
+                <span className="font-semibold text-primary-fixed">
+                  {prevHourWinWindow !== undefined ? utcPotSpanLabel(Number(prevHourWinWindow)) : "—"}
+                </span>
+              </p>
+            ) : potClock.secUntilFinalizeGate !== null ? (
+              potClock.secUntilFinalizeGate > 0 ? (
+                <p className="text-secondary">
+                  Settlement #{prevHour.toString()} in{" "}
+                  <span className="font-semibold tabular-nums text-primary-fixed">
+                    {formatCountdown(potClock.secUntilFinalizeGate)}
+                  </span>
+                </p>
+              ) : (
+                <p className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-1.5 text-amber-100/95">
+                  Round #{prevHour.toString()} ready to settle (operators).
+                </p>
+              )
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    ) : (
+      <p className="font-body text-[11px] text-secondary">Loading round clock…</p>
+    );
+
   const terminalBody = (
     <>
       {/* Setup / economy alerts */}
-      <section className="mx-auto flex w-full max-w-sm flex-col items-center space-y-10 md:max-w-lg">
+      <section className="mx-auto flex w-full max-w-sm flex-col items-center space-y-5 md:max-w-lg">
         {!gameLinkPending && !gameLinkOk && (
           <div className="w-full border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-center font-body text-[11px] text-amber-200 md:text-xs">
             Game not linked. Owner runs <span className="font-mono text-amber-100">CLICK.setGame({gameAddr})</span> (
@@ -737,88 +863,8 @@ export function ClickMintDashboard() {
         )}
       </section>
 
-      {/* Hourly POT — compact copy for mobile */}
-      <section className="w-full max-w-xl border border-outline-variant/25 bg-surface-container-low/40 px-3 py-3 text-center sm:px-5">
-        <p className="font-label text-[9px] uppercase tracking-[0.2em] text-primary-fixed/90">Hourly POT</p>
-        {potClock ? (
-          <div className="mt-2 space-y-2.5 font-body text-[11px] leading-snug text-secondary md:text-xs">
-            <p className="font-headline text-sm font-bold tabular-nums text-white md:text-base">
-              Next reset{" "}
-              <span className="text-primary-fixed">{formatCountdown(potClock.secToHourEnd)}</span>
-            </p>
-            <p className="text-[10px] text-on-surface/75 md:text-[11px]">
-              ~{formatEpochLocalShort(potClock.nextBoundaryEpochSec)} your time
-            </p>
-            <div className="rounded border border-outline-variant/20 bg-black/30 px-2 py-2 text-left sm:text-center">
-              <p className="text-[10px] text-on-surface/70">Clock (minute you click is tagged)</p>
-              <p className="mt-0.5 font-semibold text-primary-fixed">
-                :{String(potClock.currentMinuteUtc).padStart(2, "0")} UTC
-                <span className="mx-1.5 font-normal text-outline-variant">·</span>
-                <span className="font-normal text-on-surface/85">
-                  {new Date(tickSec * 1000).toLocaleTimeString(undefined, {
-                    hour: "numeric",
-                    minute: "2-digit",
-                    second: "2-digit",
-                  })}{" "}
-                  your time
-                </span>
-              </p>
-              <p className="mt-1.5 text-[9px] leading-snug text-secondary opacity-90">
-                At settlement, one random 15-minute span is chosen (UTC start minute 0–44). You need enough clicks in the hour
-                and at least one click inside that span.
-              </p>
-            </div>
-            <p className="text-[10px] text-secondary opacity-90">
-              Global round #{potClock.gameHourId.toString()}
-              <span className="mx-1 text-outline-variant">·</span>
-              <span className="text-on-surface/80">{gameHourUtcSlotLabel(potClock.gameHourId)}</span>
-            </p>
-            {prevHour !== undefined && prevFinalized !== undefined ? (
-              <p className="text-[10px] text-secondary">
-                Last round #{prevHour.toString()}{" "}
-                {prevFinalized ? (
-                  <span className="text-emerald-300/90">settled</span>
-                ) : (
-                  <span className="text-amber-200/90">waiting for settlement</span>
-                )}
-              </p>
-            ) : null}
-            {prevHour !== undefined ? (
-              <div className="text-[10px] leading-snug">
-                {prevFinalized ? (
-                  <p className="text-secondary">
-                    Last winner&apos;s span:{" "}
-                    <span className="font-semibold text-primary-fixed">
-                      {prevHourWinWindow !== undefined ? utcPotSpanLabel(Number(prevHourWinWindow)) : "—"}
-                    </span>
-                  </p>
-                ) : potClock.secUntilFinalizeGate !== null ? (
-                  potClock.secUntilFinalizeGate > 0 ? (
-                    <p className="text-secondary">
-                      Settlement for round #{prevHour.toString()} unlocks in{" "}
-                      <span className="font-semibold tabular-nums text-primary-fixed">
-                        {formatCountdown(potClock.secUntilFinalizeGate)}
-                      </span>
-                    </p>
-                  ) : (
-                    <p className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-2 text-amber-100/95">
-                      <span className="font-semibold">Round #{prevHour.toString()} ready to settle.</span>
-                      <span className="mt-1 block font-normal text-amber-100/85">
-                        Operators: use Settle below.
-                      </span>
-                    </p>
-                  )
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ) : (
-          <p className="mt-2 font-body text-[11px] text-secondary">Loading…</p>
-        )}
-      </section>
-
-      {/* Centered CLICK hero — deposits only via header Credits */}
-      <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center justify-center space-y-4 px-1 py-2 md:py-8">
+      {/* Centered CLICK hero — Add credits directly under status */}
+      <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center justify-center space-y-2 px-1 py-1 md:py-4">
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-10 md:hidden">
           <div className="pulse-ring h-64 w-64 rounded-full border border-primary-container" />
         </div>
@@ -846,16 +892,43 @@ export function ClickMintDashboard() {
             Wrong network — tap CLICK to switch to Base Sepolia, or use the header link.
           </p>
         )}
-        <div className="border border-outline-variant/30 bg-surface-container-low px-4 py-2 font-label text-[10px] uppercase tracking-widest text-primary-fixed">
-          <span className="inline-flex items-center gap-2">
-            <span
-              className="material-symbols-outlined text-xs"
-              style={{ fontVariationSettings: `"FILL" 1, "wght" 400` } as CSSProperties}
-            >
-              bolt
+        <div className="flex flex-col items-center gap-1.5">
+          <div className="border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 font-label text-[10px] uppercase tracking-widest text-primary-fixed">
+            <span className="inline-flex items-center gap-2">
+              <span
+                className="material-symbols-outlined text-xs"
+                style={{ fontVariationSettings: `"FILL" 1, "wght" 400` } as CSSProperties}
+              >
+                bolt
+              </span>
+              {cooldownLabel !== null ? (
+                <>RATE LIMIT: {cooldownLabel}s</>
+              ) : needsBuyCredits ? (
+                <>Buy credits</>
+              ) : (
+                <>READY</>
+              )}
             </span>
-            {cooldownLabel !== null ? <>RATE LIMIT: {cooldownLabel}s</> : <>READY</>}
-          </span>
+          </div>
+          <button
+            type="button"
+            id="hero-add-credits"
+            aria-haspopup="dialog"
+            aria-expanded={depositOpen}
+            disabled={!isConnected}
+            onClick={() => setDepositOpen(true)}
+            className={cn(
+              "inline-flex items-center gap-1.5 border px-3 py-1.5 font-label text-[10px] font-bold uppercase tracking-[0.15em] transition-colors",
+              !isConnected
+                ? "cursor-not-allowed border-outline-variant/30 text-secondary opacity-50"
+                : depositOpen
+                  ? "border-primary-fixed bg-primary-fixed/15 text-primary-fixed"
+                  : "border-primary-fixed/50 bg-primary-fixed/10 text-primary-fixed hover:bg-primary-fixed/20"
+            )}
+          >
+            <Icon name="add_circle" className="text-sm opacity-90" />
+            Add credits
+          </button>
         </div>
         {gasless.status === "ready" ? (
           <p className="max-w-md px-2 text-center font-body text-[10px] leading-snug text-secondary">
@@ -959,6 +1032,11 @@ export function ClickMintDashboard() {
             </Link>
             .
           </p>
+          {earlyLiquidPreview !== null && canAct && parsedEarlySpend.ok && (
+            <p className="mt-2 max-w-md text-center font-body text-[10px] leading-snug text-primary-fixed/90 md:text-[11px]">
+              Preview: spend {formatClickDisplayWei(earlyLiquidPreview.spend)} unvested → ~{formatClickDisplayWei(earlyLiquidPreview.liquid)} liquid $CLICK to your wallet (your 20% leg of the on-chain 30/30/20/20 split).
+            </p>
+          )}
           {canAct && !parsedEarlySpend.ok && (
             <p className="mt-1 font-body text-[10px] text-amber-200/90 md:text-[11px]">
               Invalid amount — use a decimal number (wei parsed as ether).
@@ -975,32 +1053,6 @@ export function ClickMintDashboard() {
             </p>
           )}
         </div>
-      </section>
-
-      <section className="mx-auto w-full max-w-sm space-y-3">
-        <div className="flex justify-between font-label text-[11px] uppercase tracking-widest text-secondary md:text-xs">
-          <span className="text-left">Hourly POT · {potEthStr} ETH</span>
-          <span className="text-primary-fixed">{potFillPct.toFixed(0)}%</span>
-        </div>
-        <div className="h-px w-full overflow-hidden bg-surface-container-highest">
-          <div
-            className="h-full bg-primary-fixed transition-all duration-700 shadow-[0_0_15px_#00fbfb]"
-            style={{ width: `${potFillPct}%` }}
-          />
-        </div>
-        <p className="text-center font-body text-[11px] text-secondary opacity-70 md:text-xs">
-          <Link href="/documentation#pot" className="text-primary-fixed/90 underline-offset-2 hover:underline">
-            How the POT works
-          </Link>
-        </p>
-        <button
-          type="button"
-          disabled={!canAct || prevHour === undefined || !!prevFinalized}
-          onClick={() => void onFinalize()}
-          className="w-full font-label text-[10px] uppercase tracking-widest text-secondary opacity-60 hover:text-primary-fixed disabled:opacity-20 md:text-[11px]"
-        >
-          Settle previous round
-        </button>
       </section>
 
       <div className="mx-auto flex w-full max-w-xl justify-center px-1">
@@ -1049,7 +1101,14 @@ export function ClickMintDashboard() {
 
       {/* Header — centered controls (md+); credits open a Dialog (fixes overflow clipping). Mobile: wallet + menu. */}
       <header className="fixed left-0 top-0 z-50 w-full overflow-visible border-b border-outline-variant/20 bg-surface/90 font-headline uppercase tracking-tighter backdrop-blur-sm">
-        <div className="mx-auto flex max-w-[100vw] flex-wrap items-center justify-between gap-x-2 gap-y-2 px-3 py-3 sm:px-4 md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center md:gap-x-4 md:px-4 md:py-3 lg:px-6">
+        <div className="relative mx-auto flex max-w-[100vw] flex-wrap items-center justify-between gap-x-2 gap-y-1.5 px-3 py-2 sm:px-4 md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center md:gap-x-4 md:px-4 md:py-2.5 lg:px-6">
+          {gameHourNow !== undefined ? (
+            <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 -translate-x-1/2 -translate-y-1/2 md:hidden">
+              <span className="font-mono text-[10px] font-bold tabular-nums text-primary-fixed" title="Current game round">
+                #{gameHourNow.toString()}
+              </span>
+            </div>
+          ) : null}
           <div className="min-w-0 max-w-[min(100%,14rem)] flex-col gap-0.5 sm:max-w-none md:justify-self-start">
             <div className="flex min-w-0 items-center gap-2">
               <span className="material-symbols-outlined shrink-0 text-primary-fixed md:hidden">token</span>
@@ -1069,24 +1128,13 @@ export function ClickMintDashboard() {
             </p>
           </div>
 
-          <div className="hidden w-full shrink-0 flex-wrap items-center justify-center gap-1.5 md:flex md:w-auto md:justify-self-center">
-            <button
-              type="button"
-              id="header-add-credits"
-              aria-expanded={depositOpen}
-              aria-haspopup="dialog"
-              title="Add ETH for click credits"
-              onClick={() => setDepositOpen(true)}
-              className={cn(
-                "inline-flex items-center gap-1 border px-2 py-1 font-label text-[8px] font-bold tracking-widest transition-colors md:gap-1.5 md:px-2.5 md:text-[9px]",
-                depositOpen
-                  ? "border-primary-fixed bg-primary-fixed/15 text-primary-fixed"
-                  : "border-primary-fixed/40 bg-primary-fixed/10 text-primary-fixed hover:bg-primary-fixed/20"
-              )}
-            >
-              <Icon name="add_circle" className="text-sm opacity-90" />
-              <span>Credits</span>
-            </button>
+          <div className="hidden w-full shrink-0 flex-col flex-wrap items-center justify-center gap-1.5 md:flex md:w-auto md:justify-self-center">
+            {gameHourNow !== undefined ? (
+              <p className="font-mono text-[9px] font-bold tabular-nums text-primary-fixed" title="Current game round">
+                ROUND #{gameHourNow.toString()}
+              </p>
+            ) : null}
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
             <button
               type="button"
               aria-pressed={musicOn}
@@ -1136,6 +1184,7 @@ export function ClickMintDashboard() {
                 </button>
               )
             ) : null}
+            </div>
           </div>
 
           <div className="flex min-w-0 flex-1 items-center justify-end gap-2 md:min-w-0 md:flex-none md:justify-self-end">
@@ -1246,6 +1295,18 @@ export function ClickMintDashboard() {
                 <span className="font-mono text-primary-fixed/80">set-economy-round.ts</span>.
               </p>
             )}
+            <p className="text-center font-body text-[10px] leading-snug text-secondary opacity-90">
+              Deposits use native ETH. To fund from USDC or other tokens, swap to ETH on Base Sepolia first (e.g.{" "}
+              <a
+                href="https://app.uniswap.org/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary-fixed underline-offset-2 hover:underline"
+              >
+                Uniswap
+              </a>
+              ), then add credits here.
+            </p>
             <p className="text-center">
               <Link
                 href="/documentation#click-credits"
@@ -1364,7 +1425,7 @@ export function ClickMintDashboard() {
       </header>
 
       {/* Desktop sidebar */}
-      <aside className="fixed left-0 top-0 z-40 hidden h-full w-64 flex-col border-r border-outline-variant/30 bg-surface-container-lowest pt-24 md:flex">
+      <aside className="fixed left-0 top-0 z-40 hidden h-full w-64 flex-col border-r border-outline-variant/30 bg-surface-container-lowest pt-20 md:flex">
         <div className="mb-8 px-6">
           <h3 className="font-label text-xs uppercase tracking-[0.15em] text-primary-fixed">Operations</h3>
           <p className="text-[10px] text-secondary opacity-50">BASE_NETWORK_ACTIVE</p>
@@ -1430,17 +1491,37 @@ export function ClickMintDashboard() {
             Documentation
           </Link>
         </nav>
+        <div className="border-t border-outline-variant/25 px-6 py-4">
+          <p className="font-label text-[9px] uppercase tracking-widest text-primary-fixed/85">Hourly POT</p>
+          <p className="mt-1 font-mono text-[11px] text-secondary">{potEthStr} ETH</p>
+          <div className="mt-2 h-1 w-full overflow-hidden rounded bg-surface-container-highest">
+            <div className="h-full bg-primary-fixed transition-all" style={{ width: `${potFillPct}%` }} />
+          </div>
+          {minPotClicks !== undefined ? (
+            <p className="mt-2 font-body text-[9px] uppercase tracking-wide text-secondary opacity-80">
+              Qualify ≥{minPotClicks.toString()} clicks / hr
+            </p>
+          ) : null}
+        </div>
         <div className="mt-auto px-6 py-8" aria-hidden />
       </aside>
 
       {/* Main */}
       <main
         className={cn(
-          "relative z-10 mx-auto flex max-w-4xl flex-col items-center space-y-16 px-6 pb-32 pt-28 md:ml-64 md:mr-0 md:pb-24 md:pt-32",
-          mobileTab !== "terminal" && "md:space-y-10"
+          "relative z-10 mx-auto flex max-w-4xl flex-col items-center space-y-8 px-4 pb-24 pt-20 md:ml-64 md:mr-0 md:pb-16 md:pt-24",
+          mobileTab !== "terminal" && "md:space-y-6"
         )}
       >
-        {mobileTab === "terminal" && terminalBody}
+        {mobileTab === "terminal" && (
+          <>
+            <div className="flex w-full flex-col items-stretch gap-2">
+              <div className="flex w-full justify-end px-1">{hourlyPotCard}</div>
+              <div className="flex w-full justify-center px-2">{resetTimerStrip}</div>
+            </div>
+            {terminalBody}
+          </>
+        )}
 
         {mobileTab === "history" && (
           <section className="w-full max-w-md pt-4">
@@ -1485,7 +1566,7 @@ export function ClickMintDashboard() {
       </footer>
 
       {/* Mobile bottom nav */}
-      <nav className="fixed bottom-0 left-0 z-50 grid h-[4.25rem] w-full max-w-[100vw] grid-cols-4 items-stretch border-t border-outline-variant/30 bg-surface pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-0.5 shadow-[0_-4px_20px_rgba(0,251,251,0.05)] md:hidden">
+      <nav className="fixed bottom-0 left-0 z-50 grid h-[3.75rem] w-full max-w-[100vw] grid-cols-4 items-stretch border-t border-outline-variant/30 bg-surface pb-[max(0.25rem,env(safe-area-inset-bottom))] pt-0.5 shadow-[0_-4px_20px_rgba(0,251,251,0.05)] md:hidden">
         <button
           type="button"
           onClick={() => setMobileTab("terminal")}
