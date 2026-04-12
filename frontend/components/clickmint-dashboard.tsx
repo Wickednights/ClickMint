@@ -692,7 +692,10 @@ export function ClickMintDashboard() {
 
   const potEthStr =
     potWei !== undefined
-      ? Number(formatEther(potWei)).toLocaleString("en-US", { maximumFractionDigits: 2, minimumFractionDigits: 0 })
+      ? Number(formatEther(potWei)).toLocaleString("en-US", {
+          maximumFractionDigits: 6,
+          minimumFractionDigits: 0,
+        })
       : "0";
   const potFillPct = useMemo(() => {
     if (potWei === undefined || POT_BAR_DISPLAY_MAX === 0n) return 0;
@@ -740,9 +743,9 @@ export function ClickMintDashboard() {
     isConnected && !writePending && !gaslessActionPending && !gameLinkPending && gameLinkOk;
 
   const hourlyPotCard = (
-    <div className="w-full max-w-[17rem] space-y-2 rounded border border-outline-variant/25 bg-surface-container-low/50 px-3 py-2.5 text-left shadow-sm shadow-black/20">
-      <p className="font-label text-[9px] uppercase tracking-[0.2em] text-primary-fixed/90">Hourly POT</p>
-      <div className="flex justify-between font-label text-[10px] uppercase tracking-widest text-secondary">
+    <div className="w-full max-w-[17rem] space-y-2 rounded border border-outline-variant/25 bg-surface-container-low/50 px-3 py-2.5 text-center shadow-sm shadow-black/20">
+      <p className="font-label text-[10px] uppercase tracking-[0.2em] text-primary-fixed/90 md:text-[11px]">Hourly POT</p>
+      <div className="flex justify-between font-label text-[11px] uppercase tracking-widest text-secondary md:text-xs">
         <span>{potEthStr} ETH</span>
         <span className="text-primary-fixed">{potFillPct.toFixed(0)}%</span>
       </div>
@@ -752,7 +755,7 @@ export function ClickMintDashboard() {
           style={{ width: `${potFillPct}%` }}
         />
       </div>
-      <p className="font-body text-[9px] leading-snug text-secondary opacity-85">
+      <p className="font-body text-[11px] leading-snug text-secondary opacity-90 md:text-xs">
         {minPotClicks !== undefined ? (
           <>
             Qualify: ≥{minPotClicks.toString()} clicks/hr + overlap with winning 15-min span.{" "}
@@ -766,23 +769,23 @@ export function ClickMintDashboard() {
         type="button"
         disabled={!canAct || prevHour === undefined || !!prevFinalized}
         onClick={() => void onFinalize()}
-        className="w-full font-label text-[9px] uppercase tracking-widest text-secondary opacity-80 hover:text-primary-fixed disabled:opacity-20"
+        className="w-full rounded border border-primary-fixed/40 bg-primary-fixed/10 py-2.5 font-label text-[11px] font-semibold uppercase tracking-widest text-primary-fixed shadow-[0_0_12px_rgba(0,251,251,0.12)] transition-colors hover:bg-primary-fixed/20 disabled:opacity-25 md:text-xs"
       >
-        Settle previous round
+        Finalize hour / settle round
       </button>
     </div>
   );
 
   const resetTimerStrip =
     potClock !== null ? (
-      <div className="w-full max-w-lg rounded border border-outline-variant/20 bg-surface-container-low/30 px-3 py-2.5 text-center font-body text-[11px] leading-snug text-secondary md:text-xs">
+      <div className="w-full max-w-lg rounded border border-outline-variant/20 bg-surface-container-low/30 px-3 py-2.5 text-center font-body text-[12px] leading-snug text-secondary md:text-sm">
         <p className="font-headline text-sm font-bold tabular-nums text-white md:text-base">
           Next reset <span className="text-primary-fixed">{formatCountdown(potClock.secToHourEnd)}</span>
         </p>
-        <p className="mt-1 text-[10px] text-on-surface/75 md:text-[11px]">
+        <p className="mt-1 text-[11px] text-on-surface/80 md:text-xs">
           ~{formatEpochLocalShort(potClock.nextBoundaryEpochSec)} your time
         </p>
-        <p className="mt-2 font-semibold text-primary-fixed">
+        <p className="mt-2 text-[12px] font-semibold text-primary-fixed md:text-sm">
           :{String(potClock.currentMinuteUtc).padStart(2, "0")} UTC
           <span className="mx-1.5 font-normal text-outline-variant">·</span>
           <span className="font-normal text-on-surface/85">
@@ -795,7 +798,7 @@ export function ClickMintDashboard() {
           </span>
         </p>
         {prevHour !== undefined && prevFinalized !== undefined ? (
-          <p className="mt-2 text-[10px] text-secondary">
+          <p className="mt-2 text-[11px] text-secondary md:text-xs">
             Last round #{prevHour.toString()}{" "}
             {prevFinalized ? (
               <span className="text-emerald-300/90">settled</span>
@@ -805,7 +808,7 @@ export function ClickMintDashboard() {
           </p>
         ) : null}
         {prevHour !== undefined ? (
-          <div className="mt-1 text-[10px] leading-snug">
+          <div className="mt-1 text-[11px] leading-snug md:text-xs">
             {prevFinalized ? (
               <p className="text-secondary">
                 Last span:{" "}
@@ -822,7 +825,7 @@ export function ClickMintDashboard() {
                   </span>
                 </p>
               ) : (
-                <p className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-1.5 text-amber-100/95">
+                <p className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100/95 md:text-xs">
                   Round #{prevHour.toString()} ready to settle (operators).
                 </p>
               )
@@ -831,11 +834,31 @@ export function ClickMintDashboard() {
         ) : null}
       </div>
     ) : (
-      <p className="font-body text-[11px] text-secondary">Loading round clock…</p>
+      <p className="font-body text-[12px] text-secondary">Loading round clock…</p>
     );
 
   const terminalBody = (
     <>
+      {/* One-line objective for new players */}
+      <section className="mx-auto w-full max-w-xl px-2 text-center">
+        <p className="font-body text-[13px] leading-relaxed text-secondary md:text-sm">
+          <span className="font-semibold text-on-surface/95">Objective:</span> spend credits to{" "}
+          <span className="text-primary-fixed/95">CLICK</span> each hour, earn $CLICK (vesting), and compete for the hourly
+          ETH pot. Use <span className="text-primary-fixed/90">Claim vested</span> for time-unlocked tokens, or{" "}
+          <span className="text-primary-fixed/90">Early claim</span> to exit locked balance early (see below).
+        </p>
+      </section>
+
+      {/* Mobile: collapsible click history (desktop has sidebar feed) */}
+      <details className="mx-auto w-full max-w-xl rounded border border-outline-variant/30 bg-surface-container-low/30 px-3 py-2 md:hidden [&_summary::-webkit-details-marker]:hidden">
+        <summary className="cursor-pointer list-none text-center font-label text-[11px] font-bold uppercase tracking-[0.2em] text-primary-fixed">
+          Click history
+        </summary>
+        <div className="mt-3 max-h-[min(70vh,28rem)] overflow-y-auto">
+          <ClickHistoryPanel gameAddr={gameAddr} compact />
+        </div>
+      </details>
+
       {/* Setup / economy alerts */}
       <section className="mx-auto flex w-full max-w-sm flex-col items-center space-y-5 md:max-w-lg">
         {!gameLinkPending && !gameLinkOk && (
@@ -888,7 +911,7 @@ export function ClickMintDashboard() {
           </span>
         </button>
         {wrongChain && (
-          <p className="max-w-xs text-center font-body text-[9px] uppercase tracking-wider text-amber-200/90">
+          <p className="max-w-xs text-center font-body text-[10px] uppercase tracking-wider text-amber-200/90 md:text-[11px]">
             Wrong network — tap CLICK to switch to Base Sepolia, or use the header link.
           </p>
         )}
@@ -931,7 +954,7 @@ export function ClickMintDashboard() {
           </button>
         </div>
         {gasless.status === "ready" ? (
-          <p className="max-w-md px-2 text-center font-body text-[10px] leading-snug text-secondary">
+          <p className="max-w-md px-2 text-center font-body text-[11px] leading-snug text-secondary md:text-xs">
             <span className="font-semibold text-primary-fixed/90">Gasless mode active</span> — clicks are free of gas. Your
             EOA receives all rewards and uses your existing credits. Executor:{" "}
             <span className="font-mono text-primary-fixed/85">
@@ -1023,32 +1046,35 @@ export function ClickMintDashboard() {
               Early claim
             </button>
           </div>
-          <p className="mt-2 max-w-md text-center font-body text-[10px] leading-snug text-secondary opacity-90 md:text-[11px]">
-            <span className="font-semibold text-on-surface/90">Early claim</span> uses your{" "}
-            <span className="font-semibold">unvested</span> balance (not the same as Claim vested). The split is roughly
-            burn / treasury / liquidity / you — see{" "}
+          <p className="mt-2 max-w-md text-center font-body text-[12px] leading-snug text-secondary opacity-95 md:text-sm">
+            <span className="font-semibold text-on-surface/90">Early claim</span> is different from{" "}
+            <span className="font-semibold">Claim vested</span>: you cash out{" "}
+            <span className="font-semibold">locked (unvested)</span> $CLICK now. Part stays in the protocol (burn, treasury,
+            liquidity); you receive roughly <span className="font-semibold text-primary-fixed/90">one fifth</span> of the
+            amount you exit as liquid $CLICK. Details in{" "}
             <Link href="/documentation#early-claim" className="text-primary-fixed/90 underline-offset-2 hover:underline">
               docs
             </Link>
             .
           </p>
           {earlyLiquidPreview !== null && canAct && parsedEarlySpend.ok && (
-            <p className="mt-2 max-w-md text-center font-body text-[10px] leading-snug text-primary-fixed/90 md:text-[11px]">
-              Preview: spend {formatClickDisplayWei(earlyLiquidPreview.spend)} unvested → ~{formatClickDisplayWei(earlyLiquidPreview.liquid)} liquid $CLICK to your wallet (your 20% leg of the on-chain 30/30/20/20 split).
+            <p className="mt-2 max-w-md text-center font-body text-[12px] leading-snug text-primary-fixed/95 md:text-sm">
+              Preview: exiting {formatClickDisplayWei(earlyLiquidPreview.spend)} unvested → about{" "}
+              {formatClickDisplayWei(earlyLiquidPreview.liquid)} liquid $CLICK to your wallet (estimate from your input).
             </p>
           )}
           {canAct && !parsedEarlySpend.ok && (
-            <p className="mt-1 font-body text-[10px] text-amber-200/90 md:text-[11px]">
+            <p className="mt-1 text-center font-body text-[11px] text-amber-200/90 md:text-xs">
               Invalid amount — use a decimal number (wei parsed as ether).
             </p>
           )}
           {canAct && parsedEarlySpend.ok && earlySpendWei > unvestedCap && unvestedCap > 0n && (
-            <p className="mt-1 font-body text-[10px] text-amber-200/90 md:text-[11px]">
+            <p className="mt-1 text-center font-body text-[11px] text-amber-200/90 md:text-xs">
               Amount exceeds unvested ({formatClickDisplayWei(unvestedCap)} $CLICK max). Try Max.
             </p>
           )}
           {canAct && unvestedCap === 0n && (
-            <p className="mt-1 font-body text-[10px] text-secondary opacity-80 md:text-[11px]">
+            <p className="mt-1 text-center font-body text-[11px] text-secondary opacity-85 md:text-xs">
               No unvested balance — early claim will revert (wallet may show “User rejected”).
             </p>
           )}
@@ -1425,12 +1451,12 @@ export function ClickMintDashboard() {
       </header>
 
       {/* Desktop sidebar */}
-      <aside className="fixed left-0 top-0 z-40 hidden h-full w-64 flex-col border-r border-outline-variant/30 bg-surface-container-lowest pt-20 md:flex">
-        <div className="mb-8 px-6">
+      <aside className="fixed left-0 top-0 z-40 hidden h-full w-72 flex-col overflow-y-auto border-r border-outline-variant/30 bg-surface-container-lowest pt-20 md:flex">
+        <div className="mb-6 shrink-0 px-6">
           <h3 className="font-label text-xs uppercase tracking-[0.15em] text-primary-fixed">Operations</h3>
-          <p className="text-[10px] text-secondary opacity-50">BASE_NETWORK_ACTIVE</p>
+          <p className="text-[11px] text-secondary opacity-55">BASE_NETWORK_ACTIVE</p>
         </div>
-        <nav className="flex flex-col space-y-1">
+        <nav className="shrink-0 flex flex-col space-y-1">
           <button
             type="button"
             onClick={() => setMobileTab("terminal")}
@@ -1491,37 +1517,23 @@ export function ClickMintDashboard() {
             Documentation
           </Link>
         </nav>
-        <div className="border-t border-outline-variant/25 px-6 py-4">
-          <p className="font-label text-[9px] uppercase tracking-widest text-primary-fixed/85">Hourly POT</p>
-          <p className="mt-1 font-mono text-[11px] text-secondary">{potEthStr} ETH</p>
-          <div className="mt-2 h-1 w-full overflow-hidden rounded bg-surface-container-highest">
-            <div className="h-full bg-primary-fixed transition-all" style={{ width: `${potFillPct}%` }} />
+        <div className="mt-4 space-y-4 border-t border-outline-variant/25 px-4 pb-8 pt-4">
+          <div className="mx-auto w-full max-w-[17rem]">{resetTimerStrip}</div>
+          <div className="mx-auto flex w-full max-w-[17rem] justify-center">{hourlyPotCard}</div>
+          <div className="border-t border-outline-variant/20 pt-4">
+            <ClickHistoryPanel gameAddr={gameAddr} compact />
           </div>
-          {minPotClicks !== undefined ? (
-            <p className="mt-2 font-body text-[9px] uppercase tracking-wide text-secondary opacity-80">
-              Qualify ≥{minPotClicks.toString()} clicks / hr
-            </p>
-          ) : null}
         </div>
-        <div className="mt-auto px-6 py-8" aria-hidden />
       </aside>
 
       {/* Main */}
       <main
         className={cn(
-          "relative z-10 mx-auto flex max-w-4xl flex-col items-center space-y-8 px-4 pb-24 pt-20 md:ml-64 md:mr-0 md:pb-16 md:pt-24",
+          "relative z-10 mx-auto flex max-w-4xl flex-col items-center space-y-8 px-4 pb-24 pt-20 md:ml-72 md:mr-0 md:pb-16 md:pt-24",
           mobileTab !== "terminal" && "md:space-y-6"
         )}
       >
-        {mobileTab === "terminal" && (
-          <>
-            <div className="flex w-full flex-col items-stretch gap-2">
-              <div className="flex w-full justify-end px-1">{hourlyPotCard}</div>
-              <div className="flex w-full justify-center px-2">{resetTimerStrip}</div>
-            </div>
-            {terminalBody}
-          </>
-        )}
+        {mobileTab === "terminal" && terminalBody}
 
         {mobileTab === "history" && (
           <section className="w-full max-w-md pt-4">
@@ -1549,15 +1561,15 @@ export function ClickMintDashboard() {
 
       {/* Desktop footer */}
       <footer className="pointer-events-none fixed bottom-0 left-0 z-50 hidden w-full items-end justify-between bg-gradient-to-t from-black/80 to-transparent px-8 py-6 md:flex">
-        <div className="pointer-events-auto font-body text-[10px] uppercase tracking-widest text-secondary opacity-50">
+        <div className="pointer-events-auto font-body text-[11px] uppercase tracking-widest text-secondary opacity-55">
           ©2026 CLICKMINT // SYSTEM_READY
         </div>
         <div className="pointer-events-auto flex gap-6">
-          {["Terms", "Privacy", "Twitter", "Discord"].map((l) => (
+          {["Terms", "Privacy", "Twitter"].map((l) => (
             <a
               key={l}
               href="#"
-              className="font-body text-[10px] uppercase tracking-widest text-secondary opacity-40 transition-all hover:text-primary-fixed hover:opacity-100"
+              className="font-body text-[11px] uppercase tracking-widest text-secondary opacity-45 transition-all hover:text-primary-fixed hover:opacity-100"
             >
               {l}
             </a>
@@ -1571,7 +1583,7 @@ export function ClickMintDashboard() {
           type="button"
           onClick={() => setMobileTab("terminal")}
           className={cn(
-            "flex min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 font-headline text-[8px] font-bold uppercase tracking-[0.12em] transition-colors sm:text-[9px]",
+            "flex min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 font-headline text-[9px] font-bold uppercase tracking-[0.12em] transition-colors sm:text-[10px]",
             mobileTab === "terminal"
               ? "border-t-2 border-primary-fixed text-primary-fixed"
               : "text-secondary opacity-50"
@@ -1584,7 +1596,7 @@ export function ClickMintDashboard() {
           type="button"
           onClick={() => setMobileTab("clicks")}
           className={cn(
-            "flex min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 font-headline text-[8px] font-bold uppercase tracking-[0.12em] transition-colors sm:text-[9px]",
+            "flex min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 font-headline text-[9px] font-bold uppercase tracking-[0.12em] transition-colors sm:text-[10px]",
             mobileTab === "clicks" ? "border-t-2 border-primary-fixed text-primary-fixed" : "text-secondary opacity-50"
           )}
         >
@@ -1595,7 +1607,7 @@ export function ClickMintDashboard() {
           type="button"
           onClick={() => setMobileTab("history")}
           className={cn(
-            "flex min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 font-headline text-[8px] font-bold uppercase tracking-[0.12em] transition-colors sm:text-[9px]",
+            "flex min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 font-headline text-[9px] font-bold uppercase tracking-[0.12em] transition-colors sm:text-[10px]",
             mobileTab === "history" ? "border-t-2 border-primary-fixed text-primary-fixed" : "text-secondary opacity-50"
           )}
         >
@@ -1606,7 +1618,7 @@ export function ClickMintDashboard() {
           type="button"
           onClick={() => setMobileTab("trophies")}
           className={cn(
-            "flex min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 font-headline text-[8px] font-bold uppercase tracking-[0.12em] transition-colors sm:text-[9px]",
+            "flex min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 font-headline text-[9px] font-bold uppercase tracking-[0.12em] transition-colors sm:text-[10px]",
             mobileTab === "trophies" ? "border-t-2 border-primary-fixed text-primary-fixed" : "text-secondary opacity-50"
           )}
         >
