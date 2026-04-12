@@ -24,7 +24,7 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     uint256 public constant FEE_EACH_BPS = 100;
 
     uint256 public constant MAX_CLICKS_PER_BLOCK = 2;
-    /// @notice Minimum clicks in a game hour to qualify for POT (deploy: testnet often lower for QA; mainnet typically100).
+    /// @notice Minimum clicks in a game hour to qualify for POT (deploy: testnet often lower for QA; mainnet typically 100).
     uint256 public immutable minPotClicks;
     /// @notice Global clicks per game hour — every N clicks adds one required leading-zero bit (cap 4) for click hash.
     uint256 public immutable clicksPerHashTier;
@@ -87,6 +87,7 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     error GameZeroTrophyAddr();
 
     error GameBadAddr();
+    error GameBadParam();
     error GameBadExecutor();
     error GameCooldown();
     error GameCredits();
@@ -113,8 +114,8 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         uint256 minPotClicks_
     ) Ownable(initialOwner) {
         if (address(click_) == address(0)) revert GameBadAddr();
-        if (clicksPerHashTier_ == 0) revert GameBadAddr();
-        if (minPotClicks_ == 0) revert GameBadAddr();
+        if (clicksPerHashTier_ == 0) revert GameBadParam();
+        if (minPotClicks_ == 0) revert GameBadParam();
         if (trophyDropBps_ > BPS) revert GameBadBps();
         clickToken = click_;
         treasury = treasury_;

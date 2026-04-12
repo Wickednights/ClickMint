@@ -3,6 +3,7 @@ import { decodeErrorResult, parseAbi } from "viem";
 /** Custom errors from ClickMintGame + CLICK (must match Solidity). */
 export const revertErrorsAbi = parseAbi([
   "error GameBadAddr()",
+  "error GameBadParam()",
   "error GameBadExecutor()",
   "error GameZeroTrophyAddr()",
   "error TrophyNotGame()",
@@ -54,6 +55,8 @@ export function explainRevertData(data: `0x${string}` | undefined): string {
         return "Block click limit reached — max ~2 clicks per block (GameCooldown).";
       case "GameBadAddr":
         return "Game misconfigured address (GameBadAddr).";
+      case "GameBadParam":
+        return "Invalid numeric constructor parameter (GameBadParam), e.g. zero minPotClicks or clicksPerHashTier.";
       case "GameBadExecutor":
         return "This wallet is not your linked gasless executor — run Enable gasless again or call setClickExecutor(smartAccount) from your EOA (GameBadExecutor).";
       case "TrophyNotGame":
