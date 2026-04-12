@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import type { Address } from "viem";
+import { type Address, getAddress, isAddress } from "viem";
 import { useAccount, usePublicClient, useReadContracts, useWriteContract } from "wagmi";
 import { baseSepolia } from "wagmi/chains";
 import { binaryTrophyAbi, escrowAbi } from "@/lib/abi";
@@ -75,7 +75,19 @@ export function EscrowPanel({ escrowAddr, trophyAddr }: Props) {
 
   const onApproveAndDeposit = async () => {
     if (!address || !publicClient) return;
-    const ben = (depositBeneficiary.trim() || address) as Address;
+    const rawBen = depositBeneficiary.trim();
+    let ben: Address;
+    if (rawBen) {
+      if (!isAddress(rawBen)) {
+        toast.error("Invalid beneficiary", {
+          description: "Enter a valid 0x address or leave blank to use your wallet.",
+        });
+        return;
+      }
+      ben = getAddress(rawBen);
+    } else {
+      ben = address;
+    }
     let tid: bigint;
     try {
       tid = BigInt(depositTokenId.trim());
@@ -148,15 +160,31 @@ export function EscrowPanel({ escrowAddr, trophyAddr }: Props) {
       )}
     >
       <h3 className="text-center font-label text-[10px] uppercase tracking-[0.2em] text-primary-fixed">
-        Trophy escrow
+        Trophies & escrow
       </h3>
-      <p className="text-center font-body text-[10px] leading-relaxed text-secondary">
-        Lock a Binary Trophy in escrow; only the beneficiary (or contract owner) can release it.
-      </p>
+      <div className="space-y-2 text-center font-body text-[10px] leading-relaxed text-secondary">
+        <p>
+          <span className="font-semibold text-on-surface/90">Random click wins</span> mint a Binary Trophy{" "}
+          <span className="text-primary-fixed/90">straight to your wallet</span>
+          — there is nothing to &quot;claim&quot; here for drops. Use your wallet or a block explorer to see the NFT; you may
+          get a toast when a mint arrives.
+        </p>
+        <p>
+          This panel is for <span className="font-semibold text-on-surface/90">escrow only</span>: someone (including you) can
+          lock a trophy they already own so a <span className="font-semibold text-on-surface/90">beneficiary</span> pulls it
+          with <span className="font-mono text-[9px] text-primary-fixed/80">claim</span>. That is separate from winning via
+          CLICK.
+        </p>
+      </div>
 
-      {myOpenHolds.length > 0 ? (
-        <div className="space-y-2">
-          <p className="font-label text-[9px] uppercase tracking-widest text-secondary">Your open holds (this trophy)</p>
+      <div className="space-y-2 border-t border-outline-variant/20 pt-3">
+        <p className="text-center font-label text-[9px] uppercase tracking-[0.2em] text-primary-fixed">
+          Claim from escrow
+        </p>
+        <p className="text-center font-body text-[10px] text-secondary opacity-80">
+          If another wallet deposited a Binary Trophy for you, claim it below (recent holds scanned).
+        </p>
+        {myOpenHolds.length > 0 ? (
           <ul className="space-y-1">
             {myOpenHolds.map((h) => (
               <li
@@ -177,15 +205,20 @@ export function EscrowPanel({ escrowAddr, trophyAddr }: Props) {
               </li>
             ))}
           </ul>
-        </div>
-      ) : (
-        <p className="text-center font-body text-[10px] text-secondary opacity-70">
-          No open holds for you on this trophy (last {HOLD_SCAN_CAP.toString()} holds scanned).
-        </p>
-      )}
+        ) : (
+          <p className="text-center font-body text-[10px] text-secondary opacity-70">
+            No trophies waiting in escrow for you (last {HOLD_SCAN_CAP.toString()} holds scanned).
+          </p>
+        )}
+      </div>
 
       <div className="border-t border-outline-variant/20 pt-3">
-        <p className="mb-2 font-label text-[9px] uppercase tracking-widest text-secondary">Deposit a trophy</p>
+        <p className="mb-1 text-center font-label text-[9px] uppercase tracking-[0.2em] text-secondary">
+          Optional — deposit for someone else
+        </p>
+        <p className="mb-2 text-center font-body text-[10px] text-secondary opacity-80">
+          You must already own the token ID. Leave beneficiary blank to escrow to yourself (advanced / testing).
+        </p>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
           <label className="flex flex-1 flex-col gap-1 font-body text-[10px] text-secondary">
             Token ID
