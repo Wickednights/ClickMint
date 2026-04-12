@@ -11,6 +11,8 @@ import { cn } from "@/lib/utils";
 /** Smaller range avoids `eth_getLogs` range limits on some RPCs (e.g. QuickNode). */
 const LOOKBACK_BLOCKS = 8_000n;
 const MAX_ROWS = 200;
+/** Cap parallel `getBlock` calls so initial history hydration does not hammer RPC limits. */
+const BLOCK_TS_FETCH_CONCURRENCY = 6;
 
 /** Default newest-click count before “Older” archive (full page). Sidebar passes a smaller value. */
 const DEFAULT_LIVE_FEED_MAX = 25;
@@ -130,7 +132,7 @@ function ClickCard({
         <span className="truncate">#{r.blockNumber.toString()}</span>
         <span
           className="shrink-0 text-right text-[10px] text-primary-fixed/90 md:text-[11px]"
-          title={`${formatClickedAtLocalMin(ts)} · chain UTC ${formatClickMinuteUtc(r.minute)}`}
+          title={`${formatClickedAtLocalMin(ts)} · chain ${formatClickMinuteUtc(r.minute)}`}
         >
           {formatClickedAtLocalMin(ts)}
         </span>
@@ -246,27 +248,38 @@ export function ClickHistoryPanel({
     if (toFetch.length === 0) return;
     toFetch.forEach((id) => blockTsInFlightRef.current.add(id));
     let cancelled = false;
-    void Promise.all(
-      toFetch.map(async (id) => {
-        try {
-          const b = await publicClient.getBlock({ blockNumber: BigInt(id) });
-          return [id, Number(b.timestamp)] as const;
-        } catch {
-          blockTsInFlightRef.current.delete(id);
-          return null;
-        }
-      })
-    ).then((results) => {
-      if (cancelled) return;
+
+    const run = async () => {
       const next: Record<string, number> = {};
-      for (const pair of results) {
-        if (pair) {
-          next[pair[0]] = pair[1];
-          blockTsInFlightRef.current.delete(pair[0]);
+      try {
+        for (let i = 0; i < toFetch.length; i += BLOCK_TS_FETCH_CONCURRENCY) {
+          if (cancelled) break;
+          const chunk = toFetch.slice(i, i + BLOCK_TS_FETCH_CONCURRENCY);
+          const chunkResults = await Promise.all(
+            chunk.map(async (id) => {
+              try {
+                const b = await publicClient.getBlock({ blockNumber: BigInt(id) });
+                return [id, Number(b.timestamp)] as const;
+              } catch {
+                return null;
+              }
+            })
+          );
+          for (const pair of chunkResults) {
+            if (pair) next[pair[0]] = pair[1];
+          }
+        }
+      } finally {
+        for (const id of toFetch) {
+          blockTsInFlightRef.current.delete(id);
         }
       }
-      if (Object.keys(next).length > 0) setBlockTs((p) => ({ ...p, ...next }));
-    });
+      if (!cancelled && Object.keys(next).length > 0) {
+        setBlockTs((p) => ({ ...p, ...next }));
+      }
+    };
+
+    void run();
     return () => {
       cancelled = true;
     };

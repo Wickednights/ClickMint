@@ -25,6 +25,7 @@ import {
   creditsGrantedOnDeposit,
   depositBonusLabel,
   earlySpendLiquidWei,
+  earlySpendSplitWei,
   formatClickDisplayWei,
   formatWholeCredits,
   isTinyClickCostWei,
@@ -873,6 +874,20 @@ export function ClickMintDashboard() {
     return { spend, liquid: earlySpendLiquidWei(spend) };
   }, [parsedEarlySpend.ok, earlyAmt, earlySpendWei, unvestedCap]);
 
+  /** Amount used for early-claim split table (empty input = full unvested). */
+  const earlyBreakdownSpend = useMemo(() => {
+    if (unvestedCap === 0n || !parsedEarlySpend.ok) return null;
+    const t = earlyAmt.trim();
+    if (t === "") return unvestedCap;
+    if (earlySpendWei === 0n || earlySpendWei > unvestedCap) return null;
+    return earlySpendWei;
+  }, [unvestedCap, parsedEarlySpend.ok, earlyAmt, earlySpendWei]);
+
+  const earlySplitDisplay = useMemo(() => {
+    if (earlyBreakdownSpend === null) return null;
+    return earlySpendSplitWei(earlyBreakdownSpend);
+  }, [earlyBreakdownSpend]);
+
   const canAct = isConnected && !wrongChain && !writePending && !gaslessActionPending;
   /** Allow CLICK on wrong chain so the handler can prompt a network switch. */
   const canSendClick =
@@ -1178,30 +1193,51 @@ export function ClickMintDashboard() {
           </div>
           <div className="mt-4 w-full max-w-lg border border-outline-variant/20 bg-surface-container-low/50 px-3 py-2">
             <div className="mx-auto flex w-full max-w-md flex-wrap items-center justify-center gap-2">
-            <input
-              value={earlyAmt}
-              onChange={(e) => setEarlyAmt(e.target.value)}
-              className="min-w-[5rem] flex-1 border-b border-outline bg-transparent py-1.5 text-center font-body text-[11px] text-primary-fixed focus:border-primary-fixed focus:outline-none sm:max-w-[7rem] md:text-xs"
-              placeholder="0"
-              title="Amount of unvested $CLICK to claim early (≤ Unvested)"
-            />
-            <button
-              type="button"
-              disabled={!canAct || unvestedCap === 0n}
-              onClick={() => setEarlyAmt(formatEther(unvestedCap))}
-              className="font-label text-[10px] font-bold uppercase tracking-widest text-secondary hover:text-primary-fixed disabled:opacity-30 md:text-[11px]"
-            >
-              Max
-            </button>
-            <button
-              type="button"
-              disabled={!canAct}
-              onClick={() => void onEarlySpend()}
-              className="font-label text-[11px] font-bold uppercase tracking-widest text-primary-fixed hover:text-white disabled:opacity-30 md:text-xs"
-            >
-              Early claim
-            </button>
+              <input
+                value={earlyAmt}
+                onChange={(e) => setEarlyAmt(e.target.value)}
+                className="min-w-[5rem] flex-1 border-b border-outline bg-transparent py-1.5 text-center font-body text-[11px] text-primary-fixed focus:border-primary-fixed focus:outline-none sm:max-w-[7rem] md:text-xs"
+                placeholder="0"
+                title="Amount of unvested $CLICK to claim early (≤ Unvested)"
+              />
+              <button
+                type="button"
+                disabled={!canAct || unvestedCap === 0n}
+                onClick={() => setEarlyAmt(formatEther(unvestedCap))}
+                className="font-label text-[10px] font-bold uppercase tracking-widest text-secondary hover:text-primary-fixed disabled:opacity-30 md:text-[11px]"
+              >
+                Max
+              </button>
+              <button
+                type="button"
+                disabled={!canAct}
+                onClick={() => void onEarlySpend()}
+                className="font-label text-[11px] font-bold uppercase tracking-widest text-primary-fixed hover:text-white disabled:opacity-30 md:text-xs"
+              >
+                Early claim
+              </button>
             </div>
+            {earlySplitDisplay !== null && earlyBreakdownSpend !== null ? (
+              <div className="mx-auto mt-3 w-full max-w-md border-t border-outline-variant/25 pt-3">
+                <p className="mb-1 text-center font-label text-[9px] uppercase tracking-widest text-secondary md:text-[10px]">
+                  Burn / Treasury / LP / You
+                </p>
+                <p className="mb-2 text-center font-mono text-[10px] tabular-nums text-primary-fixed/85 md:text-[11px]">
+                  30 / 30 / 20 / 20
+                </p>
+                <p className="mb-1.5 text-center font-body text-[10px] text-secondary opacity-90 md:text-[11px]">
+                  $CLICK split on{" "}
+                  <span className="font-semibold text-on-surface/90">{formatClickDisplayWei(earlyBreakdownSpend)}</span>{" "}
+                  unvested (estimate)
+                </p>
+                <div className="grid grid-cols-4 gap-1 text-center font-mono text-[10px] tabular-nums leading-tight text-on-surface md:text-[11px] md:leading-snug">
+                  <span className="text-secondary">{formatClickDisplayWei(earlySplitDisplay.burn)}</span>
+                  <span className="text-secondary">{formatClickDisplayWei(earlySplitDisplay.treasury)}</span>
+                  <span className="text-secondary">{formatClickDisplayWei(earlySplitDisplay.lp)}</span>
+                  <span className="text-primary-fixed">{formatClickDisplayWei(earlySplitDisplay.you)}</span>
+                </div>
+              </div>
+            ) : null}
           </div>
           <div className="mx-auto mt-2 flex max-w-md flex-col items-center gap-2">
             <p className="text-center font-body text-[12px] leading-snug text-secondary md:text-sm">
@@ -1317,9 +1353,9 @@ export function ClickMintDashboard() {
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-primary-container/[0.04]" />
       </div>
 
-      {/* Header — center cluster aligned with main content (desktop: offset by half sidebar w-72). */}
-      <header className="fixed left-0 top-0 z-50 w-full overflow-visible border-b border-outline-variant/20 bg-surface/90 font-headline uppercase tracking-tighter backdrop-blur-sm">
-        <div className="relative mx-auto flex min-h-[3.5rem] max-w-[100vw] items-center justify-between gap-x-2 px-3 py-2 sm:px-4 md:min-h-[4rem] md:px-4 md:py-2.5 lg:px-6">
+      {/* Header — center cluster: mobile = viewport center; md = center of main column (sidebar 18rem + max-w-4xl strip). */}
+      <header className="fixed left-0 top-0 z-50 w-full overflow-hidden border-b border-outline-variant/20 bg-surface/90 font-headline uppercase tracking-tighter backdrop-blur-sm">
+        <div className="relative mx-auto flex min-h-[4rem] max-w-[100vw] items-center justify-between gap-x-2 px-3 py-2 sm:px-4 md:min-h-[4.25rem] md:px-4 md:py-2 lg:px-6">
           <div className="relative z-20 flex min-w-0 max-w-[min(100%,14rem)] flex-col gap-0.5 sm:max-w-[min(100%,11rem)] md:max-w-none">
             <div className="flex min-w-0 items-center gap-2">
               <span className="material-symbols-outlined shrink-0 text-primary-fixed md:hidden">token</span>
@@ -1340,8 +1376,8 @@ export function ClickMintDashboard() {
           </div>
 
           {gameHourNow !== undefined ? (
-            <div className="pointer-events-none absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center md:left-[calc(50vw+9rem)]">
-              <div className="pointer-events-auto flex flex-col items-center gap-1 md:gap-1.5">
+            <div className="pointer-events-none absolute inset-y-0 left-1/2 z-10 flex -translate-x-1/2 items-center md:left-[calc(18rem+min(56rem,100vw-18rem)/2)]">
+              <div className="pointer-events-auto flex max-h-full flex-col items-center justify-center gap-1 py-1 md:gap-1.5 md:py-0">
                 <div className="flex flex-col items-center gap-0.5 text-center">
                   <p
                     className={cn("font-mono text-xl font-black tabular-nums leading-none md:text-3xl", NEON_MAGENTA_TEXT)}

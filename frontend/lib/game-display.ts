@@ -8,13 +8,19 @@ import { formatEther, parseEther } from "viem";
  */
 const BPS = 10_000n;
 
-/** Matches `CLICK.earlySpendPending` — liquid minted to the user after burn/treasury/LP take (20% of `amount` at current BPS). */
-export function earlySpendLiquidWei(amount: bigint): bigint {
-  if (amount <= 0n) return 0n;
+/** Matches `CLICK.earlySpendPending` — 30% burn, 30% treasury, 20% LP, 20% liquid to user (BPS math). */
+export function earlySpendSplitWei(amount: bigint): { burn: bigint; treasury: bigint; lp: bigint; you: bigint } {
+  if (amount <= 0n) return { burn: 0n, treasury: 0n, lp: 0n, you: 0n };
   const burn = (amount * 3000n) / BPS;
   const treasury = (amount * 3000n) / BPS;
   const lp = (amount * 2000n) / BPS;
-  return amount - burn - treasury - lp;
+  const you = amount - burn - treasury - lp;
+  return { burn, treasury, lp, you };
+}
+
+/** Liquid minted to the user after burn/treasury/LP take (20% of `amount` at current BPS). */
+export function earlySpendLiquidWei(amount: bigint): bigint {
+  return earlySpendSplitWei(amount).you;
 }
 
 /**
