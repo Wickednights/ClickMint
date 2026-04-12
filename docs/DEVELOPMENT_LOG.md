@@ -135,6 +135,13 @@ Format:
 - Hardhat project: `CLICK`, `ClickMintGame`, `Treasury`, `SecretPrizeWallet`, `BinaryTrophyNFT`, `Escrow`; deploy script `contracts/scripts/deploy.ts`; `set-game.ts` for CLICK↔game linking.
 - Next.js 15 frontend: App Router, wagmi v3, dashboard, ABIs in `frontend/lib/abi.ts`, addresses from env.
 
+### 2026-04-09T12:00:00Z — Testnet E2E checklist + Pimlico policy docs
+
+- **`docs/TESTNET_E2E_CHECKLIST.md`:** Ordered Base Sepolia QA — Pimlico **sponsorship policy** (toggles, limits, contract restrictions phased rollout), explorer baseline, full UI path (connect, deposits, EOA click, gasless, vesting, POT, debug, build), explicit **no IPFS** trophy metadata (`data:` URIs on-chain), trophy mint via **owner** only, gaps (Escrow UI, auto trophy on click).
+- **`docs/SYSTEM_VERIFICATION.md`:** Sections **J** (Pimlico gasless), **K** (trophy `tokenURI`); link to testnet runbook.
+- **`docs/KNOWN_ISSUES.md`:** Gasless marked **in repo**; trophy/IPFS clarified; multi-click-in-one-tx note.
+- **`docs/HOWTO.md`**, **`docs/POST_DEPLOY_VERIFICATION.md`**, **`README.md`:** Pimlico env vars + link to testnet checklist.
+
 ---
 
 ## Index by area (manual)

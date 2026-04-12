@@ -20,8 +20,10 @@ import {
   createPublicClient,
   http,
   type Address,
+  type Client,
   type Hex,
   encodeFunctionData,
+  hexToBigInt,
   type WalletClient,
 } from "viem";
 import { entryPoint07Address } from "viem/account-abstraction";
@@ -46,6 +48,44 @@ export function getPimlicoBundlerUrl(): string {
   if (!key) throw new Error("NEXT_PUBLIC_PIMLICO_API_KEY is not set");
   const raw = `https://api.pimlico.io/v2/${baseSepolia.id}/rpc?apikey=${key}`;
   return setPimlicoAsProvider(raw);
+}
+
+type PimlicoGasPriceTier = { maxFeePerGas: Hex; maxPriorityFeePerGas: Hex };
+
+type PimlicoGasPriceResult = {
+  slow: PimlicoGasPriceTier;
+  standard: PimlicoGasPriceTier;
+  fast: PimlicoGasPriceTier;
+};
+
+/**
+ * Pimlico bundlers use `pimlico_getUserOperationGasPrice`. `@zerodev/sdk`'s default
+ * `estimateFeesPerGas` calls `zd_getUserOperationGasPrice`, which Pimlico does not support.
+ */
+export async function pimlicoEstimateFeesPerGas(parameters: {
+  bundlerClient: Client;
+}): Promise<{ maxFeePerGas: bigint; maxPriorityFeePerGas: bigint }> {
+  const { bundlerClient } = parameters;
+  const result = (await bundlerClient.request({
+    method: "pimlico_getUserOperationGasPrice",
+    params: [],
+  } as Parameters<Client["request"]>[0])) as PimlicoGasPriceResult;
+  const tier = result.standard ?? result.fast ?? result.slow;
+  return {
+    maxFeePerGas: hexToBigInt(tier.maxFeePerGas),
+    maxPriorityFeePerGas: hexToBigInt(tier.maxPriorityFeePerGas),
+  };
+}
+
+/** Optional — set if your Pimlico dashboard requires a sponsorship policy for `pm_getPaymasterData`. */
+export function getPimlicoPaymasterContext():
+  | { sponsorshipPolicyId: string }
+  | undefined {
+  const id =
+    (typeof process !== "undefined" &&
+      process.env.NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID?.trim()) ||
+    "";
+  return id ? { sponsorshipPolicyId: id } : undefined;
 }
 
 export function isPimlicoConfigured(): boolean {
@@ -132,12 +172,16 @@ export async function enableGaslessSession(ctx: GaslessKernelContext): Promise<B
     },
   });
 
+  const paymasterContext = getPimlicoPaymasterContext();
+
   const masterClient = createKernelAccountClient({
     account: kernelAccount,
     chain: baseSepolia,
     client: publicClient,
     bundlerTransport,
     paymaster: true,
+    paymasterContext,
+    userOperation: { estimateFeesPerGas: pimlicoEstimateFeesPerGas },
   });
 
   await masterClient.sendTransaction({
@@ -170,6 +214,8 @@ export async function enableGaslessSession(ctx: GaslessKernelContext): Promise<B
     client: publicClient,
     bundlerTransport,
     paymaster: true,
+    paymasterContext,
+    userOperation: { estimateFeesPerGas: pimlicoEstimateFeesPerGas },
   });
 
   return {

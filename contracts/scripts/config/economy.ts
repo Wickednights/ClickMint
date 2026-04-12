@@ -28,6 +28,13 @@ export const DEFAULT_BASE_CLICK_REWARD = ethers.parseEther("10");
 export const DEFAULT_CLICK_PER_ETH_WEI = ethers.parseEther("1000");
 
 /**
+ * Per successful `click` / `clickFor`: probability of a Binary Trophy mint (basis points of 10_000).
+ * Same on testnet and mainnet for product parity — only caps differ (10 vs 10k trophies).
+ * Owner may tune live via `ClickMintGame.setTrophyDropBps`.
+ */
+export const DEFAULT_TROPHY_DROP_BPS = 100n; // 1%
+
+/**
  * Testnet: **0.00001 ETH** of credits per click → ~100 clicks from **0.001 ETH** (before bonuses).
  */
 export const TESTNET_CLICK_COST_CREDITS = ethers.parseEther("0.00001");
@@ -50,6 +57,7 @@ export const TESTNET_PRESET = {
   clickPerEthWei: DEFAULT_CLICK_PER_ETH_WEI,
   clickCostCredits: TESTNET_CLICK_COST_CREDITS,
   baseClickReward: DEFAULT_BASE_CLICK_REWARD,
+  trophyDropBps: DEFAULT_TROPHY_DROP_BPS,
 } as const;
 
 /** Production-style: 100B cap, 7d vesting, ~1 cent/click, 10k trophies, tighter hash tier. */
@@ -64,6 +72,7 @@ export const MAINNET_PRESET = {
   clickPerEthWei: DEFAULT_CLICK_PER_ETH_WEI,
   clickCostCredits: mainnetClickCostCredits(),
   baseClickReward: DEFAULT_BASE_CLICK_REWARD,
+  trophyDropBps: DEFAULT_TROPHY_DROP_BPS,
 } as const;
 
 export type EconomyPreset = "testnet" | "mainnet";
@@ -97,6 +106,7 @@ export function supplyCapsAndDifficulty(preset: EconomyPreset) {
     maxSupplyWei: p.maxSupplyWei,
     trophyMaxSupply: p.trophyMaxSupply,
     clicksPerHashTier: p.clicksPerHashTier,
+    trophyDropBps: p.trophyDropBps,
   };
 }
 

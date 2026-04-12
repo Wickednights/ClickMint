@@ -44,7 +44,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { getClickAddress, getGameAddress, getTrophyNftAddress } from "@/lib/addresses";
+import { EscrowPanel } from "@/components/escrow-panel";
+import { getClickAddress, getEscrowAddress, getGameAddress, getTrophyNftAddress } from "@/lib/addresses";
 import { economyPresetHint, economyPresetShortLabel } from "@/lib/economy-preset";
 import { useClickMintAudio } from "@/hooks/use-clickmint-audio";
 
@@ -53,7 +54,30 @@ const QUICK_BUY = ["0.001", "0.01", "0.1", "0.25", "0.5", "1"] as const;
 /** Pot bar fills to 100% at this on-chain pot size (display only; tune for your campaign). */
 const POT_BAR_DISPLAY_MAX = parseEther("0.05");
 
+/** Must match `ClickMintGame.RESET_BUFFER` — seconds after each UTC hour before `gameHour` ticks. */
+const GAME_RESET_BUFFER_SEC = 20;
+
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000" as const;
+
+/** 15-minute POT window index 0..3 (same as on-chain `utcWindow`). */
+function utcWindowFromUnix(sec: number): number {
+  const minuteInHour = Math.floor((sec % 3600) / 60);
+  return Math.min(3, Math.floor(minuteInHour / 15));
+}
+
+function utcQuarterLabel(w: number): string {
+  const labels = [":00–:14", ":15–:29", ":30–:44", ":45–:59"];
+  return `${labels[Math.min(3, Math.max(0, w))]} UTC`;
+}
+
+function formatCountdown(totalSec: number): string {
+  if (totalSec <= 0) return "0:00";
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
 type PotRow = {
   hourId: bigint;
@@ -94,6 +118,7 @@ function WinnerTable({ rows }: { rows: PotRow[] }) {
         <thead>
           <tr className="font-label uppercase tracking-widest text-secondary">
             <th className="pb-2 pr-2">Hr</th>
+            <th className="pb-2 pr-2">Slot</th>
             <th className="pb-2 pr-2">Winner</th>
             <th className="pb-2">$CLICK</th>
           </tr>
@@ -102,6 +127,9 @@ function WinnerTable({ rows }: { rows: PotRow[] }) {
           {rows.map((r) => (
             <tr key={`${r.hourId}-${r.entropy ?? ""}`} className="border-t border-outline-variant/20">
               <td className="py-2 pr-2 text-primary-fixed">{r.hourId.toString()}</td>
+              <td className="py-2 pr-2 font-mono text-[9px] text-secondary">
+                {utcQuarterLabel(Number(r.window))}
+              </td>
               <td className="max-w-[9rem] truncate py-2 pr-2">{r.winner}</td>
               <td className="py-2 text-primary">{fmtToken(r.payout, 4)}</td>
             </tr>
@@ -116,6 +144,7 @@ export function ClickMintDashboard() {
   const gameAddr = getGameAddress();
   const clickAddr = getClickAddress();
   const trophyAddr = getTrophyNftAddress();
+  const escrowAddr = getEscrowAddress();
 
   const {
     musicOn,
@@ -180,6 +209,41 @@ export function ClickMintDashboard() {
     args: prevHour !== undefined ? [prevHour] : undefined,
     query: { enabled: !!gameAddr && prevHour !== undefined },
   });
+
+  const { data: prevHourWinWindow } = useReadContract({
+    address: gameAddr,
+    abi: clickMintGameAbi,
+    functionName: "hourWinWindow",
+    args: prevHour !== undefined ? [prevHour] : undefined,
+    query: { enabled: !!gameAddr && prevHour !== undefined && !!prevFinalized },
+  });
+
+  const [timerTick, setTimerTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTimerTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const potClock = useMemo(() => {
+    void timerTick;
+    const now = Math.floor(Date.now() / 1000);
+    if (gameHourNow === undefined) return null;
+    const nextBoundary = (gameHourNow + 1n) * 3600n + BigInt(GAME_RESET_BUFFER_SEC);
+    const secToHourEnd = Math.max(0, Number(nextBoundary - BigInt(now)));
+
+    let secUntilFinalizeGate: number | null = null;
+    if (gameHourNow > 0n) {
+      const gate = gameHourNow * 3600n + BigInt(GAME_RESET_BUFFER_SEC);
+      secUntilFinalizeGate = now >= Number(gate) ? 0 : Number(gate - BigInt(now));
+    }
+
+    return {
+      secToHourEnd,
+      secUntilFinalizeGate,
+      currentQuarter: utcWindowFromUnix(now),
+      gameHourId: gameHourNow,
+    };
+  }, [gameHourNow, timerTick]);
 
   const { data: credits, refetch: refetchCredits } = useReadContract({
     address: gameAddr,
@@ -373,6 +437,7 @@ export function ClickMintDashboard() {
       });
       await publicClient.waitForTransactionReceipt({ hash });
       await Promise.all([refetchCredits(), refetchPot()]);
+      setDepositOpen(false);
       toast.success(`Deposited ${eth} ETH`, { description: "Click Credits updated on-chain (includes any tier bonus)." });
     } catch (e) {
       sfxRef.current.playError();
@@ -597,97 +662,10 @@ export function ClickMintDashboard() {
   const canSendClick =
     isConnected && !writePending && !gaslessActionPending && !gameLinkPending && gameLinkOk;
 
-  const depositPanel = (
-    <div className="flex w-full flex-col items-stretch border border-primary-fixed/20 bg-surface-container-low/60">
-      <button
-        type="button"
-        aria-expanded={depositOpen}
-        onClick={() => setDepositOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left font-headline text-sm font-bold uppercase tracking-[0.15em] text-primary-fixed transition-colors hover:bg-surface-container-low"
-      >
-        <span className="inline-flex items-center gap-2">
-          <Icon name="add_circle" className="text-lg" />
-          Add credits (ETH)
-        </span>
-        <Icon name={depositOpen ? "expand_less" : "expand_more"} className="text-xl opacity-80" />
-      </button>
-      {depositOpen ? (
-        <div className="border-t border-outline-variant/20 px-4 pb-4 pt-3 max-h-[min(28rem,52svh)] overflow-y-auto overscroll-y-contain md:max-h-[min(32rem,70vh)] md:overscroll-auto lg:max-h-none lg:overflow-visible">
-            <p className="mb-3 text-center font-body text-[12px] leading-snug text-secondary md:text-sm">
-              In-game Click Credits (not $CLICK). Bonuses apply on larger single deposits.
-            </p>
-            {clickCostCredits === 0n && (
-              <p className="mb-3 text-center font-body text-[11px] text-secondary opacity-80">0 credits charged per click on this deployment.</p>
-            )}
-            <div className="grid grid-cols-3 gap-2">
-              {QUICK_BUY.map((e) => {
-                const depWei = parseEther(e);
-                const bonusLine = depositBonusLabel(depWei);
-                const credPreview =
-                  clickCostCredits === undefined
-                    ? undefined
-                    : unlimitedClicks
-                      ? creditsGrantedOnDeposit(depWei)
-                      : clickCreditsFromDeposit(depWei, clickCostCredits);
-                const creditLine =
-                  credPreview === undefined
-                    ? "…"
-                    : unlimitedClicks
-                      ? `${formatWholeCredits(credPreview)} to balance`
-                      : tinyClickCost && credPreview > 500_000n
-                        ? "Fix click cost*"
-                        : `${formatWholeCredits(credPreview)} credits`;
-                return (
-                  <button
-                    key={e}
-                    type="button"
-                    disabled={!canAct}
-                    onClick={() => void onDeposit(e)}
-                    className={cn(
-                      "flex flex-col items-center justify-center border border-outline-variant/30 bg-surface-container py-3 font-label text-[11px] font-bold uppercase tracking-widest text-on-surface transition-colors md:text-xs",
-                      "hover:border-primary-fixed/50 hover:text-primary-fixed active:scale-[0.98] disabled:opacity-30"
-                    )}
-                  >
-                    <span>{e} ETH</span>
-                    <span
-                      className="mt-1 break-words px-0.5 text-center font-body text-[10px] font-medium normal-case tracking-normal text-primary-fixed/90 md:text-[11px]"
-                      title={tinyClickCost && credPreview !== undefined && credPreview > 500_000n ? "Owner: setEconomy on game so clickCostCredits isn’t 1 wei." : undefined}
-                    >
-                      {creditLine}
-                    </span>
-                    {bonusLine ? (
-                      <span className="mt-1 font-label text-[10px] font-bold uppercase tracking-wide text-secondary opacity-90 md:text-[11px]">
-                        {bonusLine}
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
-            {tinyClickCost && (
-              <p className="mt-2 text-center font-body text-[10px] text-secondary opacity-80">
-                *Credit count explodes when per-click cost is ~1 wei. Use repo{" "}
-                <span className="font-mono text-primary-fixed/80">set-economy-round.ts</span>.
-              </p>
-            )}
-            <p className="mt-3 text-center">
-              <Link href="/documentation#click-credits" className="font-label text-[10px] uppercase tracking-widest text-primary-fixed/80 underline-offset-2 hover:underline">
-                How credits work
-              </Link>
-            </p>
-          </div>
-        ) : null}
-    </div>
-  );
-
   const terminalBody = (
     <>
-      {/* Deposit (top on mobile, left column on md+) + centered CLICK hero */}
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-1 md:flex-row md:items-start md:justify-center md:gap-8 lg:gap-12">
-        <aside className="mx-auto w-full max-w-sm shrink-0 md:mx-0 md:w-[17.5rem] lg:w-80 md:sticky md:top-28 md:z-[5] md:self-start">
-          {depositPanel}
-        </aside>
-        <div className="relative flex min-w-0 flex-1 flex-col items-center justify-center space-y-4 py-2 md:py-8">
+      {/* Centered CLICK hero — deposits only via header Credits */}
+      <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center justify-center space-y-4 px-1 py-2 md:py-8">
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-10 md:hidden">
             <div className="pulse-ring h-64 w-64 rounded-full border border-primary-container" />
           </div>
@@ -738,10 +716,9 @@ export function ClickMintDashboard() {
               .
             </p>
           ) : null}
-        </div>
       </div>
 
-      {/* Stats */}
+      {/* Setup / economy alerts */}
       <section className="mx-auto flex w-full max-w-sm flex-col items-center space-y-10 md:max-w-lg">
         {!gameLinkPending && !gameLinkOk && (
           <div className="w-full border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-center font-body text-[11px] text-amber-200 md:text-xs">
@@ -766,6 +743,66 @@ export function ClickMintDashboard() {
             <span className="font-mono">contracts/scripts/set-economy-round.ts</span>.
           </p>
         )}
+      </section>
+
+      {/* Hourly POT clock + 15m window */}
+      <section className="w-full max-w-xl border border-outline-variant/25 bg-surface-container-low/40 px-4 py-3 text-center md:px-5">
+        <p className="font-label text-[9px] uppercase tracking-[0.2em] text-primary-fixed/90">Hourly POT</p>
+        {potClock ? (
+          <div className="mt-2 space-y-2 font-body text-[11px] leading-relaxed text-secondary md:text-xs">
+            <p>
+              <span className="text-on-surface/80">Game hour</span>{" "}
+              <span className="font-mono text-primary-fixed">#{potClock.gameHourId.toString()}</span>
+              <span className="mx-1.5 text-outline-variant">·</span>
+              <span className="text-on-surface/80">Your clicks now land in</span>{" "}
+              <span className="font-semibold text-primary-fixed">{utcQuarterLabel(potClock.currentQuarter)}</span>
+            </p>
+            <p className="font-headline text-sm font-bold tabular-nums text-white md:text-base">
+              Next hour boundary:{" "}
+              <span className="text-primary-fixed">{formatCountdown(potClock.secToHourEnd)}</span>
+            </p>
+            {prevHour !== undefined ? (
+              <p>
+                {prevFinalized ? (
+                  <>
+                    <span className="text-on-surface/80">Last settled hour #{prevHour.toString()} winning quarter:</span>{" "}
+                    <span className="font-semibold text-primary-fixed">
+                      {prevHourWinWindow !== undefined ? utcQuarterLabel(Number(prevHourWinWindow)) : "—"}
+                    </span>
+                    <span className="block pt-0.5 text-[10px] opacity-75">
+                      (Only players who clicked in that quarter were eligible for that POT.)
+                    </span>
+                  </>
+                ) : potClock.secUntilFinalizeGate !== null ? (
+                  potClock.secUntilFinalizeGate > 0 ? (
+                    <>
+                      <span className="text-on-surface/80">Finalize for hour #{prevHour.toString()} unlocks in</span>{" "}
+                      <span className="font-mono font-semibold text-primary-fixed">
+                        {formatCountdown(potClock.secUntilFinalizeGate)}
+                      </span>
+                      <span className="block pt-0.5 text-[10px] opacity-75">
+                        Winning 15-minute slot is chosen when the owner runs finalize — not known before then.
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-amber-200/90">Hour #{prevHour.toString()} ready to finalize</span>
+                      <span className="block pt-0.5 text-[10px] opacity-75">
+                        Owner: run Finalize below — the winning UTC quarter appears on-chain after that tx.
+                      </span>
+                    </>
+                  )
+                ) : null}
+              </p>
+            ) : null}
+          </div>
+        ) : (
+          <p className="mt-2 font-body text-[11px] text-secondary">Loading on-chain hour…</p>
+        )}
+      </section>
+
+      {/* Stats — top center */}
+      <section className="flex w-full max-w-xl flex-col items-center">
         <div className="w-full text-center">
           <div className="flex items-center justify-center gap-8 md:gap-10">
             <div className="text-center">
@@ -859,34 +896,37 @@ export function ClickMintDashboard() {
             </p>
           )}
         </div>
-
-        {/* POT */}
-        <div className="w-full max-w-sm space-y-3">
-          <div className="flex justify-between font-label text-[11px] uppercase tracking-widest text-secondary md:text-xs">
-            <span className="text-left">Hourly POT · {potEthStr} ETH</span>
-            <span className="text-primary-fixed">{potFillPct.toFixed(0)}%</span>
-          </div>
-          <div className="h-px w-full overflow-hidden bg-surface-container-highest">
-            <div
-              className="h-full bg-primary-fixed transition-all duration-700 shadow-[0_0_15px_#00fbfb]"
-              style={{ width: `${potFillPct}%` }}
-            />
-          </div>
-          <p className="text-center font-body text-[11px] text-secondary opacity-70 md:text-xs">
-            <Link href="/documentation#pot" className="text-primary-fixed/90 underline-offset-2 hover:underline">
-              How the POT works
-            </Link>
-          </p>
-          <button
-            type="button"
-            disabled={!canAct || prevHour === undefined || !!prevFinalized}
-            onClick={() => void onFinalize()}
-            className="w-full font-label text-[10px] uppercase tracking-widest text-secondary opacity-60 hover:text-primary-fixed disabled:opacity-20 md:text-[11px]"
-          >
-            Finalize hour (ops)
-          </button>
-        </div>
       </section>
+
+      <section className="mx-auto w-full max-w-sm space-y-3">
+        <div className="flex justify-between font-label text-[11px] uppercase tracking-widest text-secondary md:text-xs">
+          <span className="text-left">Hourly POT · {potEthStr} ETH</span>
+          <span className="text-primary-fixed">{potFillPct.toFixed(0)}%</span>
+        </div>
+        <div className="h-px w-full overflow-hidden bg-surface-container-highest">
+          <div
+            className="h-full bg-primary-fixed transition-all duration-700 shadow-[0_0_15px_#00fbfb]"
+            style={{ width: `${potFillPct}%` }}
+          />
+        </div>
+        <p className="text-center font-body text-[11px] text-secondary opacity-70 md:text-xs">
+          <Link href="/documentation#pot" className="text-primary-fixed/90 underline-offset-2 hover:underline">
+            How the POT works
+          </Link>
+        </p>
+        <button
+          type="button"
+          disabled={!canAct || prevHour === undefined || !!prevFinalized}
+          onClick={() => void onFinalize()}
+          className="w-full font-label text-[10px] uppercase tracking-widest text-secondary opacity-60 hover:text-primary-fixed disabled:opacity-20 md:text-[11px]"
+        >
+          Finalize hour (ops)
+        </button>
+      </section>
+
+      <div className="mx-auto flex w-full max-w-xl justify-center px-1">
+        <EscrowPanel escrowAddr={escrowAddr} trophyAddr={trophyAddr} />
+      </div>
 
       {/* Minimal footer strip */}
       <section className="flex max-w-lg flex-col items-center gap-4 text-center">
@@ -929,7 +969,7 @@ export function ClickMintDashboard() {
       </div>
 
       {/* Header */}
-      <header className="fixed left-0 top-0 z-50 flex w-full items-center justify-between gap-3 border-b border-outline-variant/20 bg-surface/90 px-4 py-3 font-headline uppercase tracking-tighter backdrop-blur-sm md:px-6 md:py-4">
+      <header className="fixed left-0 top-0 z-50 flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-outline-variant/20 bg-surface/90 px-4 py-3 font-headline uppercase tracking-tighter backdrop-blur-sm md:flex-nowrap md:px-6 md:py-4">
         <div className="flex min-w-0 flex-col gap-0.5 md:block">
           <div className="flex min-w-0 items-center gap-2">
             <span className="material-symbols-outlined shrink-0 text-primary-fixed md:hidden">token</span>
@@ -951,10 +991,27 @@ export function ClickMintDashboard() {
             </span>
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5 md:gap-2">
+        <div className="flex shrink-0 items-center gap-1 md:gap-1.5">
           <button
             type="button"
-            aria-pressed={musicOn ? "true" : "false"}
+            aria-expanded={depositOpen}
+            aria-controls="header-deposit-panel"
+            id="header-add-credits"
+            title="Add ETH for click credits"
+            onClick={() => setDepositOpen((o) => !o)}
+            className={cn(
+              "inline-flex items-center gap-1 border px-2 py-1 font-label text-[8px] font-bold tracking-widest transition-colors md:gap-1.5 md:px-2.5 md:text-[9px]",
+              depositOpen
+                ? "border-primary-fixed bg-primary-fixed/15 text-primary-fixed"
+                : "border-primary-fixed/40 bg-primary-fixed/10 text-primary-fixed hover:bg-primary-fixed/20"
+            )}
+          >
+            <Icon name="add_circle" className="text-sm opacity-90" />
+            <span className="hidden sm:inline">Credits</span>
+          </button>
+          <button
+            type="button"
+            aria-pressed={musicOn}
             aria-label="Background music"
             title="Background music"
             onClick={() => setMusicOn(!musicOn)}
@@ -967,7 +1024,7 @@ export function ClickMintDashboard() {
           </button>
           <button
             type="button"
-            aria-pressed={sfxOn ? "true" : "false"}
+            aria-pressed={sfxOn}
             aria-label="Click sounds"
             title="Click sounds"
             onClick={() => setSfxOn(!sfxOn)}
@@ -1046,6 +1103,86 @@ export function ClickMintDashboard() {
             </button>
           )}
         </div>
+        {depositOpen ? (
+          <div
+            id="header-deposit-panel"
+            role="region"
+            aria-labelledby="header-add-credits"
+            className="pointer-events-auto absolute left-0 right-0 top-full z-[60] max-h-[min(75vh,calc(100dvh-5rem))] overflow-y-auto border-b border-outline-variant/40 bg-surface/97 px-4 py-4 shadow-[0_16px_48px_rgba(0,0,0,0.45)] backdrop-blur-md md:px-8"
+          >
+            <p className="mb-3 text-center font-body text-[12px] leading-snug text-secondary md:text-sm">
+              In-game Click Credits (not $CLICK). Bonuses apply on larger single deposits.
+            </p>
+            {clickCostCredits === 0n && (
+              <p className="mb-3 text-center font-body text-[11px] text-secondary opacity-80">
+                0 credits charged per click on this deployment.
+              </p>
+            )}
+            <div className="mx-auto grid max-w-lg grid-cols-3 gap-2">
+              {QUICK_BUY.map((e) => {
+                const depWei = parseEther(e);
+                const bonusLine = depositBonusLabel(depWei);
+                const credPreview =
+                  clickCostCredits === undefined
+                    ? undefined
+                    : unlimitedClicks
+                      ? creditsGrantedOnDeposit(depWei)
+                      : clickCreditsFromDeposit(depWei, clickCostCredits);
+                const creditLine =
+                  credPreview === undefined
+                    ? "…"
+                    : unlimitedClicks
+                      ? `${formatWholeCredits(credPreview)} to balance`
+                      : tinyClickCost && credPreview > 500_000n
+                        ? "Fix click cost*"
+                        : `${formatWholeCredits(credPreview)} credits`;
+                return (
+                  <button
+                    key={e}
+                    type="button"
+                    disabled={!canAct}
+                    onClick={() => void onDeposit(e)}
+                    className={cn(
+                      "flex flex-col items-center justify-center border border-outline-variant/30 bg-surface-container py-3 font-label text-[11px] font-bold uppercase tracking-widest text-on-surface transition-colors md:text-xs",
+                      "hover:border-primary-fixed/50 hover:text-primary-fixed active:scale-[0.98] disabled:opacity-30"
+                    )}
+                  >
+                    <span>{e} ETH</span>
+                    <span
+                      className="mt-1 break-words px-0.5 text-center font-body text-[10px] font-medium normal-case tracking-normal text-primary-fixed/90 md:text-[11px]"
+                      title={
+                        tinyClickCost && credPreview !== undefined && credPreview > 500_000n
+                          ? "Owner: setEconomy on game so clickCostCredits isn’t 1 wei."
+                          : undefined
+                      }
+                    >
+                      {creditLine}
+                    </span>
+                    {bonusLine ? (
+                      <span className="mt-1 font-label text-[10px] font-bold uppercase tracking-wide text-secondary opacity-90 md:text-[11px]">
+                        {bonusLine}
+                      </span>
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+            {tinyClickCost && (
+              <p className="mt-2 text-center font-body text-[10px] text-secondary opacity-80">
+                *Credit count explodes when per-click cost is ~1 wei. Use repo{" "}
+                <span className="font-mono text-primary-fixed/80">set-economy-round.ts</span>.
+              </p>
+            )}
+            <p className="mt-3 text-center">
+              <Link
+                href="/documentation#click-credits"
+                className="font-label text-[10px] uppercase tracking-widest text-primary-fixed/80 underline-offset-2 hover:underline"
+              >
+                How credits work
+              </Link>
+            </p>
+          </div>
+        ) : null}
       </header>
 
       {/* Desktop sidebar */}
@@ -1112,7 +1249,7 @@ export function ClickMintDashboard() {
               Trophy room
             </h2>
             <p className="mb-4 font-body text-[10px] text-secondary opacity-80">
-              Winner log from this session. Binary Trophy NFT claims ship in a later phase.
+              POT winners from this session. Trophies mint on lucky clicks (game odds) or via escrow on the Terminal tab.
             </p>
             <WinnerTable rows={potRows} />
           </section>

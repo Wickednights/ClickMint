@@ -12,9 +12,8 @@ import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 ///
 /// Minting model:
 /// - **Owner `mint`** — bootstrap / admin (MVP).
-/// - **`mintTrophyForPlayer`** — only the linked **ClickMintGame** contract. Wire `setClickMintGame` after deploy,
-///   then add on-click drop logic in `ClickMintGame._click` that calls `trophyNft.mintTrophyForPlayer(winner, ...)`,
-///   or use the game’s **owner**-gated `mintTrophyForPlayer` on the game that forwards here (msg.sender = game).
+/// - **`mintTrophyForPlayer`** — only the linked **ClickMintGame** contract. `ClickMintGame._click` may call this
+///   with probability `trophyDropBps` (see game); **owner** may also forward via `ClickMintGame.mintTrophyForPlayer`.
 ///   Player EOAs never call this NFT directly for minting.
 contract BinaryTrophyNFT is ERC721, ERC2981, Ownable {
     uint256 public immutable maxSupply;

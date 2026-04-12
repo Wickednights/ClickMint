@@ -35,6 +35,8 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
 
     uint256 public clickCostCredits;
     uint256 public baseClickReward;
+    /// @notice Trophy mint probability per successful click (basis points of `BPS`). 0 = no auto-mints.
+    uint256 public trophyDropBps;
 
     /// @notice Last pot settlement (game hour id).
     mapping(uint256 hourId => bool) public hourFinalized;
@@ -69,6 +71,7 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     event EconomyUpdated(uint256 clickPerEthWei, uint256 clickCostCredits, uint256 baseClickReward);
     event ClickExecutorSet(address indexed player, address indexed executor);
     event TrophyNftSet(address indexed trophy);
+    event TrophyDropBpsUpdated(uint256 bps);
     event PotCarrySwept(address indexed to, uint256 amount);
     /// @notice Emitted in addition to OpenZeppelin `Pausable` **Paused** event (same transition).
     event GamePaused(address indexed by);
@@ -84,6 +87,7 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     error GameCredits();
     error GameFinalizeEarly();
     error GameAlreadyFinalized();
+    error GameBadBps();
 
     constructor(
         address initialOwner,
@@ -93,10 +97,12 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         uint256 clickPerEthWei_,
         uint256 clickCostCredits_,
         uint256 baseClickReward_,
-        uint256 clicksPerHashTier_
+        uint256 clicksPerHashTier_,
+        uint256 trophyDropBps_
     ) Ownable(initialOwner) {
         if (address(click_) == address(0)) revert GameBadAddr();
         if (clicksPerHashTier_ == 0) revert GameBadAddr();
+        if (trophyDropBps_ > BPS) revert GameBadBps();
         clickToken = click_;
         treasury = treasury_;
         secretWallet = secretWallet_;
@@ -104,6 +110,7 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         clickCostCredits = clickCostCredits_;
         baseClickReward = baseClickReward_;
         clicksPerHashTier = clicksPerHashTier_;
+        trophyDropBps = trophyDropBps_;
     }
 
     function setAddresses(address payable treasury_, address payable secretWallet_) external onlyOwner whenNotPaused {
@@ -122,6 +129,13 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     function setTrophyNft(address trophy_) external onlyOwner whenNotPaused {
         trophyNft = BinaryTrophyNFT(payable(trophy_));
         emit TrophyNftSet(trophy_);
+    }
+
+    /// @notice Tune per-click trophy drop rate (basis points of 10_000). Use 0 to disable auto-mints.
+    function setTrophyDropBps(uint256 bps) external onlyOwner whenNotPaused {
+        if (bps > BPS) revert GameBadBps();
+        trophyDropBps = bps;
+        emit TrophyDropBpsUpdated(bps);
     }
 
     /// @notice Pause gameplay (`deposit`, clicks, `setClickExecutor`, `finalizeHour`, economy/trophy admin).
@@ -256,6 +270,19 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
 
         uint256 reward = baseClickReward;
         if (reward > 0) clickToken.grantVested(player, reward);
+
+        BinaryTrophyNFT tn = trophyNft;
+        uint256 dropBps = trophyDropBps;
+        if (address(tn) != address(0) && dropBps > 0) {
+            bytes32 roll = keccak256(
+                abi.encodePacked(player, hid, c, block.number, block.timestamp, block.prevrandao, address(this), "TROPHY")
+            );
+            if (uint256(roll) % BPS < dropBps) {
+                uint8 frag = uint8((uint256(roll) >> 128) % 256);
+                uint64 tc = uint64(c > type(uint64).max ? type(uint64).max : c);
+                try tn.mintTrophyForPlayer(player, tc, frag) {} catch {}
+            }
+        }
     }
 
     /// @notice After a game hour ends (+ RESET_BUFFER), finalize POT for `hourId` (owner / ops only).

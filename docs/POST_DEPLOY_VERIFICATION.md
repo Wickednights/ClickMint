@@ -60,6 +60,8 @@ CLICK_ADDRESS=0x... GAME_ADDRESS=0x... TROPHY_ADDRESS=0x... npm run verify:base-
 
 Set **`NEXT_PUBLIC_DEPLOY_ECONOMY=testnet`** or **`mainnet`** to match **`DEPLOY_ECONOMY`** used at deploy (header hint only).
 
+For **gasless** QA on Base Sepolia, also set **`NEXT_PUBLIC_PIMLICO_API_KEY`** and (after creating a policy in the Pimlico dashboard) **`NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID`** — see **`docs/TESTNET_E2E_CHECKLIST.md`** Part B.
+
 ## Events (owner / ops)
 
 After admin txs, confirm the intended logs exist — e.g. **`GameSet`** on CLICK, **`AddressesUpdated`** / **`EconomyUpdated`** on game, **`GamePaused` / `GameUnpaused`** (plus OZ **`Paused`/`Unpaused`**), **`ClickMintGameSet`** on trophy, **`Swept`** on treasury/secret.

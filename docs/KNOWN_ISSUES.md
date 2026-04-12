@@ -54,10 +54,12 @@ Use this as a living QA list. Update checkboxes as you verify. **Maintenance:** 
 
 | Item | Notes |
 |------|--------|
-| Gasless / one-signature multi-click | Requires relayer, AA session keys, or off-chain queue — not in repo. |
-| Full trophy ↔ game automation | Trophy mint/revenue is separate from `ClickMintGame.click()`. |
-| Production VRF | POT uses pseudo-random; upgrade for mainnet fairness. |
-| Escrow integrated flow | Contract exists; product flow not tied to dashboard MVP. |
+| Gasless clicks | **In repo:** Pimlico + ZeroDev Kernel session + `clickFor` — see `frontend/lib/account-abstraction.ts`, **`docs/TESTNET_E2E_CHECKLIST.md`** Part B. |
+| One signature for **many** clicks in one tx | Not supported; each gasless click is one sponsored UserOp. |
+| On-click trophy drops | **`_click`** may mint via **`trophyDropBps`** (deploy / `setTrophyDropBps`). **Owner** can still use **`mintTrophyForPlayer`** or NFT **`mint`**. New game deploy: **`npm run deploy-game:base-sepolia`**. |
+| Trophy **IPFS** metadata | **`tokenURI`** is on-chain **data URI** (JSON + SVG), not `ipfs://`. Optional IPFS/images are **post-MVP** if you change metadata design. |
+| Production VRF | POT (and trophy roll entropy) use pseudo-random; upgrade for mainnet fairness. |
+| Escrow | Standalone contract (not invoked by `ClickMintGame`). Terminal tab supports deposit/claim; set **`Escrow`** in env / `addresses.ts`. |
 
 ## Quick smoke test (manual)
 

@@ -22,6 +22,8 @@ export const clickMintGameAbi = parseAbi([
   "function hourPayout(uint256 hourId) view returns (uint256)",
   "function hourFinalized(uint256 hourId) view returns (bool)",
   "function hourWinWindow(uint256 hourId) view returns (uint8)",
+  "function trophyDropBps() view returns (uint256)",
+  "function setTrophyDropBps(uint256 bps)",
   "function finalizeHour(uint256 hourId)",
   "event Deposited(address indexed user, uint256 ethIn, uint256 creditsOut)",
   "event Clicked(address indexed user, uint256 hourId, uint256 totalForUserHour, uint8 window)",
@@ -30,6 +32,15 @@ export const clickMintGameAbi = parseAbi([
 
 export const binaryTrophyAbi = parseAbi([
   "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
+  "function approve(address to, uint256 tokenId)",
+  "function ownerOf(uint256 tokenId) view returns (address)",
+]);
+
+export const escrowAbi = parseAbi([
+  "function deposit(address token, uint256 tokenId, address beneficiary) returns (uint256)",
+  "function claim(uint256 holdId)",
+  "function nextHoldId() view returns (uint256)",
+  "function holds(uint256 holdId) view returns (address token, uint256 tokenId, address depositor, address beneficiary, bool released)",
 ]);
 
 export const clickTokenAbi = parseAbi([

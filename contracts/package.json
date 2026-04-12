@@ -8,6 +8,7 @@
     "test": "hardhat test",
     "deploy:base-sepolia": "hardhat run scripts/deploy.ts --network baseSepolia",
     "set-game:base-sepolia": "hardhat run scripts/set-game.ts --network baseSepolia",
+    "deploy-game:base-sepolia": "hardhat run scripts/deploy-game-and-relink.ts --network baseSepolia",
     "verify:base-sepolia": "hardhat run scripts/verify-deployment.ts --network baseSepolia",
     "peek:deployer-meta": "node scripts/peek-deployer-key-meta.cjs"
   },

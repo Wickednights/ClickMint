@@ -30,6 +30,7 @@ async function main() {
     maxSupplyWei: caps.maxSupplyWei.toString(),
     trophyMaxSupply: caps.trophyMaxSupply.toString(),
     clicksPerHashTier: caps.clicksPerHashTier.toString(),
+    trophyDropBps: caps.trophyDropBps.toString(),
     vestingSeconds: vestingSec.toString(),
   });
 
@@ -83,7 +84,8 @@ async function main() {
     clickPerEthWei,
     clickCostCredits,
     baseClickReward,
-    caps.clicksPerHashTier
+    caps.clicksPerHashTier,
+    caps.trophyDropBps
   );
   await game.waitForDeployment();
   await (await click.setGame(await game.getAddress())).wait();

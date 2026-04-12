@@ -2,6 +2,8 @@
 
 Use this after each deployment or before mainnet. Work **top to bottom**. For every step, record **PASS / FAIL**, **tx hash** (if on-chain), and **screenshots or notes**.
 
+**Full ordered testnet runbook (Pimlico policy + explorers + every UI path):** [TESTNET_E2E_CHECKLIST.md](./TESTNET_E2E_CHECKLIST.md)
+
 **What to send back** (so we can review without your keys):
 
 1. **Environment:** `VERCEL_ENV` or local, commit SHA, `NEXT_PUBLIC_*` names you set (not values for secrets).
@@ -120,5 +122,30 @@ C: PASS/FAIL — …
 D: PASS/FAIL — …
 Wallet: [browser + extensions] — G1-G4 notes + console errors if any
 ```
+
+---
+
+## J. Pimlico gasless (optional)
+
+Prereq: **`NEXT_PUBLIC_PIMLICO_API_KEY`**; **`NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID`** if your paymaster requires a policy. See **[TESTNET_E2E_CHECKLIST.md](./TESTNET_E2E_CHECKLIST.md)** Part B for dashboard steps (limits, contract restrictions, testnet toggle).
+
+| # | Check | How | Your result |
+|---|--------|-----|-------------|
+| J1 | Gas price RPC | Must **not** error with `zd_getUserOperationGasPrice` — app uses **`pimlico_getUserOperationGasPrice`** (see `frontend/lib/account-abstraction.ts`). | |
+| J2 | Enable gasless | Modal completes; EOA calls **`setClickExecutor`** once. | |
+| J3 | Sponsored click | **`clickFor(EOA)`** from smart account; EOA pays no gas per click. | |
+| J4 | Pimlico dashboard | UserOps **accepted**; policy limits not exceeded. | |
+
+---
+
+## K. Trophy NFT metadata (on-chain, not IPFS)
+
+| # | Check | How | Your result |
+|---|--------|-----|-------------|
+| K1 | **`tokenURI`** | Basescan **Read** on **BinaryTrophyNFT** — value starts with **`data:application/json;base64,`**. | |
+| K2 | Decoded JSON | **`image`** is **`data:image/svg+xml;base64,...`** (on-chain SVG). | |
+| K3 | Mint path | **Owner** **`mintTrophyForPlayer`** on **game** (or **`mint`** on NFT) — **not** automatic on every `click()` in MVP. | |
+
+---
 
 We use this to mark **working vs broken** layers (config / contract / RPC / UI) and iterate in order.
