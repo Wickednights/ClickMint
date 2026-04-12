@@ -23,3 +23,17 @@ export function readGenesisGameHourFromEnv(): bigint | null {
   if (!Number.isFinite(n) || n < 0) return null;
   return gameHourIndexFromUnixSec(n);
 }
+
+/**
+ * On-chain `hourId` as the **round since launch** (1-based) when `genesisHour` is known; otherwise raw chain hour id string.
+ */
+export function hourIdForDisplay(hourId: bigint, genesisHour: bigint | null): string {
+  if (genesisHour === null) return hourId.toString();
+  if (hourId < genesisHour) return "1";
+  return (hourId - genesisHour + 1n).toString();
+}
+
+/** Table column / labels: "Round" when genesis is set, else "Hour" (raw index). */
+export function potRoundKind(genesisHour: bigint | null): "Round" | "Hour" {
+  return genesisHour === null ? "Hour" : "Round";
+}
