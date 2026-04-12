@@ -1,4 +1,4 @@
-import { parseEther } from "viem";
+import { formatEther, parseEther } from "viem";
 
 /**
  * Display helpers for on-chain wei-sized credits and $CLICK vaults.
@@ -81,53 +81,45 @@ export function trimEtherString(s: string): string {
   return t === "" ? "0" : t;
 }
 
-const ONE_CLICK = parseEther("1");
+/**
+ * Vault balances are **wei**; linear vesting means amounts are usually **not** whole multiples of
+ * `baseClickReward`. Showing `wei / baseReward` as a “grant count” mislabels balances (e.g. “1 grant”
+ * when the real claimable amount is fractional in grant units).
+ */
+function vaultAmountHeadline(wei: bigint): string {
+  if (wei === 0n) return "0";
+  return trimEtherString(formatEther(wei));
+}
+
+function grantHint(wei: bigint, baseRewardWei?: bigint): string | null {
+  if (baseRewardWei === undefined || baseRewardWei === 0n || wei === 0n) return null;
+  if (wei % baseRewardWei !== 0n) return null;
+  const n = wei / baseRewardWei;
+  return n === 1n ? "equals 1 base click reward" : `equals ${n.toLocaleString()} base click rewards`;
+}
 
 /**
- * Whole-number $CLICK vesting vault display (no wei decimals in UI).
+ * `pendingVested` / unvested slice from CLICK (still locking in the vault).
  */
 export function vestingVaultDisplay(wei: bigint, baseRewardWei?: bigint): {
   headline: string;
   caption: string;
 } {
-  if (wei === 0n) {
-    return { headline: "0", caption: "$CLICK in vesting" };
-  }
-  if (baseRewardWei !== undefined && baseRewardWei > 0n) {
-    const grants = wei / baseRewardWei;
-    if (grants > 0n) {
-      return {
-        headline: grants.toLocaleString(),
-        caption: grants === 1n ? "$CLICK grant vesting" : "$CLICK grants vesting",
-      };
-    }
-  }
-  const whole = wei / ONE_CLICK;
-  if (whole > 0n) {
-    return { headline: whole.toLocaleString(), caption: "whole $CLICK unvested" };
-  }
-  return { headline: "0", caption: "$CLICK in vesting" };
+  const headline = vaultAmountHeadline(wei);
+  const hint = grantHint(wei, baseRewardWei);
+  const caption = hint ? `$CLICK unvested (${hint})` : "$CLICK unvested (linear vesting)";
+  if (wei === 0n) return { headline: "0", caption: "$CLICK unvested (none)" };
+  return { headline, caption };
 }
 
+/** `claimable` from CLICK — vested but not yet minted to wallet (`claimVested`). */
 export function claimableVaultDisplay(wei: bigint, baseRewardWei?: bigint): {
   headline: string;
   caption: string;
 } {
-  if (wei === 0n) {
-    return { headline: "0", caption: "$CLICK ready to claim" };
-  }
-  if (baseRewardWei !== undefined && baseRewardWei > 0n) {
-    const grants = wei / baseRewardWei;
-    if (grants > 0n) {
-      return {
-        headline: grants.toLocaleString(),
-        caption: grants === 1n ? "vested $CLICK grant" : "vested $CLICK grants",
-      };
-    }
-  }
-  const whole = wei / ONE_CLICK;
-  if (whole > 0n) {
-    return { headline: whole.toLocaleString(), caption: "whole $CLICK claimable" };
-  }
-  return { headline: "0", caption: "$CLICK ready to claim" };
+  const headline = vaultAmountHeadline(wei);
+  const hint = grantHint(wei, baseRewardWei);
+  const caption = hint ? `$CLICK claimable (${hint})` : "$CLICK vested — use Claim vested";
+  if (wei === 0n) return { headline: "0", caption: "nothing to claim yet" };
+  return { headline, caption };
 }
