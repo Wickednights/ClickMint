@@ -190,12 +190,20 @@ export function ClickMintDashboard() {
 
   /** One wall-clock second bucket for reads + countdowns — avoids refetch thrash from `Date.now()` on unrelated renders. */
   const [tickSec, setTickSec] = useState(() => Math.floor(Date.now() / 1000));
-  const nowTs = BigInt(tickSec);
+  /**
+   * Stable timestamp for `gameHour(ts)` reads: same on-chain hour for every second inside that hour.
+   * Must mirror `ClickMintGame.gameHour`: `(ts - RESET_BUFFER) / 3600` (not raw UTC hour start).
+   */
+  const gameHourReadTs = useMemo(() => {
+    if (tickSec <= GAME_RESET_BUFFER_SEC) return BigInt(GAME_RESET_BUFFER_SEC + 1);
+    const h = Math.floor((tickSec - GAME_RESET_BUFFER_SEC) / 3600);
+    return BigInt(GAME_RESET_BUFFER_SEC + h * 3600 + 1);
+  }, [tickSec]);
   const { data: gameHourNow } = useReadContract({
     address: gameAddr,
     abi: clickMintGameAbi,
     functionName: "gameHour",
-    args: [nowTs],
+    args: [gameHourReadTs],
     query: { enabled: !!gameAddr, placeholderData: keepPreviousData },
   });
 
