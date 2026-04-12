@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import { Space_Grotesk, Inter } from "next/font/google";
 import { Toaster } from "sonner";
+import { getSiteUrl } from "@/lib/site-url";
 import { Providers } from "./providers";
 import "./globals.css";
 
-const siteUrl =
-  process.env.NEXT_PUBLIC_SITE_URL?.trim().replace(/\/$/, "") ?? "https://clickmint-blue.vercel.app";
+const siteUrl = getSiteUrl();
 
 const spaceGrotesk = Space_Grotesk({
   variable: "--font-space-grotesk",

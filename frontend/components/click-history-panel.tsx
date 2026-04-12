@@ -7,7 +7,8 @@ import { baseSepolia } from "wagmi/chains";
 import { clickMintGameAbi } from "@/lib/abi";
 import { cn } from "@/lib/utils";
 
-const LOOKBACK_BLOCKS = 25_000n;
+/** Smaller range avoids `eth_getLogs` range limits on some RPCs (e.g. QuickNode). */
+const LOOKBACK_BLOCKS = 8_000n;
 const MAX_ROWS = 200;
 
 export type ClickLogRow = {
@@ -65,7 +66,6 @@ export function ClickHistoryPanel({ gameAddr }: { gameAddr: Address }) {
   const publicClient = usePublicClient({ chainId: baseSepolia.id });
   const [rows, setRows] = useState<ClickLogRow[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const ingestLogs = useCallback((logs: Parameters<typeof decodeClickedLogs>[0]) => {
     const decoded = decodeClickedLogs(logs);
@@ -78,7 +78,6 @@ export function ClickHistoryPanel({ gameAddr }: { gameAddr: Address }) {
     let cancelled = false;
     (async () => {
       setStatus("loading");
-      setErrorMsg(null);
       try {
         const latest = await publicClient.getBlockNumber();
         const fromBlock = latest > LOOKBACK_BLOCKS ? latest - LOOKBACK_BLOCKS : 0n;
@@ -104,7 +103,9 @@ export function ClickHistoryPanel({ gameAddr }: { gameAddr: Address }) {
       } catch (e) {
         if (!cancelled) {
           setStatus("error");
-          setErrorMsg((e as Error).message?.slice(0, 200) ?? "Log fetch failed");
+          if (typeof console !== "undefined" && console.debug) {
+            console.debug("Click history getLogs failed", e);
+          }
         }
       }
     })();
@@ -144,33 +145,32 @@ export function ClickHistoryPanel({ gameAddr }: { gameAddr: Address }) {
   const windowLabels = [":00–:14", ":15–:29", ":30–:44", ":45–:59"];
 
   return (
-    <section className="w-full max-w-2xl space-y-6 pt-4">
+    <section className="w-full max-w-2xl space-y-5 pt-4">
       <div>
         <h2 className="mb-1 font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary-fixed">Click history</h2>
-        <p className="font-body text-[10px] leading-relaxed text-secondary opacity-85">
-          Recent <span className="font-mono text-primary-fixed/80">Clicked</span> events from this game (last ~{LOOKBACK_BLOCKS.toLocaleString()} blocks + live). Eligibility
-          windows are <span className="font-semibold">UTC quarters</span> of each on-chain hour index.
+        <p className="font-body text-[11px] leading-snug text-secondary md:text-xs">
+          Recent clicks for this game. Shades show how busy each 15-minute slice was. New clicks appear live when connected.
         </p>
       </div>
 
       {status === "loading" && rows.length === 0 ? (
-        <p className="font-body text-[11px] text-secondary">Loading on-chain click logs…</p>
+        <p className="font-body text-[11px] text-secondary">Loading…</p>
       ) : null}
-      {status === "error" && errorMsg ? (
-        <p className="border border-amber-500/40 bg-amber-500/10 px-3 py-2 font-body text-[10px] text-amber-200">
-          Could not load full history ({errorMsg}). Live clicks still append if your RPC allows subscriptions.
+      {status === "error" ? (
+        <p className="rounded border border-amber-500/35 bg-amber-500/10 px-3 py-2 font-body text-[11px] text-amber-100/95">
+          Older history could not be loaded. New clicks may still show up below.
         </p>
       ) : null}
 
       {heatmap.hourKeys.length > 0 ? (
         <div className="space-y-2">
-          <p className="font-label text-[9px] uppercase tracking-widest text-secondary">Heatmap (clicks per 15m UTC window)</p>
+          <p className="font-label text-[9px] uppercase tracking-widest text-secondary">Activity by 15-minute slice (UTC)</p>
           <div className="space-y-2">
             {heatmap.hourKeys.map((hid) => {
               const counts = heatmap.byHour.get(hid)!;
               return (
                 <div key={hid} className="flex flex-wrap items-center gap-2">
-                  <span className="w-24 shrink-0 font-mono text-[10px] text-primary-fixed/90">Hr #{hid}</span>
+                  <span className="w-20 shrink-0 font-mono text-[10px] text-primary-fixed/90 md:w-24">#{hid}</span>
                   <div className="flex flex-1 gap-1">
                     {counts.map((c, wi) => (
                       <div
@@ -194,22 +194,40 @@ export function ClickHistoryPanel({ gameAddr }: { gameAddr: Address }) {
               );
             })}
           </div>
-          <p className="text-[9px] text-secondary opacity-70">Darker cyan = more clicks in that quarter (per scanned window).</p>
         </div>
       ) : status !== "loading" ? (
-        <p className="font-body text-[10px] text-secondary opacity-70">No clicks in the scanned block range yet.</p>
+        <p className="font-body text-[11px] text-secondary opacity-80">No clicks in the recent window yet.</p>
       ) : null}
 
       <div>
         <p className="mb-2 font-label text-[9px] uppercase tracking-widest text-secondary">Recent clicks</p>
-        <div className="max-h-[min(50vh,24rem)] overflow-auto border border-outline-variant/25">
+        <div className="md:hidden">
+          <div className="max-h-[min(55vh,26rem)] space-y-2 overflow-auto pr-0.5">
+            {rows.map((r) => (
+              <div
+                key={r.key}
+                className="border border-outline-variant/25 bg-surface-container-low/50 px-3 py-2 font-mono text-[10px] text-on-surface"
+              >
+                <div className="flex justify-between gap-2 text-secondary">
+                  <span>#{r.blockNumber.toString()}</span>
+                  <span className="text-primary-fixed/90">{windowLabels[r.window] ?? r.window}</span>
+                </div>
+                <div className="mt-1 truncate text-[11px]" title={r.user}>
+                  {r.user.slice(0, 8)}…{r.user.slice(-6)}
+                </div>
+                <div className="mt-0.5 text-[10px] text-secondary">Round #{r.hourId.toString()}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="hidden max-h-[min(50vh,24rem)] overflow-auto border border-outline-variant/25 md:block">
           <table className="w-full text-left font-mono text-[9px] text-on-surface">
             <thead className="sticky top-0 bg-surface-container-low/95 font-label uppercase tracking-wider text-secondary">
               <tr>
                 <th className="px-2 py-2">Block</th>
                 <th className="px-2 py-2">Player</th>
-                <th className="px-2 py-2">Hour</th>
-                <th className="px-2 py-2">Win</th>
+                <th className="px-2 py-2">Round</th>
+                <th className="px-2 py-2">Slot</th>
               </tr>
             </thead>
             <tbody>

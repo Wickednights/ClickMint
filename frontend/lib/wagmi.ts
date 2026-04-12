@@ -1,6 +1,7 @@
 import { coinbaseWallet, injected, metaMask, walletConnect } from "@wagmi/connectors";
 import { http, createConfig } from "wagmi";
 import { baseSepolia } from "wagmi/chains";
+import { getSiteUrl } from "@/lib/site-url";
 
 const rpc =
   typeof process !== "undefined" && process.env.NEXT_PUBLIC_QUICKNODE_RPC
@@ -22,10 +23,7 @@ const connectors = [
           metadata: {
             name: "ClickMint",
             description: "Base Sepolia — credits, CLICK, hourly POT",
-            url:
-              typeof window !== "undefined"
-                ? window.location.origin
-                : "https://vercel.app",
+            url: typeof window !== "undefined" ? window.location.origin : getSiteUrl(),
             icons: [],
           },
           showQrModal: true,

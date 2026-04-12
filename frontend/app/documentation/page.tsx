@@ -68,17 +68,27 @@ export default function DocumentationPage() {
               vests over <strong className="text-white">7 days</strong>
             </li>
           </ul>
-          <h3 className="mt-6 font-headline text-sm uppercase tracking-widest text-primary-fixed">Early Spend Option</h3>
+          <h3 id="early-claim" className="mt-6 scroll-mt-24 font-headline text-sm uppercase tracking-widest text-primary-fixed">
+            Early claim
+          </h3>
           <p className="mt-2 font-body text-sm leading-relaxed text-secondary md:text-base">
-            You can spend a large portion of your pending $CLICK immediately to discount future ETH deposits. Split on spent
-            amount:
+            You can convert part of your <strong className="text-white">pending</strong> $CLICK into liquid tokens right away
+            instead of waiting for the full vesting schedule. The amount you choose is split:
           </p>
           <ul className="mt-2 list-disc space-y-1 pl-5 font-body text-sm text-secondary md:text-base">
             <li>30% burned</li>
-            <li>30% to treasury</li>
-            <li>20% added to liquidity pool</li>
-            <li>20% sent instantly to your wallet</li>
+            <li>30% to the protocol treasury</li>
+            <li>
+              20% minted to the protocol&apos;s <strong className="text-white">liquidity address</strong> (operators choose
+              this address at deploy; default deploy sends it to the same wallet as the owner until you point it at a multisig
+              or LP workflow)
+            </li>
+            <li>20% to your wallet as liquid $CLICK</li>
           </ul>
+          <p className="mt-3 font-body text-sm leading-relaxed text-secondary md:text-base">
+            This is <strong className="text-white">not</strong> automatic Uniswap liquidity: the contract only mints tokens to
+            that address. Moving funds into a pool (and pairing with ETH) is a separate step the team runs when a pool exists.
+          </p>
         </Section>
 
         <Section id="click-credits" title="Click Credits & Deposits">
@@ -99,16 +109,16 @@ export default function DocumentationPage() {
           <ul className="mt-3 list-disc space-y-2 pl-5 font-body text-sm leading-relaxed text-secondary md:text-base">
             <li>Receives 1% of every ETH deposit + a portion of minted $CLICK</li>
             <li>
-              <strong className="text-white">Pays out once every hour</strong>
+              <strong className="text-white">Pays out once every hour</strong> after the round is settled
             </li>
             <li>Eligibility: Must have clicked at least 100 times during the hour</li>
             <li>
-              Winner selection: The contract secretly picks a random 15-minute window within the hour and chooses a random
-              eligible player who was active in that window
+              Winner selection: A random 15-minute slice of the hour is chosen at settlement, then a random eligible clicker
+              from that slice wins
             </li>
-            <li>Payout happens after minute 59, with a ~20-second buffer before the hour ends to reset the pot cleanly</li>
-            <li>Live toast notification appears instantly when someone wins</li>
-            <li>History icon shows all previous hourly winners</li>
+            <li>Timing uses a short buffer after each UTC hour so the pot can reset cleanly</li>
+            <li>Winners see a live notification when a round pays out</li>
+            <li>Use POT history in the app to see past winners</li>
           </ul>
         </Section>
 
@@ -172,7 +182,7 @@ export default function DocumentationPage() {
             <li>
               Vesting period: <strong className="text-white">10 minutes</strong> (instead of 7 days)
             </li>
-            <li>All other mechanics (POT, difficulty, early spend, fees, etc.) behave exactly like mainnet</li>
+            <li>All other mechanics (POT, difficulty, early claim, fees, etc.) behave exactly like mainnet</li>
           </ul>
           <h3 className="mt-6 font-headline text-sm uppercase tracking-widest text-primary-fixed">How to test</h3>
           <ul className="mt-2 list-disc space-y-2 pl-5 font-body text-sm text-secondary md:text-base">

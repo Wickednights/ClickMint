@@ -21,6 +21,8 @@ Work **top to bottom**. For each step, record **PASS / FAIL**, **tx hash** (if a
 
 ## Part B — Pimlico: sponsorship policy (gasless clicks)
 
+**Step-by-step guide (expanded):** [PIMLICO_SPONSORSHIP_SETUP.md](./PIMLICO_SPONSORSHIP_SETUP.md).
+
 The app sponsors **ERC-4337 UserOperations** through Pimlico. Your policy controls **who** gets free gas and **which contracts** may be called.
 
 ### B.1 Dashboard and API key
