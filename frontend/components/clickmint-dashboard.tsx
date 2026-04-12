@@ -746,96 +746,74 @@ export function ClickMintDashboard() {
         )}
       </section>
 
-      {/* Hourly POT clock + 15m window */}
-      <section className="w-full max-w-xl border border-outline-variant/25 bg-surface-container-low/40 px-4 py-3 text-center md:px-5">
+      {/* Hourly POT — compact copy for mobile */}
+      <section className="w-full max-w-xl border border-outline-variant/25 bg-surface-container-low/40 px-3 py-3 text-center sm:px-5">
         <p className="font-label text-[9px] uppercase tracking-[0.2em] text-primary-fixed/90">Hourly POT</p>
         {potClock ? (
-          <div className="mt-2 space-y-2 font-body text-[11px] leading-relaxed text-secondary md:text-xs">
-            <p>
-              <span className="text-on-surface/80">Game hour index</span>{" "}
-              <span className="font-mono text-primary-fixed">#{potClock.gameHourId.toString()}</span>
-              <span className="mx-1.5 text-outline-variant">·</span>
-              <span className="text-on-surface/80">POT window (UTC + your time):</span>
-            </p>
-            <p className="text-[10px] leading-snug text-secondary opacity-90">
-              This index is the global UTC hour counter on-chain:{" "}
-              <span className="font-mono text-primary-fixed/80">(unixTime − {GAME_RESET_BUFFER_SEC}s) / 3600</span> — it is{" "}
-              <span className="font-semibold text-on-surface/85">not</span> “hours since this contract was deployed.” Large
-              numbers are normal (epoch hours). Approximate UTC span for this index:
-            </p>
-            <p className="font-mono text-[10px] text-primary-fixed/90">{gameHourUtcSlotLabel(potClock.gameHourId)}</p>
-            {prevHour !== undefined && prevFinalized !== undefined ? (
-              <p className="text-[10px] text-secondary opacity-90">
-                Previous index <span className="font-mono text-primary-fixed/80">#{prevHour.toString()}</span>{" "}
-                {prevFinalized ? (
-                  <span className="text-emerald-300/90">finalized on-chain</span>
-                ) : (
-                  <span className="text-amber-200/90">not finalized yet</span>
-                )}
-                .
-              </p>
-            ) : null}
-            <p className="font-semibold text-primary-fixed">
-              {utcQuarterLabel(potClock.currentQuarter)}
-              <span className="mx-1.5 font-normal text-outline-variant">·</span>
-              <span className="font-normal text-on-surface/85">
-                {localQuarterRangeLabel(tickSec, potClock.currentQuarter)}
-              </span>
-            </p>
+          <div className="mt-2 space-y-2.5 font-body text-[11px] leading-snug text-secondary md:text-xs">
             <p className="font-headline text-sm font-bold tabular-nums text-white md:text-base">
-              Next hour boundary:{" "}
+              Next reset{" "}
               <span className="text-primary-fixed">{formatCountdown(potClock.secToHourEnd)}</span>
             </p>
-            <p className="text-[10px] text-on-surface/70">
-              Clock aligns at ~{formatEpochLocalShort(potClock.nextBoundaryEpochSec)} your time (UTC hour +{" "}
-              {GAME_RESET_BUFFER_SEC}s reset buffer — same rules on-chain).
+            <p className="text-[10px] text-on-surface/75 md:text-[11px]">
+              ~{formatEpochLocalShort(potClock.nextBoundaryEpochSec)} your time
             </p>
-            {prevHour !== undefined ? (
-              <p>
+            <div className="rounded border border-outline-variant/20 bg-black/30 px-2 py-2 text-left sm:text-center">
+              <p className="text-[10px] text-on-surface/70">This round</p>
+              <p className="mt-0.5 font-semibold text-primary-fixed">
+                {utcQuarterLabel(potClock.currentQuarter)}
+                <span className="mx-1.5 font-normal text-outline-variant">·</span>
+                <span className="font-normal text-on-surface/85">
+                  {localQuarterRangeLabel(tickSec, potClock.currentQuarter)}
+                </span>
+              </p>
+            </div>
+            <p className="text-[10px] text-secondary opacity-90">
+              Global round #{potClock.gameHourId.toString()}
+              <span className="mx-1 text-outline-variant">·</span>
+              <span className="text-on-surface/80">{gameHourUtcSlotLabel(potClock.gameHourId)}</span>
+            </p>
+            {prevHour !== undefined && prevFinalized !== undefined ? (
+              <p className="text-[10px] text-secondary">
+                Last round #{prevHour.toString()}{" "}
                 {prevFinalized ? (
-                  <>
-                    <span className="text-on-surface/80">Last settled hour #{prevHour.toString()} winning quarter:</span>{" "}
+                  <span className="text-emerald-300/90">settled</span>
+                ) : (
+                  <span className="text-amber-200/90">waiting for settlement</span>
+                )}
+              </p>
+            ) : null}
+            {prevHour !== undefined ? (
+              <div className="text-[10px] leading-snug">
+                {prevFinalized ? (
+                  <p className="text-secondary">
+                    Last winner&apos;s slot:{" "}
                     <span className="font-semibold text-primary-fixed">
                       {prevHourWinWindow !== undefined ? utcQuarterLabel(Number(prevHourWinWindow)) : "—"}
                     </span>
-                    <span className="block pt-0.5 text-[10px] opacity-75">
-                      (Only players who clicked in that quarter were eligible for that POT.)
-                    </span>
-                  </>
+                  </p>
                 ) : potClock.secUntilFinalizeGate !== null ? (
                   potClock.secUntilFinalizeGate > 0 ? (
-                    <>
-                      <span className="text-on-surface/80">
-                        Finalize for <span className="font-mono text-on-surface/90">previous</span> hour #
-                        {prevHour.toString()} unlocks in
-                      </span>{" "}
-                      <span className="font-mono font-semibold text-primary-fixed">
+                    <p className="text-secondary">
+                      Settlement for round #{prevHour.toString()} unlocks in{" "}
+                      <span className="font-semibold tabular-nums text-primary-fixed">
                         {formatCountdown(potClock.secUntilFinalizeGate)}
                       </span>
-                      <span className="block pt-0.5 text-[10px] opacity-75">
-                        Winning 15-minute slot is chosen when the owner runs finalize — not known before then.
-                      </span>
-                    </>
+                    </p>
                   ) : (
-                    <>
-                      <span className="text-amber-200/90">
-                        Previous hour #{prevHour.toString()} ready to finalize
+                    <p className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-2 text-amber-100/95">
+                      <span className="font-semibold">Round #{prevHour.toString()} ready to settle.</span>
+                      <span className="mt-1 block font-normal text-amber-100/85">
+                        Operators: use Settle below.
                       </span>
-                      <span className="block pt-0.5 text-[10px] font-normal normal-case text-secondary opacity-90">
-                        You are in hour #{potClock.gameHourId.toString()} now — #{prevHour.toString()} is the one that
-                        just ended and still needs <span className="font-mono">finalizeHour</span> on-chain.
-                      </span>
-                      <span className="block pt-0.5 text-[10px] opacity-75">
-                        Owner: run Finalize below — the winning UTC quarter appears on-chain after that tx.
-                      </span>
-                    </>
+                    </p>
                   )
                 ) : null}
-              </p>
+              </div>
             ) : null}
           </div>
         ) : (
-          <p className="mt-2 font-body text-[11px] text-secondary">Loading on-chain hour…</p>
+          <p className="mt-2 font-body text-[11px] text-secondary">Loading…</p>
         )}
       </section>
 
@@ -972,13 +950,14 @@ export function ClickMintDashboard() {
               Early claim
             </button>
           </div>
-          <p className="mt-2 max-w-md text-center font-body text-[10px] leading-snug text-secondary opacity-85 md:text-[11px]">
-            <span className="font-semibold text-on-surface/90">Early claim</span> calls{" "}
-            <span className="font-mono text-primary-fixed/90">earlySpendPending</span> on <span className="font-mono">CLICK</span>
-            : it pulls from your <span className="font-semibold">unvested</span> vault balance only (not the same as{" "}
-            <span className="font-semibold">Claim vested</span> above). The protocol splits that amount{" "}
-            <span className="font-mono">30/30/20/20</span> (burn / treasury / LP / you) per the contract — you receive less
-            than full face value.
+          <p className="mt-2 max-w-md text-center font-body text-[10px] leading-snug text-secondary opacity-90 md:text-[11px]">
+            <span className="font-semibold text-on-surface/90">Early claim</span> uses your{" "}
+            <span className="font-semibold">unvested</span> balance (not the same as Claim vested). The split is roughly
+            burn / treasury / liquidity / you — see{" "}
+            <Link href="/documentation#early-claim" className="text-primary-fixed/90 underline-offset-2 hover:underline">
+              docs
+            </Link>
+            .
           </p>
           {canAct && !parsedEarlySpend.ok && (
             <p className="mt-1 font-body text-[10px] text-amber-200/90 md:text-[11px]">
@@ -1020,7 +999,7 @@ export function ClickMintDashboard() {
           onClick={() => void onFinalize()}
           className="w-full font-label text-[10px] uppercase tracking-widest text-secondary opacity-60 hover:text-primary-fixed disabled:opacity-20 md:text-[11px]"
         >
-          Finalize hour (ops)
+          Settle previous round
         </button>
       </section>
 

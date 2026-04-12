@@ -42,6 +42,7 @@ async function main() {
   const secret = await SecretPrizeWallet.deploy(owner);
   await secret.waitForDeployment();
 
+  /** Until you call `CLICK.setLpRecipient`, early-claim LP share mints here — default is owner for bootstrap. */
   const lpRecipient = owner;
 
   const CLICK = await ethers.getContractFactory("CLICK");

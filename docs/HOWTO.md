@@ -96,7 +96,7 @@ Copy `frontend/.env.example` → `frontend/.env.local` (or use root `.env` if yo
 - `NEXT_PUBLIC_QUICKNODE_RPC` — optional RPC (else public Base Sepolia endpoint in `wagmi.ts`)  
 - `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` — optional; enables WalletConnect QR in the connect modal  
 - **`NEXT_PUBLIC_PIMLICO_API_KEY`** — optional; **gasless clicks** (Pimlico bundler + paymaster on Base Sepolia).  
-- **`NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID`** — optional; paste **policy id** from Pimlico after you create a **sponsorship policy** (required if paymaster calls fail without context).
+- **`NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID`** — optional; paste **policy id** from Pimlico after you create a **sponsorship policy** (required if paymaster calls fail without context). Full walkthrough: **`docs/PIMLICO_SPONSORSHIP_SETUP.md`**.
 
 ### Dev server
 
@@ -124,6 +124,21 @@ Place files under `frontend/public/sounds/`:
 
 Browsers require a user gesture (click/key) before audio unlocks.
 
+### Custom domain (production + preview, fewer wallet warnings)
+
+Generic **`*.vercel.app`** URLs are often flagged by browser wallets until they gain reputation. Using a domain you control (e.g. **`clickmint.app`**) usually helps.
+
+**Recommended Vercel setup**
+
+1. **Production:** Add **`clickmint.app`** (and optionally **`www.clickmint.app`**) in the Vercel project → Domains, assigned to the **Production** deployment. Point DNS per Vercel’s instructions (A/AAAA or CNAME).
+2. **Preview / staging:** Add a second hostname on the **same** registrable domain, e.g. **`preview.clickmint.app`**, and assign it to **Preview** deployments (or to a specific branch such as `develop`). That gives testers a stable URL that is not a random `*.vercel.app` host.
+3. **Environment variables:** In Vercel, set **`NEXT_PUBLIC_SITE_URL`** with **no trailing slash** per environment — e.g. Production: `https://clickmint.app`, Preview: `https://preview.clickmint.app`. Redeploy after changes (`NEXT_PUBLIC_*` is inlined at build time).
+4. **WalletConnect (Reown):** In the project dashboard, add **both** origins to the allowed app/domain list (exactly the `https://…` URLs users open). Same project ID can back prod and preview if both hosts are allowlisted.
+
+**Path-only “preview” (`/preview`)** on the production deployment is a separate idea: it does **not** replace Vercel’s per-branch preview builds, and everyone would still share one deployment and one set of env vars unless you add custom logic. For eliminating hostname-based warnings, **subdomains under `clickmint.app`** are the straightforward approach.
+
+Canonical URL resolution in the app: **`frontend/lib/site-url.ts`** (`NEXT_PUBLIC_SITE_URL` → else production default `https://clickmint.app` → else `VERCEL_URL` → else localhost).
+
 ## Wallet behavior
 
 - **One wallet signature per EOA transaction** is normal: each `deposit()`, `click()`, `claimVested()`, `earlySpendPending()`, etc. is its own tx.
@@ -137,7 +152,7 @@ Browsers require a user gesture (click/key) before audio unlocks.
 | Early spend fails / “rejected” | Unvested must be ≥ amount; see `docs/ARCHITECTURE.md` and `docs/KNOWN_ISSUES.md`. |
 | No CLICK from clicks | Read `baseClickReward` on game; if zero, owner must `setEconomy` or rewards come from POT only. |
 | WalletConnect missing | Set `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID`. |
-| Gasless errors (`pm_*`, policy, `zd_*`) | Create Pimlico **sponsorship policy**, set **`NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID`**; ensure **testnet chains** enabled; see **`docs/TESTNET_E2E_CHECKLIST.md`** Part B. |
+| Gasless errors (`pm_*`, policy, `zd_*`) | Create Pimlico **sponsorship policy**, set **`NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID`**; ensure **testnet chains** enabled; see **`docs/PIMLICO_SPONSORSHIP_SETUP.md`** and **`docs/TESTNET_E2E_CHECKLIST.md`** Part B. |
 | Connector build warnings | Optional peers for unused wagmi connector exports; core MetaMask/CB/WC paths install the packages added in `frontend/package.json`. |
 
 ## Related docs
