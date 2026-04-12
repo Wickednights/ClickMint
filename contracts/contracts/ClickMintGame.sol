@@ -23,8 +23,9 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     /// @dev 3% total: 1% treasury / 1% pot (ETH) / 1% secret. Credits are still granted on full `msg.value`.
     uint256 public constant FEE_EACH_BPS = 100;
 
-    uint256 public constant MIN_POT_CLICKS = 100;
     uint256 public constant MAX_CLICKS_PER_BLOCK = 2;
+    /// @notice Minimum clicks in a game hour to qualify for POT (deploy: testnet often lower for QA; mainnet typically100).
+    uint256 public immutable minPotClicks;
     /// @notice Global clicks per game hour — every N clicks adds one required leading-zero bit (cap 4) for click hash.
     uint256 public immutable clicksPerHashTier;
 
@@ -108,10 +109,12 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         uint256 clickCostCredits_,
         uint256 baseClickReward_,
         uint256 clicksPerHashTier_,
-        uint256 trophyDropBps_
+        uint256 trophyDropBps_,
+        uint256 minPotClicks_
     ) Ownable(initialOwner) {
         if (address(click_) == address(0)) revert GameBadAddr();
         if (clicksPerHashTier_ == 0) revert GameBadAddr();
+        if (minPotClicks_ == 0) revert GameBadAddr();
         if (trophyDropBps_ > BPS) revert GameBadBps();
         clickToken = click_;
         treasury = treasury_;
@@ -121,6 +124,7 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         baseClickReward = baseClickReward_;
         clicksPerHashTier = clicksPerHashTier_;
         trophyDropBps = trophyDropBps_;
+        minPotClicks = minPotClicks_;
     }
 
     function setAddresses(address payable treasury_, address payable secretWallet_) external onlyOwner whenNotPaused {
@@ -348,7 +352,7 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         uint256 n = 0;
         for (uint256 i = 0; i < parts.length; ++i) {
             address a = parts[i];
-            if (clicksInHour[hourId][a] < MIN_POT_CLICKS) continue;
+            if (clicksInHour[hourId][a] < minPotClicks) continue;
             if ((minuteMask[hourId][a] & eligible) == 0) continue;
             cand[n++] = a;
         }

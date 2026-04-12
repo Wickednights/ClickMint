@@ -8,6 +8,15 @@ import { formatEther, parseEther } from "viem";
  */
 const BPS = 10_000n;
 
+/** Matches `CLICK.earlySpendPending` — liquid minted to the user after burn/treasury/LP take (20% of `amount` at current BPS). */
+export function earlySpendLiquidWei(amount: bigint): bigint {
+  if (amount <= 0n) return 0n;
+  const burn = (amount * 3000n) / BPS;
+  const treasury = (amount * 3000n) / BPS;
+  const lp = (amount * 2000n) / BPS;
+  return amount - burn - treasury - lp;
+}
+
 /**
  * Mirrors `ClickMintGame._depositBonusWei` — bonus added to `credits` on each `deposit()`.
  */

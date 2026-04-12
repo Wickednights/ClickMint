@@ -52,6 +52,7 @@ async function main() {
     baseClickReward: baseClickReward.toString(),
     clicksPerHashTier: caps.clicksPerHashTier.toString(),
     trophyDropBps: caps.trophyDropBps.toString(),
+    minPotClicks: caps.minPotClicks.toString(),
   });
 
   const ClickMintGame = await ethers.getContractFactory("ClickMintGame");
@@ -64,7 +65,8 @@ async function main() {
     clickCostCredits,
     baseClickReward,
     caps.clicksPerHashTier,
-    caps.trophyDropBps
+    caps.trophyDropBps,
+    caps.minPotClicks
   );
   await game.waitForDeployment();
   const gameAddr = await game.getAddress();

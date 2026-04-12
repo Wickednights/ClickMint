@@ -11,6 +11,11 @@ import { cn } from "@/lib/utils";
 const LOOKBACK_BLOCKS = 8_000n;
 const MAX_ROWS = 200;
 
+/** Newest clicks: show up to this many with “live” styling (no inner scrollbar). */
+const LIVE_FEED_MAX = 25;
+/** Paginate clicks older than the live window. */
+const ARCHIVE_PAGE_SIZE = 20;
+
 /** Aggregate heatmap into 5-minute buckets (12 per hour). */
 const MINUTES_PER_BUCKET = 5;
 const BUCKETS_PER_HOUR = 60 / MINUTES_PER_BUCKET;
@@ -36,7 +41,15 @@ function pushUnique(prev: ClickLogRow[], next: ClickLogRow[]): ClickLogRow[] {
   return out.slice(0, MAX_ROWS);
 }
 
-function decodeClickedLogs(logs: readonly { data: `0x${string}`; topics: [] | [`0x${string}`, ...`0x${string}`[]]; blockNumber: bigint; transactionHash: `0x${string}`; logIndex: number }[]): ClickLogRow[] {
+function decodeClickedLogs(
+  logs: readonly {
+    data: `0x${string}`;
+    topics: [] | [`0x${string}`, ...`0x${string}`[]];
+    blockNumber: bigint;
+    transactionHash: `0x${string}`;
+    logIndex: number;
+  }[]
+): ClickLogRow[] {
   const out: ClickLogRow[] = [];
   for (const log of logs) {
     try {
@@ -71,10 +84,32 @@ function formatMinuteUtc(m: number): string {
   return `:${String(Math.min(59, Math.max(0, m))).padStart(2, "0")}`;
 }
 
+function ClickCard({ r, animate }: { r: ClickLogRow; animate: boolean }) {
+  return (
+    <div
+      className={cn(
+        "border border-outline-variant/25 bg-surface-container-low/50 px-3 py-2 font-mono text-[10px] text-on-surface",
+        animate && "clickmint-feed-item--enter"
+      )}
+    >
+      <div className="flex justify-between gap-2 text-secondary">
+        <span>#{r.blockNumber.toString()}</span>
+        <span className="text-primary-fixed/90">{formatMinuteUtc(r.minute)} UTC</span>
+      </div>
+      <div className="mt-1 truncate text-[11px]" title={r.user}>
+        {r.user.slice(0, 8)}…{r.user.slice(-6)}
+      </div>
+      <div className="mt-0.5 text-[10px] text-secondary">Round #{r.hourId.toString()}</div>
+    </div>
+  );
+}
+
 export function ClickHistoryPanel({ gameAddr }: { gameAddr: Address }) {
   const publicClient = usePublicClient({ chainId: baseSepolia.id });
   const [rows, setRows] = useState<ClickLogRow[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [archivePage, setArchivePage] = useState(0);
+  const [enterKey, setEnterKey] = useState<string | null>(null);
 
   const ingestLogs = useCallback((logs: Parameters<typeof decodeClickedLogs>[0]) => {
     const decoded = decodeClickedLogs(logs);
@@ -133,6 +168,27 @@ export function ClickHistoryPanel({ gameAddr }: { gameAddr: Address }) {
     },
   });
 
+  const topKey = rows[0]?.key;
+  useEffect(() => {
+    if (!topKey) return;
+    setEnterKey(topKey);
+    const t = setTimeout(() => setEnterKey(null), 420);
+    return () => clearTimeout(t);
+  }, [topKey]);
+
+  const liveRows = rows.slice(0, LIVE_FEED_MAX);
+  const archiveTail = rows.length > LIVE_FEED_MAX ? rows.slice(LIVE_FEED_MAX) : [];
+  const archivePageCount = Math.max(1, Math.ceil(archiveTail.length / ARCHIVE_PAGE_SIZE));
+
+  useEffect(() => {
+    setArchivePage((p) => Math.min(p, Math.max(0, archivePageCount - 1)));
+  }, [archivePageCount]);
+
+  const archiveSlice = useMemo(() => {
+    const start = archivePage * ARCHIVE_PAGE_SIZE;
+    return archiveTail.slice(start, start + ARCHIVE_PAGE_SIZE);
+  }, [archiveTail, archivePage]);
+
   const heatmap = useMemo(() => {
     const byHour = new Map<string, number[]>();
     for (const r of rows) {
@@ -142,7 +198,7 @@ export function ClickHistoryPanel({ gameAddr }: { gameAddr: Address }) {
       b[bucket] += 1;
       byHour.set(k, b);
     }
-    const hourKeys = [...byHour.keys()].sort((a, b) => (BigInt(b) > BigInt(a) ? 1 : BigInt(b) < BigInt(a) ? -1 : 0)).slice(0, 8);
+    const hourKeys = [...byHour.keys()].sort((a, b) => (BigInt(b) > BigInt(a) ? 1 : BigInt(b) < BigInt(a) ? -1 : 0)).slice(0, 6);
     let maxC = 1;
     for (const h of hourKeys) {
       const b = byHour.get(h)!;
@@ -157,13 +213,22 @@ export function ClickHistoryPanel({ gameAddr }: { gameAddr: Address }) {
     return `:${String(a).padStart(2, "0")}–:${String(b).padStart(2, "0")}`;
   });
 
+  /** Page buttons: current + up to 3 forward, with prev/next arrows. */
+  const pageWindow = useMemo(() => {
+    const out: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      const p = archivePage + i;
+      if (p < archivePageCount) out.push(p);
+    }
+    return out;
+  }, [archivePage, archivePageCount]);
+
   return (
-    <section className="w-full max-w-2xl space-y-5 pt-4">
+    <section className="w-full max-w-2xl space-y-4 pt-4">
       <div>
         <h2 className="mb-1 font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary-fixed">Click history</h2>
         <p className="font-body text-[11px] leading-snug text-secondary md:text-xs">
-          Recent clicks for this game. Heatmap uses 5-minute UTC buckets; each click tags the exact minute for POT overlap.
-          New clicks appear live when connected.
+          Live feed (newest first). Heatmap: 5-minute UTC buckets. Settlement uses exact minutes for POT overlap.
         </p>
       </div>
 
@@ -178,14 +243,14 @@ export function ClickHistoryPanel({ gameAddr }: { gameAddr: Address }) {
 
       {heatmap.hourKeys.length > 0 ? (
         <div className="space-y-2">
-          <p className="font-label text-[9px] uppercase tracking-widest text-secondary">Activity by 5-minute UTC bucket</p>
+          <p className="font-label text-[9px] uppercase tracking-widest text-secondary">5-min UTC buckets</p>
           <div className="space-y-2">
             {heatmap.hourKeys.map((hid) => {
               const counts = heatmap.byHour.get(hid)!;
               return (
                 <div key={hid} className="flex flex-wrap items-center gap-2">
-                  <span className="w-20 shrink-0 font-mono text-[10px] text-primary-fixed/90 md:w-24">#{hid}</span>
-                  <div className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto pb-1">
+                  <span className="w-16 shrink-0 font-mono text-[10px] text-primary-fixed/90 md:w-20">#{hid}</span>
+                  <div className="flex min-w-0 flex-1 flex-wrap gap-0.5">
                     {counts.map((c, wi) => (
                       <div
                         key={wi}
@@ -214,51 +279,86 @@ export function ClickHistoryPanel({ gameAddr }: { gameAddr: Address }) {
       ) : null}
 
       <div>
-        <p className="mb-2 font-label text-[9px] uppercase tracking-widest text-secondary">Recent clicks</p>
-        <div className="md:hidden">
-          <div className="max-h-[min(55vh,26rem)] space-y-2 overflow-auto pr-0.5">
-            {rows.map((r) => (
-              <div
-                key={r.key}
-                className="border border-outline-variant/25 bg-surface-container-low/50 px-3 py-2 font-mono text-[10px] text-on-surface"
-              >
-                <div className="flex justify-between gap-2 text-secondary">
-                  <span>#{r.blockNumber.toString()}</span>
-                  <span className="text-primary-fixed/90">{formatMinuteUtc(r.minute)} UTC</span>
-                </div>
-                <div className="mt-1 truncate text-[11px]" title={r.user}>
-                  {r.user.slice(0, 8)}…{r.user.slice(-6)}
-                </div>
-                <div className="mt-0.5 text-[10px] text-secondary">Round #{r.hourId.toString()}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="hidden max-h-[min(50vh,24rem)] overflow-auto border border-outline-variant/25 md:block">
-          <table className="w-full text-left font-mono text-[9px] text-on-surface">
-            <thead className="sticky top-0 bg-surface-container-low/95 font-label uppercase tracking-wider text-secondary">
-              <tr>
-                <th className="px-2 py-2">Block</th>
-                <th className="px-2 py-2">Player</th>
-                <th className="px-2 py-2">Round</th>
-                <th className="px-2 py-2">Min UTC</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.key} className="border-t border-outline-variant/15">
-                  <td className="px-2 py-1.5 text-secondary">{r.blockNumber.toString()}</td>
-                  <td className="max-w-[8rem] truncate px-2 py-1.5" title={r.user}>
-                    {r.user.slice(0, 6)}…{r.user.slice(-4)}
-                  </td>
-                  <td className="px-2 py-1.5 text-primary-fixed/90">#{r.hourId.toString()}</td>
-                  <td className="px-2 py-1.5">{formatMinuteUtc(r.minute)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <p className="mb-2 font-label text-[9px] uppercase tracking-widest text-secondary">Latest clicks</p>
+        <div className="space-y-2">
+          {liveRows.map((r) => (
+            <ClickCard key={r.key} r={r} animate={enterKey === r.key} />
+          ))}
         </div>
       </div>
+
+      {archiveTail.length > 0 ? (
+        <div className="space-y-2 border-t border-outline-variant/20 pt-4">
+          <p className="font-label text-[9px] uppercase tracking-widest text-secondary">Older</p>
+          <div className="hidden max-h-none overflow-visible border border-outline-variant/25 md:block">
+            <table className="w-full text-left font-mono text-[9px] text-on-surface">
+              <thead className="bg-surface-container-low/95 font-label uppercase tracking-wider text-secondary">
+                <tr>
+                  <th className="px-2 py-2">Block</th>
+                  <th className="px-2 py-2">Player</th>
+                  <th className="px-2 py-2">Round</th>
+                  <th className="px-2 py-2">Min UTC</th>
+                </tr>
+              </thead>
+              <tbody>
+                {archiveSlice.map((r) => (
+                  <tr key={r.key} className="border-t border-outline-variant/15">
+                    <td className="px-2 py-1.5 text-secondary">{r.blockNumber.toString()}</td>
+                    <td className="max-w-[8rem] truncate px-2 py-1.5" title={r.user}>
+                      {r.user.slice(0, 6)}…{r.user.slice(-4)}
+                    </td>
+                    <td className="px-2 py-1.5 text-primary-fixed/90">#{r.hourId.toString()}</td>
+                    <td className="px-2 py-1.5">{formatMinuteUtc(r.minute)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="space-y-2 md:hidden">
+            {archiveSlice.map((r) => (
+              <ClickCard key={r.key} r={r} animate={false} />
+            ))}
+          </div>
+
+          {archivePageCount > 1 ? (
+            <div className="flex flex-wrap items-center justify-center gap-1.5 pt-2 font-label text-[10px] uppercase tracking-widest">
+              <button
+                type="button"
+                disabled={archivePage <= 0}
+                onClick={() => setArchivePage((p) => Math.max(0, p - 1))}
+                className="border border-outline-variant/40 px-2 py-1 text-secondary disabled:opacity-30 hover:border-primary-fixed hover:text-primary-fixed"
+                aria-label="Previous page"
+              >
+                ←
+              </button>
+              {pageWindow.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setArchivePage(p)}
+                  className={cn(
+                    "min-w-[2rem] border px-2 py-1",
+                    p === archivePage
+                      ? "border-primary-fixed bg-primary-fixed/15 text-primary-fixed"
+                      : "border-outline-variant/40 text-secondary hover:border-primary-fixed/50"
+                  )}
+                >
+                  {p + 1}
+                </button>
+              ))}
+              <button
+                type="button"
+                disabled={archivePage >= archivePageCount - 1}
+                onClick={() => setArchivePage((p) => Math.min(archivePageCount - 1, p + 1))}
+                className="border border-outline-variant/40 px-2 py-1 text-secondary disabled:opacity-30 hover:border-primary-fixed hover:text-primary-fixed"
+                aria-label="Next page"
+              >
+                →
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }

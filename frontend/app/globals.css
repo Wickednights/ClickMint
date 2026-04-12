@@ -66,6 +66,21 @@ body {
   }
 }
 
+@keyframes clickmint-feed-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.clickmint-feed-item--enter {
+  animation: clickmint-feed-enter 0.38s ease-out;
+}
+
 .bg-noise {
   background-image: radial-gradient(circle at center, #131313 0%, #000000 100%);
 }
