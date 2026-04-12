@@ -90,8 +90,10 @@ export async function pimlicoEstimateFeesPerGas(parameters: {
       maxFeePerGas: hexToBigInt(tierRaw.maxFeePerGas),
       maxPriorityFeePerGas: hexToBigInt(tierRaw.maxPriorityFeePerGas),
     };
-  } catch {
-    throw new Error("pimlico_getUserOperationGasPrice: could not parse fee fields as hex bigint");
+  } catch (e) {
+    throw new Error("pimlico_getUserOperationGasPrice: could not parse fee fields as hex bigint", {
+      cause: e,
+    });
   }
 }
 
