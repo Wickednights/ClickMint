@@ -11,8 +11,8 @@ import { cn } from "@/lib/utils";
 const LOOKBACK_BLOCKS = 8_000n;
 const MAX_ROWS = 200;
 
-/** Newest clicks: show up to this many with “live” styling (no inner scrollbar). */
-const LIVE_FEED_MAX = 25;
+/** Default newest-click count before “Older” archive (full page). Sidebar passes a smaller value. */
+const DEFAULT_LIVE_FEED_MAX = 25;
 /** Paginate clicks older than the live window. */
 const ARCHIVE_PAGE_SIZE = 20;
 
@@ -80,26 +80,50 @@ function decodeClickedLogs(
   return out;
 }
 
-function formatMinuteUtc(m: number): string {
-  return `:${String(Math.min(59, Math.max(0, m))).padStart(2, "0")}`;
+/** Minute 0–59 within the *game hour* when the tx landed — not “now”. */
+function formatClickMinuteLine(m: number): string {
+  const mm = Math.min(59, Math.max(0, m));
+  return `:${String(mm).padStart(2, "0")} in hour`;
 }
 
-function ClickCard({ r, animate }: { r: ClickLogRow; animate: boolean }) {
+const MINUTE_IN_HOUR_HELP =
+  "UTC minute (0–59) within that game hour when the click was mined — not the current clock.";
+
+function ClickCard({
+  r,
+  animate,
+  genesisGameHour,
+}: {
+  r: ClickLogRow;
+  animate: boolean;
+  genesisGameHour: bigint | null;
+}) {
+  const roundLine =
+    genesisGameHour !== null
+      ? `Round ${(r.hourId >= genesisGameHour ? r.hourId - genesisGameHour + 1n : 1n).toString()}`
+      : `Hour #${r.hourId.toString()}`;
   return (
     <div
       className={cn(
-        "border border-outline-variant/25 bg-surface-container-low/50 px-3 py-2 font-mono text-[11px] text-on-surface",
+        "border border-outline-variant/25 bg-surface-container-low/50 px-3 py-2 text-center font-mono text-[11px] text-on-surface",
         animate && "clickmint-feed-item--enter"
       )}
     >
       <div className="flex justify-between gap-2 text-secondary">
-        <span>#{r.blockNumber.toString()}</span>
-        <span className="text-primary-fixed/90">{formatMinuteUtc(r.minute)} UTC</span>
+        <span className="truncate">#{r.blockNumber.toString()}</span>
+        <span className="shrink-0 text-primary-fixed/90" title={MINUTE_IN_HOUR_HELP}>
+          {formatClickMinuteLine(r.minute)}
+        </span>
       </div>
       <div className="mt-1 truncate text-[12px]" title={r.user}>
         {r.user.slice(0, 8)}…{r.user.slice(-6)}
       </div>
-      <div className="mt-0.5 text-[11px] text-secondary">Round #{r.hourId.toString()}</div>
+      <div
+        className="mt-1 font-headline text-base font-bold tracking-tight text-[#ff2ee8] drop-shadow-[0_0_10px_rgba(255,46,232,0.45)]"
+        title={genesisGameHour !== null ? "Round index since contract deployment" : "On-chain game hour bucket"}
+      >
+        {roundLine}
+      </div>
     </div>
   );
 }
@@ -108,9 +132,19 @@ type ClickHistoryPanelProps = {
   gameAddr: Address;
   /** Narrow sidebar: hide heatmap, tighter spacing (desktop sidebar). */
   compact?: boolean;
+  /** When set, hour cards show “Round N” as N = hourId − genesis + 1 (since deploy). */
+  genesisGameHour?: bigint | null;
+  /** Max rows in the live feed (default 25; sidebar uses 5). */
+  liveFeedMax?: number;
 };
 
-export function ClickHistoryPanel({ gameAddr, compact = false }: ClickHistoryPanelProps) {
+export function ClickHistoryPanel({
+  gameAddr,
+  compact = false,
+  genesisGameHour = null,
+  liveFeedMax: liveFeedMaxProp,
+}: ClickHistoryPanelProps) {
+  const liveCap = liveFeedMaxProp ?? DEFAULT_LIVE_FEED_MAX;
   const publicClient = usePublicClient({ chainId: baseSepolia.id });
   const [rows, setRows] = useState<ClickLogRow[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
@@ -182,8 +216,8 @@ export function ClickHistoryPanel({ gameAddr, compact = false }: ClickHistoryPan
     return () => clearTimeout(t);
   }, [topKey]);
 
-  const liveRows = rows.slice(0, LIVE_FEED_MAX);
-  const archiveTail = rows.length > LIVE_FEED_MAX ? rows.slice(LIVE_FEED_MAX) : [];
+  const liveRows = rows.slice(0, liveCap);
+  const archiveTail = rows.length > liveCap ? rows.slice(liveCap) : [];
   const archivePageCount = Math.max(1, Math.ceil(archiveTail.length / ARCHIVE_PAGE_SIZE));
 
   useEffect(() => {
@@ -240,7 +274,9 @@ export function ClickHistoryPanel({ gameAddr, compact = false }: ClickHistoryPan
             Live feed (newest first). Heatmap: 5-minute UTC buckets. Settlement uses exact minutes for POT overlap.
           </p>
         ) : (
-          <p className="font-body text-[11px] leading-snug text-secondary">Newest first · live</p>
+          <p className="font-body text-[11px] leading-snug text-secondary">
+            Newest first · live · “:MM in hour” = minute within that game hour when the tx mined (not current time).
+          </p>
         )}
       </div>
 
@@ -291,10 +327,14 @@ export function ClickHistoryPanel({ gameAddr, compact = false }: ClickHistoryPan
       ) : null}
 
       <div>
-        <p className="mb-2 font-label text-[10px] uppercase tracking-widest text-secondary md:text-[11px]">Latest clicks</p>
+        {!compact ? (
+          <p className="mb-2 font-label text-[10px] uppercase tracking-widest text-secondary md:text-[11px]">
+            Latest clicks
+          </p>
+        ) : null}
         <div className="space-y-2">
           {liveRows.map((r) => (
-            <ClickCard key={r.key} r={r} animate={enterKey === r.key} />
+            <ClickCard key={r.key} r={r} animate={enterKey === r.key} genesisGameHour={genesisGameHour} />
           ))}
         </div>
       </div>
@@ -309,7 +349,9 @@ export function ClickHistoryPanel({ gameAddr, compact = false }: ClickHistoryPan
                   <th className="px-2 py-2">Block</th>
                   <th className="px-2 py-2">Player</th>
                   <th className="px-2 py-2">Round</th>
-                  <th className="px-2 py-2">Min UTC</th>
+                  <th className="px-2 py-2" title={MINUTE_IN_HOUR_HELP}>
+                    In-hour min
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -319,8 +361,14 @@ export function ClickHistoryPanel({ gameAddr, compact = false }: ClickHistoryPan
                     <td className="max-w-[8rem] truncate px-2 py-1.5" title={r.user}>
                       {r.user.slice(0, 6)}…{r.user.slice(-4)}
                     </td>
-                    <td className="px-2 py-1.5 text-primary-fixed/90">#{r.hourId.toString()}</td>
-                    <td className="px-2 py-1.5">{formatMinuteUtc(r.minute)}</td>
+                    <td className="px-2 py-1.5 text-[#ff2ee8]">
+                      {genesisGameHour !== null
+                        ? (r.hourId >= genesisGameHour ? r.hourId - genesisGameHour + 1n : 1n).toString()
+                        : `#${r.hourId.toString()}`}
+                    </td>
+                    <td className="px-2 py-1.5" title={MINUTE_IN_HOUR_HELP}>
+                      {formatClickMinuteLine(r.minute)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -328,7 +376,7 @@ export function ClickHistoryPanel({ gameAddr, compact = false }: ClickHistoryPan
           </div>
           <div className="space-y-2 md:hidden">
             {archiveSlice.map((r) => (
-              <ClickCard key={r.key} r={r} animate={false} />
+              <ClickCard key={r.key} r={r} animate={false} genesisGameHour={genesisGameHour} />
             ))}
           </div>
 
