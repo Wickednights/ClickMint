@@ -18,6 +18,14 @@ Use this file to **record suggestions** from GitHub Copilot, Cursor, or human re
 
 ---
 
+## Operations / wallets (not from Copilot)
+
+| Date (UTC) | Area | Summary | Status | Notes |
+|------------|------|---------|--------|--------|
+| 2026-04-12 | MetaMask / Blockaid | New or rarely used domains (e.g. `*.vercel.app`) are often flagged as “malicious” until reputation improves. | Info | **Mitigations:** use a custom domain you control; in MetaMask use **Report** / dispute if available; ensure no phishing patterns; over time false positives can clear. Not fixable purely in app code. |
+
+---
+
 ## Backlog (from earlier reviews — triage as needed)
 
 | Idea | Where to look |

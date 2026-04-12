@@ -44,6 +44,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { ClickHistoryPanel } from "@/components/click-history-panel";
 import { EscrowPanel } from "@/components/escrow-panel";
 import { getClickAddress, getEscrowAddress, getGameAddress, getTrophyNftAddress } from "@/lib/addresses";
 import { economyPresetHint, economyPresetShortLabel } from "@/lib/economy-preset";
@@ -70,6 +71,51 @@ function utcQuarterLabel(w: number): string {
   return `${labels[Math.min(3, Math.max(0, w))]} UTC`;
 }
 
+/** Same 15m POT window as on-chain `utcWindow`, expressed in the viewer's local timezone. */
+function localQuarterRangeLabel(unixSec: number, quarter: number): string {
+  const base = new Date(unixSec * 1000);
+  const y = base.getUTCFullYear();
+  const mo = base.getUTCMonth();
+  const da = base.getUTCDate();
+  const utcHour = base.getUTCHours();
+  const startMin = quarter * 15;
+  const startMs = Date.UTC(y, mo, da, utcHour, startMin, 0);
+  const endMs = Date.UTC(y, mo, da, utcHour, startMin + 14, 59);
+  const opts: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
+  const s = new Date(startMs).toLocaleTimeString(undefined, opts);
+  const e = new Date(endMs).toLocaleTimeString(undefined, opts);
+  return `${s}–${e} your time`;
+}
+
+function formatEpochLocalShort(epochSec: number): string {
+  return new Date(epochSec * 1000).toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+/** Matches `ClickMintGame.gameHour`: hour id H covers unix seconds roughly [H*3600+21, (H+1)*3600+19]. */
+function gameHourUtcSlotLabel(hourId: bigint): string {
+  const H = Number(hourId);
+  if (!Number.isFinite(H) || H < 0) return "—";
+  const startSec = H * 3600 + 21;
+  const endSec = (H + 1) * 3600 + 19;
+  const fmt = (s: number) =>
+    new Date(s * 1000).toLocaleString("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "UTC",
+      timeZoneName: "short",
+    });
+  return `${fmt(startSec)} → ${fmt(endSec)}`;
+}
+
 function formatCountdown(totalSec: number): string {
   if (totalSec <= 0) return "0:00";
   const h = Math.floor(totalSec / 3600);
@@ -87,7 +133,7 @@ type PotRow = {
   entropy?: `0x${string}`;
 };
 
-type MobileTab = "terminal" | "history" | "trophies";
+type MobileTab = "terminal" | "history" | "trophies" | "clicks";
 
 function fmtToken(wei: bigint | undefined, maxFrac = 2) {
   if (wei === undefined) return "—";
@@ -250,6 +296,7 @@ export function ClickMintDashboard() {
       secUntilFinalizeGate,
       currentQuarter: utcWindowFromUnix(now),
       gameHourId: gameHourNow,
+      nextBoundaryEpochSec: Number(nextBoundary),
     };
   }, [gameHourNow, tickSec]);
 
@@ -561,7 +608,7 @@ export function ClickMintDashboard() {
       amt = parseEther(earlyAmt.trim() === "" ? "0" : earlyAmt.trim());
     } catch {
       sfxRef.current.playError();
-      toast.error("Early spend", { description: "Enter a valid $CLICK amount (on-chain uses ether-style decimals)." });
+      toast.error("Early claim", { description: "Enter a valid $CLICK amount (on-chain uses ether-style decimals)." });
       return;
     }
     if (amt === 0n) {
@@ -570,11 +617,11 @@ export function ClickMintDashboard() {
     }
     if (amt > cap) {
       sfxRef.current.playError();
-      toast.error("Early spend exceeds unvested", {
+      toast.error("Early claim exceeds unvested", {
         description:
           cap === 0n
             ? "You have 0 unvested $CLICK in the vesting vault. Clicks must grant baseClickReward, or wait for vesting after rewards."
-            : `Max early spend now: ${formatEther(cap)} $CLICK (unvested). Wallets often say "rejected" when simulation reverts.`,
+            : `Max early claim now: ${formatEther(cap)} $CLICK (unvested). Wallets often say "rejected" when simulation reverts.`,
       });
       return;
     }
@@ -597,7 +644,7 @@ export function ClickMintDashboard() {
       });
       void refetchUnvested();
       void refetchClaimable();
-      toast.success("Early spend (30/30/20/20)");
+      toast.success("Early claim (30/30/20/20 split on unvested)");
     } catch (e) {
       sfxRef.current.playError();
       const data = extractRevertData(e);
@@ -609,7 +656,7 @@ export function ClickMintDashboard() {
         msg = `${msg.slice(0, 120)} — If you did not cancel, the wallet may be hiding a revert; try a smaller amount.`;
       }
       console.error("earlySpendPending() failed", e);
-      toast.error("Early spend failed", { description: msg.slice(0, 260) });
+      toast.error("Early claim failed", { description: msg.slice(0, 260) });
     }
   };
 
@@ -672,60 +719,6 @@ export function ClickMintDashboard() {
 
   const terminalBody = (
     <>
-      {/* Centered CLICK hero — deposits only via header Credits */}
-      <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center justify-center space-y-4 px-1 py-2 md:py-8">
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-10 md:hidden">
-            <div className="pulse-ring h-64 w-64 rounded-full border border-primary-container" />
-          </div>
-          <button
-            type="button"
-            disabled={!canSendClick}
-            onClick={() => void onClick()}
-            className={cn(
-              "relative z-10 flex h-56 w-56 flex-col items-center justify-center font-headline font-black uppercase transition-transform active:scale-90",
-              "md:h-[17rem] md:w-[17rem] md:shrink-0",
-              "rounded-full border-4 border-primary-container bg-surface-container md:rounded-none md:border-0 md:bg-primary-fixed md:text-on-primary-fixed md:neon-pulse",
-              wrongChain && "ring-2 ring-amber-400/80"
-            )}
-          >
-            <span className="absolute inset-0 bg-gradient-to-tr from-primary-container/20 to-transparent md:hidden" />
-            <span className="relative z-20 font-headline text-5xl font-extrabold tracking-tighter text-white glitch-text md:text-6xl md:text-on-primary-fixed md:[text-shadow:none]">
-              CLICK
-            </span>
-            <span className="relative z-20 mt-1 font-label text-[10px] font-medium tracking-[0.3em] text-primary-fixed md:hidden">
-              EXECUTE
-            </span>
-          </button>
-          {wrongChain && (
-            <p className="max-w-xs text-center font-body text-[9px] uppercase tracking-wider text-amber-200/90">
-              Wrong network — tap CLICK to switch to Base Sepolia, or use the header link.
-            </p>
-          )}
-          <div className="border border-outline-variant/30 bg-surface-container-low px-4 py-2 font-label text-[10px] uppercase tracking-widest text-primary-fixed">
-            <span className="inline-flex items-center gap-2">
-              <span
-                className="material-symbols-outlined text-xs"
-                style={{ fontVariationSettings: `"FILL" 1, "wght" 400` } as CSSProperties}
-              >
-                bolt
-              </span>
-              {cooldownLabel !== null ? <>RATE LIMIT: {cooldownLabel}s</> : <>READY</>}
-            </span>
-          </div>
-          {gasless.status === "ready" ? (
-            <p className="max-w-md px-2 text-center font-body text-[10px] leading-snug text-secondary">
-              <span className="font-semibold text-primary-fixed/90">Gasless mode active</span> — clicks are free of gas. Your
-              EOA receives all rewards and uses your existing credits. Executor:{" "}
-              <span className="font-mono text-primary-fixed/85">
-                {gasless.smartAccountAddress
-                  ? `${gasless.smartAccountAddress.slice(0, 6)}…${gasless.smartAccountAddress.slice(-4)}`
-                  : "—"}
-              </span>
-              .
-            </p>
-          ) : null}
-      </div>
-
       {/* Setup / economy alerts */}
       <section className="mx-auto flex w-full max-w-sm flex-col items-center space-y-10 md:max-w-lg">
         {!gameLinkPending && !gameLinkOk && (
@@ -759,15 +752,43 @@ export function ClickMintDashboard() {
         {potClock ? (
           <div className="mt-2 space-y-2 font-body text-[11px] leading-relaxed text-secondary md:text-xs">
             <p>
-              <span className="text-on-surface/80">Game hour</span>{" "}
+              <span className="text-on-surface/80">Game hour index</span>{" "}
               <span className="font-mono text-primary-fixed">#{potClock.gameHourId.toString()}</span>
               <span className="mx-1.5 text-outline-variant">·</span>
-              <span className="text-on-surface/80">Your clicks now land in</span>{" "}
-              <span className="font-semibold text-primary-fixed">{utcQuarterLabel(potClock.currentQuarter)}</span>
+              <span className="text-on-surface/80">POT window (UTC + your time):</span>
+            </p>
+            <p className="text-[10px] leading-snug text-secondary opacity-90">
+              This index is the global UTC hour counter on-chain:{" "}
+              <span className="font-mono text-primary-fixed/80">(unixTime − {GAME_RESET_BUFFER_SEC}s) / 3600</span> — it is{" "}
+              <span className="font-semibold text-on-surface/85">not</span> “hours since this contract was deployed.” Large
+              numbers are normal (epoch hours). Approximate UTC span for this index:
+            </p>
+            <p className="font-mono text-[10px] text-primary-fixed/90">{gameHourUtcSlotLabel(potClock.gameHourId)}</p>
+            {prevHour !== undefined && prevFinalized !== undefined ? (
+              <p className="text-[10px] text-secondary opacity-90">
+                Previous index <span className="font-mono text-primary-fixed/80">#{prevHour.toString()}</span>{" "}
+                {prevFinalized ? (
+                  <span className="text-emerald-300/90">finalized on-chain</span>
+                ) : (
+                  <span className="text-amber-200/90">not finalized yet</span>
+                )}
+                .
+              </p>
+            ) : null}
+            <p className="font-semibold text-primary-fixed">
+              {utcQuarterLabel(potClock.currentQuarter)}
+              <span className="mx-1.5 font-normal text-outline-variant">·</span>
+              <span className="font-normal text-on-surface/85">
+                {localQuarterRangeLabel(tickSec, potClock.currentQuarter)}
+              </span>
             </p>
             <p className="font-headline text-sm font-bold tabular-nums text-white md:text-base">
               Next hour boundary:{" "}
               <span className="text-primary-fixed">{formatCountdown(potClock.secToHourEnd)}</span>
+            </p>
+            <p className="text-[10px] text-on-surface/70">
+              Clock aligns at ~{formatEpochLocalShort(potClock.nextBoundaryEpochSec)} your time (UTC hour +{" "}
+              {GAME_RESET_BUFFER_SEC}s reset buffer — same rules on-chain).
             </p>
             {prevHour !== undefined ? (
               <p>
@@ -784,7 +805,10 @@ export function ClickMintDashboard() {
                 ) : potClock.secUntilFinalizeGate !== null ? (
                   potClock.secUntilFinalizeGate > 0 ? (
                     <>
-                      <span className="text-on-surface/80">Finalize for hour #{prevHour.toString()} unlocks in</span>{" "}
+                      <span className="text-on-surface/80">
+                        Finalize for <span className="font-mono text-on-surface/90">previous</span> hour #
+                        {prevHour.toString()} unlocks in
+                      </span>{" "}
                       <span className="font-mono font-semibold text-primary-fixed">
                         {formatCountdown(potClock.secUntilFinalizeGate)}
                       </span>
@@ -794,7 +818,13 @@ export function ClickMintDashboard() {
                     </>
                   ) : (
                     <>
-                      <span className="text-amber-200/90">Hour #{prevHour.toString()} ready to finalize</span>
+                      <span className="text-amber-200/90">
+                        Previous hour #{prevHour.toString()} ready to finalize
+                      </span>
+                      <span className="block pt-0.5 text-[10px] font-normal normal-case text-secondary opacity-90">
+                        You are in hour #{potClock.gameHourId.toString()} now — #{prevHour.toString()} is the one that
+                        just ended and still needs <span className="font-mono">finalizeHour</span> on-chain.
+                      </span>
                       <span className="block pt-0.5 text-[10px] opacity-75">
                         Owner: run Finalize below — the winning UTC quarter appears on-chain after that tx.
                       </span>
@@ -808,6 +838,60 @@ export function ClickMintDashboard() {
           <p className="mt-2 font-body text-[11px] text-secondary">Loading on-chain hour…</p>
         )}
       </section>
+
+      {/* Centered CLICK hero — deposits only via header Credits */}
+      <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center justify-center space-y-4 px-1 py-2 md:py-8">
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-10 md:hidden">
+          <div className="pulse-ring h-64 w-64 rounded-full border border-primary-container" />
+        </div>
+        <button
+          type="button"
+          disabled={!canSendClick}
+          onClick={() => void onClick()}
+          className={cn(
+            "relative z-10 flex h-56 w-56 flex-col items-center justify-center font-headline font-black uppercase transition-transform active:scale-90",
+            "md:h-[17rem] md:w-[17rem] md:shrink-0",
+            "rounded-full border-4 border-primary-container bg-surface-container md:rounded-none md:border-0 md:bg-primary-fixed md:text-on-primary-fixed md:neon-pulse",
+            wrongChain && "ring-2 ring-amber-400/80"
+          )}
+        >
+          <span className="absolute inset-0 bg-gradient-to-tr from-primary-container/20 to-transparent md:hidden" />
+          <span className="relative z-20 font-headline text-5xl font-extrabold tracking-tighter text-white glitch-text md:text-6xl md:text-on-primary-fixed md:[text-shadow:none]">
+            CLICK
+          </span>
+          <span className="relative z-20 mt-1 font-label text-[10px] font-medium tracking-[0.3em] text-primary-fixed md:hidden">
+            EXECUTE
+          </span>
+        </button>
+        {wrongChain && (
+          <p className="max-w-xs text-center font-body text-[9px] uppercase tracking-wider text-amber-200/90">
+            Wrong network — tap CLICK to switch to Base Sepolia, or use the header link.
+          </p>
+        )}
+        <div className="border border-outline-variant/30 bg-surface-container-low px-4 py-2 font-label text-[10px] uppercase tracking-widest text-primary-fixed">
+          <span className="inline-flex items-center gap-2">
+            <span
+              className="material-symbols-outlined text-xs"
+              style={{ fontVariationSettings: `"FILL" 1, "wght" 400` } as CSSProperties}
+            >
+              bolt
+            </span>
+            {cooldownLabel !== null ? <>RATE LIMIT: {cooldownLabel}s</> : <>READY</>}
+          </span>
+        </div>
+        {gasless.status === "ready" ? (
+          <p className="max-w-md px-2 text-center font-body text-[10px] leading-snug text-secondary">
+            <span className="font-semibold text-primary-fixed/90">Gasless mode active</span> — clicks are free of gas. Your
+            EOA receives all rewards and uses your existing credits. Executor:{" "}
+            <span className="font-mono text-primary-fixed/85">
+              {gasless.smartAccountAddress
+                ? `${gasless.smartAccountAddress.slice(0, 6)}…${gasless.smartAccountAddress.slice(-4)}`
+                : "—"}
+            </span>
+            .
+          </p>
+        ) : null}
+      </div>
 
       {/* Stats — top center */}
       <section className="flex w-full max-w-xl flex-col items-center">
@@ -869,7 +953,7 @@ export function ClickMintDashboard() {
               onChange={(e) => setEarlyAmt(e.target.value)}
               className="min-w-[5rem] flex-1 border-b border-outline bg-transparent py-1.5 font-body text-[11px] text-primary-fixed focus:border-primary-fixed focus:outline-none sm:max-w-[7rem] md:text-xs"
               placeholder="0"
-              title="Amount of unvested $CLICK to early-liquidate (≤ Unvested)"
+              title="Amount of unvested $CLICK to claim early (≤ Unvested)"
             />
             <button
               type="button"
@@ -885,9 +969,17 @@ export function ClickMintDashboard() {
               onClick={() => void onEarlySpend()}
               className="font-label text-[11px] font-bold uppercase tracking-widest text-primary-fixed hover:text-white disabled:opacity-30 md:text-xs"
             >
-              Early spend
+              Early claim
             </button>
           </div>
+          <p className="mt-2 max-w-md text-center font-body text-[10px] leading-snug text-secondary opacity-85 md:text-[11px]">
+            <span className="font-semibold text-on-surface/90">Early claim</span> calls{" "}
+            <span className="font-mono text-primary-fixed/90">earlySpendPending</span> on <span className="font-mono">CLICK</span>
+            : it pulls from your <span className="font-semibold">unvested</span> vault balance only (not the same as{" "}
+            <span className="font-semibold">Claim vested</span> above). The protocol splits that amount{" "}
+            <span className="font-mono">30/30/20/20</span> (burn / treasury / LP / you) per the contract — you receive less
+            than full face value.
+          </p>
           {canAct && !parsedEarlySpend.ok && (
             <p className="mt-1 font-body text-[10px] text-amber-200/90 md:text-[11px]">
               Invalid amount — use a decimal number (wei parsed as ether).
@@ -900,7 +992,7 @@ export function ClickMintDashboard() {
           )}
           {canAct && unvestedCap === 0n && (
             <p className="mt-1 font-body text-[10px] text-secondary opacity-80 md:text-[11px]">
-              No unvested balance — early spend will revert (wallet may show “User rejected”).
+              No unvested balance — early claim will revert (wallet may show “User rejected”).
             </p>
           )}
         </div>
@@ -976,27 +1068,24 @@ export function ClickMintDashboard() {
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-primary-container/[0.04]" />
       </div>
 
-      {/* Header — md: true center for Credits/BGM/SFX via3-column grid */}
-      <header className="fixed left-0 top-0 z-50 flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-outline-variant/20 bg-surface/90 px-4 py-3 font-headline uppercase tracking-tighter backdrop-blur-sm md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center md:gap-x-4 md:px-6 md:py-4">
-        <div className="flex min-w-0 flex-col gap-0.5 md:block md:justify-self-start">
+      {/* Header — md: 3-col grid; overflow contained (long preset = tooltip only on md) */}
+      <header className="fixed left-0 top-0 z-50 max-w-[100vw] flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-2 overflow-x-hidden border-b border-outline-variant/20 bg-surface/90 px-3 py-3 font-headline uppercase tracking-tighter backdrop-blur-sm sm:px-4 md:grid md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center md:gap-x-3 md:px-4 md:py-4 lg:px-6">
+        <div className="min-w-0 max-w-[100%] flex-col gap-0.5 overflow-hidden md:block md:justify-self-start">
           <div className="flex min-w-0 items-center gap-2">
             <span className="material-symbols-outlined shrink-0 text-primary-fixed md:hidden">token</span>
             <span className="truncate text-lg font-black tracking-tighter text-white md:text-2xl">CLICKMINT</span>
             <Link
               href="/documentation"
-              className="ml-2 shrink-0 font-label text-[9px] uppercase tracking-widest text-primary-fixed/75 hover:text-primary-fixed md:ml-3"
+              className="ml-1 shrink-0 font-label text-[9px] uppercase tracking-widest text-primary-fixed/75 hover:text-primary-fixed md:ml-2"
             >
               Docs
             </Link>
           </div>
           <p
-            className="max-w-[min(100%,28rem)] font-label text-[7px] uppercase leading-tight tracking-widest text-secondary/90 md:text-[8px]"
-            title={economyPresetHint()}
+            className="truncate font-label text-[7px] uppercase leading-tight tracking-widest text-secondary/90 md:text-[8px]"
+            title={`${economyPresetShortLabel()} — ${economyPresetHint()}`}
           >
-            <span className="md:hidden">{economyPresetShortLabel()}</span>
-            <span className="hidden md:inline">
-              {economyPresetShortLabel()} — {economyPresetHint()}
-            </span>
+            {economyPresetShortLabel()}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1 md:justify-self-center md:gap-1.5">
@@ -1044,13 +1133,13 @@ export function ClickMintDashboard() {
             SFX
           </button>
         </div>
-        <div className="flex min-w-0 flex-col items-end gap-1 md:justify-self-end">
+        <div className="flex min-w-0 max-w-full flex-col items-end gap-1 overflow-hidden md:max-w-[min(18rem,32vw)] md:justify-self-end">
           {isConnected ? (
             <>
               <button
                 type="button"
                 onClick={() => disconnect()}
-                className="max-w-[11rem] truncate bg-primary-container px-3 py-1.5 font-headline text-[11px] font-bold tracking-widest text-on-primary-fixed transition-all hover:brightness-110 active:scale-95 md:max-w-none md:px-4 md:text-xs"
+                className="max-w-full truncate bg-primary-container px-2 py-1.5 font-headline text-[10px] font-bold tracking-widest text-on-primary-fixed transition-all hover:brightness-110 active:scale-95 sm:px-3 md:max-w-[13rem] md:px-4 md:text-xs"
               >
                 {address?.slice(0, 6)}…{address?.slice(-4)}
               </button>
@@ -1065,8 +1154,8 @@ export function ClickMintDashboard() {
                 </button>
               )}
               {isPimlicoConfigured() ? (
-                <div className="mt-1 flex max-w-[14rem] flex-col items-end gap-1 md:max-w-none">
-                  <p className="text-right font-label text-[8px] uppercase leading-tight tracking-widest text-secondary">
+                <div className="mt-1 flex w-full max-w-full flex-col items-end gap-1 overflow-hidden md:max-w-[13rem]">
+                  <p className="w-full truncate text-right font-label text-[8px] uppercase leading-tight tracking-widest text-secondary">
                     {gasless.status === "ready"
                       ? "Gasless mode active"
                       : isConnected
@@ -1200,24 +1289,54 @@ export function ClickMintDashboard() {
           <p className="text-[10px] text-secondary opacity-50">BASE_NETWORK_ACTIVE</p>
         </div>
         <nav className="flex flex-col space-y-1">
-          <div className="flex items-center gap-3 border-l-2 border-primary-container bg-surface-container-low px-6 py-3 font-label text-xs uppercase tracking-[0.15em] text-white">
-            <Icon name="terminal" className="text-sm" />
-            Terminal
-          </div>
           <button
             type="button"
-            onClick={() => setHistoryOpen(true)}
-            className="flex items-center gap-3 px-6 py-3 text-left font-label text-xs uppercase tracking-[0.15em] text-secondary transition-all hover:bg-surface-container-low hover:text-white"
+            onClick={() => setMobileTab("terminal")}
+            className={cn(
+              "flex w-full items-center gap-3 px-6 py-3 text-left font-label text-xs uppercase tracking-[0.15em] transition-all hover:bg-surface-container-low hover:text-white",
+              mobileTab === "terminal"
+                ? "border-l-2 border-primary-container bg-surface-container-low text-white"
+                : "text-secondary"
+            )}
+          >
+            <Icon name="terminal" className="text-sm" />
+            Terminal
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab("clicks")}
+            className={cn(
+              "flex w-full items-center gap-3 px-6 py-3 text-left font-label text-xs uppercase tracking-[0.15em] transition-all hover:bg-surface-container-low hover:text-white",
+              mobileTab === "clicks"
+                ? "border-l-2 border-primary-container bg-surface-container-low text-white"
+                : "text-secondary"
+            )}
+          >
+            <Icon name="touch_app" className="text-sm" />
+            Click history
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab("history")}
+            className={cn(
+              "flex w-full items-center gap-3 px-6 py-3 text-left font-label text-xs uppercase tracking-[0.15em] transition-all hover:bg-surface-container-low hover:text-white",
+              mobileTab === "history"
+                ? "border-l-2 border-primary-container bg-surface-container-low text-white"
+                : "text-secondary"
+            )}
           >
             <Icon name="military_tech" className="text-sm" />
             Pot history
           </button>
           <button
             type="button"
-            onClick={() => {
-              setHistoryOpen(true);
-            }}
-            className="flex items-center gap-3 px-6 py-3 text-left font-label text-xs uppercase tracking-[0.15em] text-secondary transition-all hover:bg-surface-container-low hover:text-white"
+            onClick={() => setMobileTab("trophies")}
+            className={cn(
+              "flex w-full items-center gap-3 px-6 py-3 text-left font-label text-xs uppercase tracking-[0.15em] transition-all hover:bg-surface-container-low hover:text-white",
+              mobileTab === "trophies"
+                ? "border-l-2 border-primary-container bg-surface-container-low text-white"
+                : "text-secondary"
+            )}
           >
             <Icon name="workspace_premium" className="text-sm" />
             Trophy room
@@ -1262,6 +1381,8 @@ export function ClickMintDashboard() {
             <WinnerTable rows={potRows} />
           </section>
         )}
+
+        {mobileTab === "clicks" && <ClickHistoryPanel gameAddr={gameAddr} />}
       </main>
 
       {/* Desktop footer */}
@@ -1283,41 +1404,52 @@ export function ClickMintDashboard() {
       </footer>
 
       {/* Mobile bottom nav */}
-      <nav className="fixed bottom-0 left-0 z-50 flex h-20 w-full items-stretch justify-around border-t border-outline-variant/30 bg-surface pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1 shadow-[0_-4px_20px_rgba(0,251,251,0.05)] md:hidden">
+      <nav className="fixed bottom-0 left-0 z-50 grid h-[4.25rem] w-full max-w-[100vw] grid-cols-4 items-stretch border-t border-outline-variant/30 bg-surface pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-0.5 shadow-[0_-4px_20px_rgba(0,251,251,0.05)] md:hidden">
         <button
           type="button"
           onClick={() => setMobileTab("terminal")}
           className={cn(
-            "flex flex-1 flex-col items-center justify-center gap-1 font-headline text-[10px] font-bold uppercase tracking-[0.15em] transition-colors",
+            "flex min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 font-headline text-[8px] font-bold uppercase tracking-[0.12em] transition-colors sm:text-[9px]",
             mobileTab === "terminal"
               ? "border-t-2 border-primary-fixed text-primary-fixed"
               : "text-secondary opacity-50"
           )}
         >
-          <Icon name="terminal" />
-          Terminal
+          <Icon name="terminal" className="!text-lg" />
+          Term
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab("clicks")}
+          className={cn(
+            "flex min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 font-headline text-[8px] font-bold uppercase tracking-[0.12em] transition-colors sm:text-[9px]",
+            mobileTab === "clicks" ? "border-t-2 border-primary-fixed text-primary-fixed" : "text-secondary opacity-50"
+          )}
+        >
+          <Icon name="touch_app" className="!text-lg" />
+          Clicks
         </button>
         <button
           type="button"
           onClick={() => setMobileTab("history")}
           className={cn(
-            "flex flex-1 flex-col items-center justify-center gap-1 font-headline text-[10px] font-bold uppercase tracking-[0.15em] transition-colors hover:opacity-100",
+            "flex min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 font-headline text-[8px] font-bold uppercase tracking-[0.12em] transition-colors sm:text-[9px]",
             mobileTab === "history" ? "border-t-2 border-primary-fixed text-primary-fixed" : "text-secondary opacity-50"
           )}
         >
-          <Icon name="history" />
-          History
+          <Icon name="military_tech" className="!text-lg" />
+          POT
         </button>
         <button
           type="button"
           onClick={() => setMobileTab("trophies")}
           className={cn(
-            "flex flex-1 flex-col items-center justify-center gap-1 font-headline text-[10px] font-bold uppercase tracking-[0.15em] transition-colors hover:opacity-100",
+            "flex min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 font-headline text-[8px] font-bold uppercase tracking-[0.12em] transition-colors sm:text-[9px]",
             mobileTab === "trophies" ? "border-t-2 border-primary-fixed text-primary-fixed" : "text-secondary opacity-50"
           )}
         >
-          <Icon name="emoji_events" />
-          Trophies
+          <Icon name="emoji_events" className="!text-lg" />
+          Trophy
         </button>
       </nav>
 
