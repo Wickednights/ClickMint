@@ -42,11 +42,13 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     mapping(uint256 hourId => bool) public hourFinalized;
     mapping(uint256 hourId => address) public hourWinner;
     mapping(uint256 hourId => uint256) public hourPayout;
+    /// @notice Start UTC minute (0–44) of the winning 15-minute span for this hour after `finalizeHour`. Not valid until finalized.
     mapping(uint256 hourId => uint8) public hourWinWindow;
 
     mapping(address => uint256) public credits;
     mapping(uint256 hourId => mapping(address => uint256)) public clicksInHour;
-    mapping(uint256 hourId => mapping(address => uint8)) public windowMask;
+    /// @notice Bit `m` set if player clicked at least once in UTC minute `m` (0–59) of this game hour. Used for POT overlap with random span.
+    mapping(uint256 hourId => mapping(address => uint64)) public minuteMask;
     mapping(uint256 hourId => mapping(address => bool)) internal _hourListed;
     mapping(uint256 hourId => address[]) internal _participants;
 
@@ -65,8 +67,10 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     BinaryTrophyNFT public trophyNft;
 
     event Deposited(address indexed user, uint256 ethIn, uint256 creditsOut);
-    event Clicked(address indexed user, uint256 hourId, uint256 totalForUserHour, uint8 window);
-    event PotWin(uint256 indexed hourId, address indexed winner, uint256 clickPayout, uint8 window, bytes32 entropy);
+    /// @param minute UTC minute 0–59 within the game hour when this click was mined.
+    event Clicked(address indexed user, uint256 hourId, uint256 totalForUserHour, uint8 minute);
+    /// @param winStartMinute UTC minute 0–44; winning span is `[winStartMinute, winStartMinute + 14]` inclusive (15 minutes), within the same calendar hour.
+    event PotWin(uint256 indexed hourId, address indexed winner, uint256 clickPayout, uint8 winStartMinute, bytes32 entropy);
     event AddressesUpdated(address indexed treasury, address indexed secret);
     event EconomyUpdated(uint256 clickPerEthWei, uint256 clickCostCredits, uint256 baseClickReward);
     event ClickExecutorSet(address indexed player, address indexed executor);
@@ -126,7 +130,9 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     }
 
     /// @notice Set who may call `finalizeHour` besides `owner`. Use a dedicated automation/relayer address; set to zero to disable.
-    function setPotKeeper(address k) external onlyOwner whenNotPaused {
+    /// @dev Intentionally **not** `whenNotPaused`: if a keeper key is compromised, owner must be able to rotate or clear it **while paused**
+    /// before unpausing (otherwise a bad keeper could race `finalizeHour` on unpause). `finalizeHour` itself stays `whenNotPaused`.
+    function setPotKeeper(address k) external onlyOwner {
         potKeeper = k;
         emit PotKeeperSet(k);
     }
@@ -195,9 +201,18 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         return (ts % 3600) / 60;
     }
 
-    /// @dev 15-minute window index 0..3 within the UTC hour — used for POT eligibility.
-    function utcWindow(uint256 ts) public pure returns (uint8) {
-        return uint8(_minuteInUtcHour(ts) / 15);
+    /// @dev UTC minute 0..59 within the calendar hour (`ts` in unix seconds).
+    function minuteOfUtcHour(uint256 ts) public pure returns (uint8) {
+        return uint8(_minuteInUtcHour(ts));
+    }
+
+    /// @dev 15 consecutive UTC minutes starting at `start` (0–44); mask has bits `start..start+14` set.
+    function _eligibleSpanMask(uint8 start) internal pure returns (uint64 m) {
+        unchecked {
+            for (uint256 i; i < 15; ++i) {
+                m |= uint64(1) << uint64(start + i);
+            }
+        }
     }
 
     /// @dev Extra game credits on larger single deposits (same wei units as `credits`). Tiers: 1%..10% of deposit.
@@ -267,12 +282,14 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         }
 
         uint256 hid = gameHour(block.timestamp);
-        uint8 w = utcWindow(block.timestamp);
+        uint256 m = _minuteInUtcHour(block.timestamp);
+        require(m < 60, "game: minute");
+        uint8 minute = uint8(m);
 
         uint256 c = clicksInHour[hid][player] + 1;
         clicksInHour[hid][player] = c;
         totalClicksInHour[hid]++;
-        windowMask[hid][player] |= uint8(1 << w);
+        minuteMask[hid][player] |= uint64(1) << uint64(minute);
 
         uint256 tier = totalClicksInHour[hid] / clicksPerHashTier;
         uint256 needBits = tier > 4 ? 4 : tier;
@@ -288,7 +305,7 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
             _participants[hid].push(player);
         }
 
-        emit Clicked(player, hid, c, w);
+        emit Clicked(player, hid, c, minute);
 
         uint256 reward = baseClickReward;
         if (reward > 0) clickToken.grantVested(player, reward);
@@ -322,7 +339,9 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         bytes32 entropy = keccak256(
             abi.encodePacked(block.prevrandao, hourId, address(this), block.timestamp, _potNonce, block.number)
         );
-        uint8 winWindow = uint8(uint256(entropy) % 4);
+        /// Random start minute 0..44 so the 15-minute span stays within the hour (minutes 0..59).
+        uint8 winStartMinute = uint8(uint256(entropy) % 45);
+        uint64 eligible = _eligibleSpanMask(winStartMinute);
 
         address[] storage parts = _participants[hourId];
         address[] memory cand = new address[](parts.length);
@@ -330,18 +349,18 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         for (uint256 i = 0; i < parts.length; ++i) {
             address a = parts[i];
             if (clicksInHour[hourId][a] < MIN_POT_CLICKS) continue;
-            if ((windowMask[hourId][a] & uint8(1 << winWindow)) == 0) continue;
+            if ((minuteMask[hourId][a] & eligible) == 0) continue;
             cand[n++] = a;
         }
 
-        hourWinWindow[hourId] = winWindow;
+        hourWinWindow[hourId] = winStartMinute;
 
         uint256 pe = potEthByHour[hourId];
         potEthByHour[hourId] = 0;
 
         if (n == 0) {
             potCarry += pe;
-            emit PotWin(hourId, address(0), 0, winWindow, entropy);
+            emit PotWin(hourId, address(0), 0, winStartMinute, entropy);
             return;
         }
 
@@ -356,7 +375,7 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
 
         if (payout > 0) clickToken.mint(winner, payout);
 
-        emit PotWin(hourId, winner, payout, winWindow, entropy);
+        emit PotWin(hourId, winner, payout, winStartMinute, entropy);
     }
 
     function currentPotEth() external view returns (uint256) {

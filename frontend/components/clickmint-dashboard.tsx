@@ -61,31 +61,16 @@ const GAME_RESET_BUFFER_SEC = 20;
 
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000" as const;
 
-/** 15-minute POT window index 0..3 (same as on-chain `utcWindow`). */
-function utcWindowFromUnix(sec: number): number {
-  const minuteInHour = Math.floor((sec % 3600) / 60);
-  return Math.min(3, Math.floor(minuteInHour / 15));
+/** UTC minute-of-hour 0..59 (same as on-chain `_minuteInUtcHour`). */
+function minuteInHourFromUnix(sec: number): number {
+  return Math.floor((sec % 3600) / 60);
 }
 
-function utcQuarterLabel(w: number): string {
-  const labels = [":00–:14", ":15–:29", ":30–:44", ":45–:59"];
-  return `${labels[Math.min(3, Math.max(0, w))]} UTC`;
-}
-
-/** Same 15m POT window as on-chain `utcWindow`, expressed in the viewer's local timezone. */
-function localQuarterRangeLabel(unixSec: number, quarter: number): string {
-  const base = new Date(unixSec * 1000);
-  const y = base.getUTCFullYear();
-  const mo = base.getUTCMonth();
-  const da = base.getUTCDate();
-  const utcHour = base.getUTCHours();
-  const startMin = quarter * 15;
-  const startMs = Date.UTC(y, mo, da, utcHour, startMin, 0);
-  const endMs = Date.UTC(y, mo, da, utcHour, startMin + 14, 59);
-  const opts: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
-  const s = new Date(startMs).toLocaleTimeString(undefined, opts);
-  const e = new Date(endMs).toLocaleTimeString(undefined, opts);
-  return `${s}–${e} your time`;
+/** Winning POT span after finalize: `startMinute` is 0..44; span is 15 consecutive UTC minutes. */
+function utcPotSpanLabel(startMinute: number): string {
+  if (startMinute < 0 || startMinute > 44) return "—";
+  const endMinute = startMinute + 14;
+  return `:${String(startMinute).padStart(2, "0")}–:${String(endMinute).padStart(2, "0")} UTC`;
 }
 
 function formatEpochLocalShort(epochSec: number): string {
@@ -130,7 +115,8 @@ type PotRow = {
   hourId: bigint;
   winner: Address;
   payout: bigint;
-  window: number;
+  /** Start UTC minute 0–44 of the winning 15-minute span. */
+  winStartMinute: number;
   entropy?: `0x${string}`;
 };
 
@@ -165,7 +151,7 @@ function WinnerTable({ rows }: { rows: PotRow[] }) {
         <thead>
           <tr className="font-label uppercase tracking-widest text-secondary">
             <th className="pb-2 pr-2">Hr</th>
-            <th className="pb-2 pr-2">Slot</th>
+            <th className="pb-2 pr-2">Span</th>
             <th className="pb-2 pr-2">Winner</th>
             <th className="pb-2">$CLICK</th>
           </tr>
@@ -175,7 +161,7 @@ function WinnerTable({ rows }: { rows: PotRow[] }) {
             <tr key={`${r.hourId}-${r.entropy ?? ""}`} className="border-t border-outline-variant/20">
               <td className="py-2 pr-2 text-primary-fixed">{r.hourId.toString()}</td>
               <td className="py-2 pr-2 font-mono text-[9px] text-secondary">
-                {utcQuarterLabel(Number(r.window))}
+                {utcPotSpanLabel(Number(r.winStartMinute))}
               </td>
               <td className="max-w-[9rem] truncate py-2 pr-2">{r.winner}</td>
               <td className="py-2 text-primary">{fmtToken(r.payout, 4)}</td>
@@ -295,7 +281,7 @@ export function ClickMintDashboard() {
     return {
       secToHourEnd,
       secUntilFinalizeGate,
-      currentQuarter: utcWindowFromUnix(now),
+      currentMinuteUtc: minuteInHourFromUnix(now),
       gameHourId: gameHourNow,
       nextBoundaryEpochSec: Number(nextBoundary),
     };
@@ -413,7 +399,7 @@ export function ClickMintDashboard() {
           hourId: bigint;
           winner: Address;
           clickPayout: bigint;
-          window: number;
+          winStartMinute: number;
           entropy: `0x${string}`;
         };
         if (!args?.winner || args.winner === ZERO_ADDR) {
@@ -425,7 +411,7 @@ export function ClickMintDashboard() {
           hourId: args.hourId,
           winner: args.winner,
           payout: args.clickPayout,
-          window: args.window,
+          winStartMinute: args.winStartMinute,
           entropy: args.entropy,
         });
         sfxRef.current.playWin();
@@ -764,13 +750,22 @@ export function ClickMintDashboard() {
               ~{formatEpochLocalShort(potClock.nextBoundaryEpochSec)} your time
             </p>
             <div className="rounded border border-outline-variant/20 bg-black/30 px-2 py-2 text-left sm:text-center">
-              <p className="text-[10px] text-on-surface/70">This round</p>
+              <p className="text-[10px] text-on-surface/70">Clock (minute you click is tagged)</p>
               <p className="mt-0.5 font-semibold text-primary-fixed">
-                {utcQuarterLabel(potClock.currentQuarter)}
+                :{String(potClock.currentMinuteUtc).padStart(2, "0")} UTC
                 <span className="mx-1.5 font-normal text-outline-variant">·</span>
                 <span className="font-normal text-on-surface/85">
-                  {localQuarterRangeLabel(tickSec, potClock.currentQuarter)}
+                  {new Date(tickSec * 1000).toLocaleTimeString(undefined, {
+                    hour: "numeric",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })}{" "}
+                  your time
                 </span>
+              </p>
+              <p className="mt-1.5 text-[9px] leading-snug text-secondary opacity-90">
+                At settlement, one random 15-minute span is chosen (UTC start minute 0–44). You need enough clicks in the hour
+                and at least one click inside that span.
               </p>
             </div>
             <p className="text-[10px] text-secondary opacity-90">
@@ -792,9 +787,9 @@ export function ClickMintDashboard() {
               <div className="text-[10px] leading-snug">
                 {prevFinalized ? (
                   <p className="text-secondary">
-                    Last winner&apos;s slot:{" "}
+                    Last winner&apos;s span:{" "}
                     <span className="font-semibold text-primary-fixed">
-                      {prevHourWinWindow !== undefined ? utcQuarterLabel(Number(prevHourWinWindow)) : "—"}
+                      {prevHourWinWindow !== undefined ? utcPotSpanLabel(Number(prevHourWinWindow)) : "—"}
                     </span>
                   </p>
                 ) : potClock.secUntilFinalizeGate !== null ? (

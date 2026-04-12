@@ -82,16 +82,26 @@ export function trimEtherString(s: string): string {
 }
 
 /**
- * Human-readable **$CLICK** from wei for UI (avoids 18-decimal noise). Display-only; on-chain values are exact.
+ * Human-readable **$CLICK** from wei for UI. **Truncates** (floors) to `maxFractionDigits` — never rounds up, so users never see
+ * more than they can spend. If balance is positive but below one display step, shows `<0.01` (or `<0.001` for 3 decimals, etc.).
  */
 export function formatClickDisplayWei(wei: bigint, maxFractionDigits = 2): string {
   if (wei === 0n) return "0";
-  const n = Number(formatEther(wei));
-  if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("en-US", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: maxFractionDigits,
-  });
+  if (wei < 0n) return "—";
+  const d = Math.min(18, Math.max(0, maxFractionDigits));
+  const scale = 10n ** BigInt(18 - d);
+  const truncWei = (wei / scale) * scale;
+  if (wei > 0n && truncWei === 0n) {
+    if (d === 0) return "<1";
+    return `<0.${"0".repeat(d - 1)}1`;
+  }
+  const s = formatEther(truncWei);
+  const [wholeRaw, fracRaw = ""] = s.split(".");
+  const wholeWithSep = wholeRaw.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (d === 0) return wholeWithSep;
+  const fracTrunc = fracRaw.slice(0, d).replace(/0+$/, "");
+  if (fracTrunc === "") return wholeWithSep;
+  return `${wholeWithSep}.${fracTrunc}`;
 }
 
 /**
