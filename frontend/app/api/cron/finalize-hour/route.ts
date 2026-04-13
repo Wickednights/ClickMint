@@ -15,10 +15,9 @@ export const maxDuration = 60;
  * **same** deployment target as the cron (usually **Production**). If cron hits Production but secrets
  * are only set for Preview, you get 500 / Unauthorized.
  *
- * **Schedule:** Vercel cron has **minute** granularity only (no “15 seconds before the hour”). Also,
- * `finalizeHour` for the *previous* game hour is only valid **after** that hour ends plus **`RESET_BUFFER`
- * (20s)** — running *before* the top of the hour will revert (`GameFinalizeEarly`). Use a **1–2 minute**
- * cadence (or every minute) so the first successful run lands after the window opens.
+ * **Schedule:** `1,6,11,16,21,26,31,36,41,46,51,56 * * * *` — first tick **:01** past each hour, then every **5 minutes**
+ * so the previous game hour has multiple chances to settle. Vercel cron is minute granularity only.
+ * `finalizeHour` for the *previous* game hour is only valid **after** that hour ends plus **`RESET_BUFFER` (20s)**.
  *
  * @see docs/LP_AERODROME_AND_AUTOMATION.md
  */

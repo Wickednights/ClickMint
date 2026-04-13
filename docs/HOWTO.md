@@ -64,7 +64,7 @@ Optional: set **`EXPECTED_MAX_SUPPLY_WEI`** to the deployed cap (mainnet-style *
 
 On **ClickMintGame**, owner can call:
 
-- `setEconomy(clickPerEthWei, clickCostCredits, baseClickReward)` — POT mint rate, per-click credit cost, per-click vested CLICK grant.
+- `setEconomy(clickPerEthWei, clickCostCredits, baseClickReward)` — **`clickPerEthWei` is legacy** (kept for ABI / deploy compat); the hourly **POT pays accumulated ETH**, not minted $CLICK. **`clickCostCredits`** and **`baseClickReward`** still tune per-click credits and vested CLICK grants.
 
 If **`baseClickReward`** is `0`, clicks do not add to users’ CLICK vesting vault; early spend will have no unvested balance.
 

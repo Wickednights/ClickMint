@@ -9,13 +9,13 @@ Deploy-time presets are **`TESTNET_PRESET`** and **`MAINNET_PRESET`**. Choose wi
 | **`vestingDuration` (CLICK)** | `600` s (10 min) | `604_800` s (7 days) |
 | **`clickCostCredits`** | `1e13` wei (~0.00001 ETH of credits per click) | `1e18 / (MAINNET_ETH_USD × 100)` (~1 cent/click at default **3500** USD/ETH) |
 | **`clicksPerHashTier`** | `50_000` (looser QA) | `2_500` (tighter) |
-| **`clickPerEthWei` / `baseClickReward`** | shared defaults | shared defaults |
+| **`clickPerEthWei` / `baseClickReward`** | shared defaults ( **`clickPerEthWei`** is legacy; POT pays **ETH**, not minted CLICK ) | shared defaults |
 
 Credits on-chain are **wei-denominated** (deposit wei + bonus, minus `clickCostCredits` per click).
 
 ## Live `setEconomy` only
 
-`set-economy-round.ts` uses **`ECONOMY=testnet|mainnet`** to patch **`clickPerEthWei`**, **`clickCostCredits`**, **`baseClickReward`** on an existing game. It does **not** change **`CLICK.maxSupply`**, **vesting duration**, **trophy cap**, or **`clicksPerHashTier`** (immutable from deploy).
+`set-economy-round.ts` uses **`ECONOMY=testnet|mainnet`** to patch **`clickPerEthWei`**, **`clickCostCredits`**, **`baseClickReward`** on an existing game. **`clickPerEthWei`** no longer affects POT payouts (POT is **native ETH** to the winner). It does **not** change **`CLICK.maxSupply`**, **vesting duration**, **trophy cap**, or **`clicksPerHashTier`** (immutable from deploy).
 
 To fix a game that shows **billions** of Click Credits, on-chain **`clickCostCredits`** is often **1 wei**. Owner runs:
 

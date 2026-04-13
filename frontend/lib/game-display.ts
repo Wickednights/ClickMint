@@ -96,6 +96,13 @@ export function trimEtherString(s: string): string {
   return t === "" ? "0" : t;
 }
 
+/** Human ETH from wei for POT / balance lines (no rounding up). */
+export function formatPotEthDisplay(wei: bigint): string {
+  if (wei === 0n) return "0";
+  if (wei < 0n) return "—";
+  return trimEtherString(formatEther(wei));
+}
+
 /**
  * Human-readable **$CLICK** from wei for UI. **Truncates** (floors) to `maxFractionDigits` — never rounds up, so users never see
  * more than they can spend. If balance is positive but below one display step, shows `<0.01` (or `<0.001` for 3 decimals, etc.).
