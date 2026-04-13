@@ -28,6 +28,7 @@ import {
   earlySpendLiquidWei,
   earlySpendSplitWei,
   formatClickDisplayWei,
+  formatPotEthDisplay,
   formatWholeCredits,
   isTinyClickCostWei,
   onChainPlaysRemaining,
@@ -108,6 +109,7 @@ function formatCountdown(totalSec: number): string {
 type PotRow = {
   hourId: bigint;
   winner: Address;
+  /** ETH wei from `PotWin.ethPayout`. */
   payout: bigint;
   /** Start UTC minute 0–44 of the winning 15-minute span. */
   winStartMinute: number;
@@ -142,7 +144,7 @@ function WinnerTable({ rows, genesisGameHour }: { rows: PotRow[]; genesisGameHou
               <th className="w-[14%] px-2 py-3 pr-2">{col}</th>
               <th className="w-[26%] px-2 py-3 pr-2">Span</th>
               <th className="px-2 py-3 pr-2">Winner</th>
-              <th className="w-[18%] px-2 py-3 text-right tabular-nums">$CLICK</th>
+              <th className="w-[18%] px-2 py-3 text-right tabular-nums">ETH</th>
             </tr>
           </thead>
           <tbody>
@@ -158,7 +160,7 @@ function WinnerTable({ rows, genesisGameHour }: { rows: PotRow[]; genesisGameHou
                   {r.winner}
                 </td>
                 <td className="px-2 py-3 text-right font-headline font-semibold tabular-nums text-primary">
-                  {formatClickDisplayWei(r.payout, 6)}
+                  {formatPotEthDisplay(r.payout)}
                 </td>
               </tr>
             ))}
@@ -166,8 +168,8 @@ function WinnerTable({ rows, genesisGameHour }: { rows: PotRow[]; genesisGameHou
         </table>
       </div>
       <p className="text-center font-body text-xs text-secondary opacity-75 md:text-sm">
-        Amounts match on-chain <code className="text-primary-fixed/90">PotWin.clickPayout</code>. Small hourly pots pay
-        fewer $CLICK (ETH in pot × click-per-ETH rate).
+        Amounts match on-chain <code className="text-primary-fixed/90">PotWin.ethPayout</code> (ETH wei). The winner
+        receives that ETH from the game contract; unclaimed hours keep accruing until finalized.
       </p>
     </div>
   );
@@ -200,7 +202,7 @@ function SidebarPotWinners({ rows, genesisGameHour }: { rows: PotRow[]; genesisG
                 {r.winner.slice(0, 6)}…{r.winner.slice(-4)}
               </div>
               <div className="mt-1 font-headline text-base font-bold tabular-nums text-emerald-200/95">
-                +{formatClickDisplayWei(r.payout, 6)} $CLICK
+                +{formatPotEthDisplay(r.payout)} ETH
               </div>
             </li>
           ))}
@@ -527,7 +529,7 @@ export function ClickMintDashboard() {
         const args = log.args as unknown as {
           hourId: bigint;
           winner: Address;
-          clickPayout: bigint;
+          ethPayout: bigint;
           winStartMinute: number;
           entropy: `0x${string}`;
         };
@@ -539,14 +541,14 @@ export function ClickMintDashboard() {
         pushPotRow({
           hourId: args.hourId,
           winner: args.winner,
-          payout: args.clickPayout,
+          payout: args.ethPayout,
           winStartMinute: args.winStartMinute,
           entropy: args.entropy,
         });
         sfxRef.current.playWin();
         sfxRef.current.celebrateWin();
         toast.success("POT WIN", {
-          description: `${args.winner.slice(0, 10)}… +${formatClickDisplayWei(args.clickPayout, 6)} $CLICK`,
+          description: `${args.winner.slice(0, 10)}… +${formatPotEthDisplay(args.ethPayout)} ETH`,
           duration: 8000,
         });
         void refetchPot();

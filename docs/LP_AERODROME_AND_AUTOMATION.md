@@ -62,7 +62,7 @@ This repository **does not** include that helper yet; it is a small dedicated co
 ## How hourly POT settlement works today
 
 1. **`finalizeHour(hourId)`** on **ClickMintGame** runs **after** the game hour ends and the **`RESET_BUFFER`** (20s) has passed — see `GameFinalizeEarly` in the contract.
-2. It derives **pseudo-random** entropy from **`block.prevrandao`** and other fields, picks a **winning 15-minute UTC span** with a **random start minute 0–44** (so the span stays inside the hour), then **eligible** players (min clicks + at least one click whose **minute-of-hour** falls in that span). Mints CLICK POT payout if there is a winner; otherwise carries ETH forward.
+2. It derives **pseudo-random** entropy from **`block.prevrandao`** and other fields, picks a **winning 15-minute UTC span** with a **random start minute 0–44** (so the span stays inside the hour), then **eligible** players (min clicks + at least one click whose **minute-of-hour** falls in that span). **Sends accumulated POT ETH** (`potEthByHour` + `potCarry`) to the winner; if there is no eligible winner, **carries** that hour’s slice forward in **`potCarry`** (no ETH transfer that round).
 3. Previously **only `owner`** could call `finalizeHour` (MEV/grief mitigation in comments).
 
 ### Automatic settlement (no manual owner click)
@@ -83,7 +83,7 @@ The contract supports an optional **`potKeeper`** address:
 **`hourId` for the keeper (match the UI):**
 
 - On-chain time buckets use **`RESET_BUFFER` = 20 seconds** (see `ClickMintGame` / `GAME_RESET_BUFFER_SEC` in the frontend). The **current** game hour is `gameHour(timestamp)`; the hour to finalize is **`gameHour(now) - 1`** once that previous hour has ended and the buffer has passed.
-- Practically: run your job **every minute** (or every few minutes) after the top of each wall-clock hour, or **once per hour ~30–60s after** `:00:20` UTC to stay safely past the buffer. Each run should:
+- Practically: run your job on a **few fixed minutes each hour** (e.g. **:01, :06, :11, …** every five minutes) so the first run is safely after the buffer, with retries until the hour finalizes. Each run should:
   1. Read **`gameHour`** for “now” (or compute the same bucket from Unix time and `RESET_BUFFER`).
   2. Let **`targetHour = gameHourNow - 1`**. Skip if `targetHour` is absent or zero.
   3. If **`hourFinalized(targetHour)`** is already true, exit.
@@ -98,7 +98,7 @@ Idempotent behavior: repeating the job is safe once the hour is finalized (the t
 **Gelato (Cloud vs legacy):** **[app.gelato.network](https://app.gelato.network/)** Web3 Functions / “Create Task” is **deprecated** for new work; **[Gelato Cloud](https://app.gelato.cloud/)** focuses on **Paymaster & Bundler, Relay, and Gas Tank**. Scheduled keeper-style **tasks** are often no longer available there after migrating accounts. You can still drive **Relay** from your own cron (your server calls Gelato), but `finalizeHour` must execute as **`potKeeper`**, so you still need that identity funded and signing — the options below are usually simpler.
 
 **Default for this repo (Vercel):** **Vercel Cron → `GET /api/cron/finalize-hour`**  
-Route Handler in **`frontend/app/api/cron/finalize-hour/route.ts`**: requires **`Authorization: Bearer $CRON_SECRET`**, uses **`POT_KEEPER_PRIVATE_KEY`** (must match on-chain **`potKeeper`**; fund with ETH), runs **`gameHour` → `targetHour = gameHourNow - 1` → `hourFinalized` → `finalizeHour`** (idempotent). **`frontend/vercel.json`** uses **once per minute** (`* * * * *`) — Vercel cron has **no second-level schedule**; **`finalizeHour`** must run **after** the prior game hour ends plus **`RESET_BUFFER` (20s)**, not “15 seconds before” the wall-clock hour. Optional **`POT_KEEPER_RPC_URL`**; otherwise **`NEXT_PUBLIC_QUICKNODE_RPC`**.
+Route Handler in **`frontend/app/api/cron/finalize-hour/route.ts`**: requires **`Authorization: Bearer $CRON_SECRET`**, uses **`POT_KEEPER_PRIVATE_KEY`** (must match on-chain **`potKeeper`**; fund with ETH), runs **`gameHour` → `targetHour = gameHourNow - 1` → `hourFinalized` → `finalizeHour`** (idempotent). **`frontend/vercel.json`** schedules **`1,6,11,16,21,26,31,36,41,46,51,56 * * * *`** (first tick **:01** past each hour, then every **5 minutes**) — Vercel cron has **no second-level schedule**; **`finalizeHour`** must run **after** the prior game hour ends plus **`RESET_BUFFER` (20s)**. Optional **`POT_KEEPER_RPC_URL`**; otherwise **`NEXT_PUBLIC_QUICKNODE_RPC`**.
 
 **Production vs Preview:** Cron jobs run against your **production deployment** by default. **`CRON_SECRET`**, **`POT_KEEPER_PRIVATE_KEY`**, and **`NEXT_PUBLIC_QUICKNODE_RPC`** must exist on **Production** in Vercel → Settings → Environment Variables, then redeploy. If they are only set for Preview, the cron **500s** immediately (often before any RPC call).
 

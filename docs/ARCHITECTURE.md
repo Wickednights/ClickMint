@@ -93,7 +93,7 @@ Holds ERC721 in a **hold**; beneficiary (or owner) **`claim`** to release. Optio
 | Unvested / early spend cap | `CLICK.pendingVested(user)` |
 | Claimable | `CLICK.claimable(user)` |
 | Per-click reward | `ClickMintGame.baseClickReward()` |
-| POT | `currentPotEth`, `finalizeHour`, events `PotWin` |
+| POT | `currentPotEth`, `finalizeHour`, `PotWin` (**ETH** to winner, `ethPayout` wei) |
 
 ## Security / production notes (brief)
 

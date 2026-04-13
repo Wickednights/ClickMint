@@ -8,9 +8,10 @@ import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {CLICK} from "./CLICK.sol";
 import {BinaryTrophyNFT} from "./BinaryTrophyNFT.sol";
 
-/// @title ClickMintGame — ETH credits, fee split, rate-limited clicks, hourly CLICK POT.
+/// @title ClickMintGame — ETH credits, fee split, rate-limited clicks, hourly ETH POT.
 /// @dev Randomness: block.prevrandao + salt — upgrade to Chainlink VRF for mainnet fairness.
 /// Constructor economy + `clicksPerHashTier` are set at deploy from `DEPLOY_ECONOMY` (**testnet** vs **mainnet** in `scripts/config/economy.ts`). Owner may later `setEconomy` / `setAddresses`; hash tier stays immutable.
+/// POT winners receive **accumulated POT ETH** (`potEthByHour` + `potCarry`), not minted $CLICK.
 contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     CLICK public immutable clickToken;
 
@@ -31,7 +32,7 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
 
     mapping(uint256 hourId => uint256) public totalClicksInHour;
 
-    /// @notice Wei of CLICK minted per 1 ETH of pot (scaled — testnet sized).
+    /// @notice Legacy economy slot (still in `setEconomy` for ABI compat). **Not used for POT** — POT pays raw accumulated ETH.
     uint256 public clickPerEthWei;
 
     uint256 public clickCostCredits;
@@ -42,6 +43,7 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     /// @notice Last pot settlement (game hour id).
     mapping(uint256 hourId => bool) public hourFinalized;
     mapping(uint256 hourId => address) public hourWinner;
+    /// @notice ETH wei sent to the POT winner for this hour after `finalizeHour` (0 if none / no winner).
     mapping(uint256 hourId => uint256) public hourPayout;
     /// @notice Start UTC minute (0–44) of the winning 15-minute span for this hour after `finalizeHour`. Not valid until finalized.
     mapping(uint256 hourId => uint8) public hourWinWindow;
@@ -71,7 +73,8 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     /// @param minute UTC minute 0–59 within the game hour when this click was mined.
     event Clicked(address indexed user, uint256 hourId, uint256 totalForUserHour, uint8 minute);
     /// @param winStartMinute UTC minute 0–44; winning span is `[winStartMinute, winStartMinute + 14]` inclusive (15 minutes), within the same calendar hour.
-    event PotWin(uint256 indexed hourId, address indexed winner, uint256 clickPayout, uint8 winStartMinute, bytes32 entropy);
+    /// @param ethPayout ETH wei sent to `winner` (0 if no eligible winner).
+    event PotWin(uint256 indexed hourId, address indexed winner, uint256 ethPayout, uint8 winStartMinute, bytes32 entropy);
     event AddressesUpdated(address indexed treasury, address indexed secret);
     event EconomyUpdated(uint256 clickPerEthWei, uint256 clickCostCredits, uint256 baseClickReward);
     event ClickExecutorSet(address indexed player, address indexed executor);
@@ -373,14 +376,15 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         potCarry = 0;
 
         address winner = cand[uint256(entropy) % n];
-        uint256 payout = (gross * clickPerEthWei) / 1 ether;
-
         hourWinner[hourId] = winner;
-        hourPayout[hourId] = payout;
+        hourPayout[hourId] = gross;
 
-        if (payout > 0) clickToken.mint(winner, payout);
+        if (gross > 0) {
+            (bool paid,) = payable(winner).call{value: gross}("");
+            require(paid, "game: pot pay");
+        }
 
-        emit PotWin(hourId, winner, payout, winStartMinute, entropy);
+        emit PotWin(hourId, winner, gross, winStartMinute, entropy);
     }
 
     function currentPotEth() external view returns (uint256) {

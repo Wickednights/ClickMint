@@ -31,7 +31,7 @@ export const clickMintGameAbi = parseAbi([
   "function finalizeHour(uint256 hourId)",
   "event Deposited(address indexed user, uint256 ethIn, uint256 creditsOut)",
   "event Clicked(address indexed user, uint256 hourId, uint256 totalForUserHour, uint8 minute)",
-  "event PotWin(uint256 indexed hourId, address indexed winner, uint256 clickPayout, uint8 winStartMinute, bytes32 entropy)",
+  "event PotWin(uint256 indexed hourId, address indexed winner, uint256 ethPayout, uint8 winStartMinute, bytes32 entropy)",
 ]);
 
 export const binaryTrophyAbi = parseAbi([
