@@ -2,6 +2,7 @@
 
 import type { CSSProperties } from "react";
 import Link from "next/link";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useAccount,
@@ -37,7 +38,6 @@ import { formatEther, parseEther, type Address } from "viem";
 import { toast } from "sonner";
 import { binaryTrophyAbi, clickMintGameAbi, clickTokenAbi } from "@/lib/abi";
 import { explainRevertData, extractRevertData } from "@/lib/revert-reason";
-import { keepPreviousData } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { ClickHistoryPanel } from "@/components/click-history-panel";
+import { SidebarRecentTrophies, TrophyRoomGrid } from "@/components/trophy-room-panel";
 import { EscrowPanel } from "@/components/escrow-panel";
 import { getClickAddress, getEscrowAddress, getGameAddress, getTrophyNftAddress } from "@/lib/addresses";
 import { economyPresetHint, economyPresetShortLabel } from "@/lib/economy-preset";
@@ -59,6 +60,7 @@ import {
   readGenesisGameHourFromEnv,
   GAME_RESET_BUFFER_SEC,
 } from "@/lib/game-genesis";
+import { fetchTrophyMintLogs, trophyHistoryFromBlock } from "@/lib/trophy-mints";
 
 const QUICK_BUY = ["0.001", "0.01", "0.1", "0.25", "0.5", "1"] as const;
 
@@ -112,21 +114,7 @@ type PotRow = {
   entropy?: `0x${string}`;
 };
 
-/** Live trophy mint (Transfer from zero) for sidebar feed. */
-type TrophyMintRow = {
-  key: string;
-  tokenId: bigint;
-  to: Address;
-};
-
 type MobileTab = "terminal" | "history" | "trophies" | "clicks";
-
-function fmtToken(wei: bigint | undefined, maxFrac = 2) {
-  if (wei === undefined) return "—";
-  const n = Number(formatEther(wei));
-  if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("en-US", { maximumFractionDigits: maxFrac });
-}
 
 function Icon({ name, className }: { name: string; className?: string }) {
   return (
@@ -139,36 +127,48 @@ function Icon({ name, className }: { name: string; className?: string }) {
 function WinnerTable({ rows, genesisGameHour }: { rows: PotRow[]; genesisGameHour: bigint | null }) {
   if (rows.length === 0) {
     return (
-      <p className="font-body text-[10px] leading-relaxed text-secondary opacity-70">
+      <p className="text-center font-body text-sm leading-relaxed text-secondary opacity-80 md:text-base">
         No POT wins in this session yet. Keep the tab open to catch live events, or finalize an hour on-chain.
       </p>
     );
   }
   const col = potRoundKind(genesisGameHour);
   return (
-    <div className="max-h-[min(50vh,20rem)] overflow-auto">
-      <table className="w-full text-left font-body text-[10px] text-on-surface">
-        <thead>
-          <tr className="font-label uppercase tracking-widest text-secondary">
-            <th className="pb-2 pr-2">{col}</th>
-            <th className="pb-2 pr-2">Span</th>
-            <th className="pb-2 pr-2">Winner</th>
-            <th className="pb-2">$CLICK</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={`${r.hourId}-${r.entropy ?? ""}`} className="border-t border-outline-variant/20">
-              <td className="py-2 pr-2 text-primary-fixed">{hourIdForDisplay(r.hourId, genesisGameHour)}</td>
-              <td className="py-2 pr-2 font-mono text-[9px] text-secondary">
-                {utcPotSpanLabel(Number(r.winStartMinute))}
-              </td>
-              <td className="max-w-[9rem] truncate py-2 pr-2">{r.winner}</td>
-              <td className="py-2 text-primary">{fmtToken(r.payout, 4)}</td>
+    <div className="w-full space-y-3">
+      <div className="max-h-[min(60vh,28rem)] overflow-auto rounded-md border border-outline-variant/25">
+        <table className="w-full table-fixed text-left font-body text-sm text-on-surface md:text-base">
+          <thead>
+            <tr className="font-label text-xs uppercase tracking-widest text-secondary md:text-sm">
+              <th className="w-[14%] px-2 py-3 pr-2">{col}</th>
+              <th className="w-[26%] px-2 py-3 pr-2">Span</th>
+              <th className="px-2 py-3 pr-2">Winner</th>
+              <th className="w-[18%] px-2 py-3 text-right tabular-nums">$CLICK</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={`${r.hourId}-${r.entropy ?? ""}`} className="border-t border-outline-variant/20">
+                <td className="px-2 py-3 pr-2 font-headline text-primary-fixed tabular-nums">
+                  {hourIdForDisplay(r.hourId, genesisGameHour)}
+                </td>
+                <td className="px-2 py-3 pr-2 font-mono text-xs text-secondary md:text-sm">
+                  {utcPotSpanLabel(Number(r.winStartMinute))}
+                </td>
+                <td className="truncate px-2 py-3 pr-2 font-mono text-xs md:text-sm" title={r.winner}>
+                  {r.winner}
+                </td>
+                <td className="px-2 py-3 text-right font-headline font-semibold tabular-nums text-primary">
+                  {formatClickDisplayWei(r.payout, 6)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-center font-body text-xs text-secondary opacity-75 md:text-sm">
+        Amounts match on-chain <code className="text-primary-fixed/90">PotWin.clickPayout</code>. Small hourly pots pay
+        fewer $CLICK (ETH in pot × click-per-ETH rate).
+      </p>
     </div>
   );
 }
@@ -179,59 +179,28 @@ function SidebarPotWinners({ rows, genesisGameHour }: { rows: PotRow[]; genesisG
   const rk = potRoundKind(genesisGameHour);
   return (
     <div className="border-t border-outline-variant/20 pt-4">
-      <h3 className="mb-2 text-center font-headline text-xs font-bold uppercase tracking-[0.2em] text-emerald-300/90">
+      <h3 className="mb-3 text-center font-headline text-sm font-bold uppercase tracking-[0.2em] text-emerald-300/90">
         POT winners
       </h3>
       {shown.length === 0 ? (
-        <p className="text-center font-body text-[11px] leading-snug text-secondary">
+        <p className="text-center font-body text-sm leading-snug text-secondary">
           No POT wins yet — finalize hours and watch live.
         </p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-2.5">
           {shown.map((r) => (
             <li
               key={`${r.hourId}-${r.entropy ?? ""}`}
-              className="rounded border border-emerald-500/25 bg-emerald-500/[0.07] px-2 py-2 text-center"
+              className="rounded border border-emerald-500/25 bg-emerald-500/[0.07] px-3 py-2.5 text-center"
             >
-              <div className="font-label text-[9px] uppercase tracking-wider text-secondary">
+              <div className="font-label text-xs uppercase tracking-wider text-secondary">
                 {rk} {hourIdForDisplay(r.hourId, genesisGameHour)}
               </div>
-              <div className="mt-0.5 truncate font-mono text-[11px] text-primary-fixed" title={r.winner}>
+              <div className="mt-1 truncate font-mono text-sm text-primary-fixed" title={r.winner}>
                 {r.winner.slice(0, 6)}…{r.winner.slice(-4)}
               </div>
-              <div className="mt-0.5 font-headline text-[11px] font-bold tabular-nums text-emerald-200/95">
-                +{fmtToken(r.payout, 4)} $CLICK
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-/** Desktop sidebar: last 5 trophy mints (session feed). */
-function SidebarTrophyMints({ rows }: { rows: TrophyMintRow[] }) {
-  const shown = rows.slice(0, 5);
-  return (
-    <div className="border-t border-outline-variant/20 pt-4">
-      <h3 className="mb-2 text-center font-headline text-xs font-bold uppercase tracking-[0.2em] text-amber-200/90">
-        Trophy mints
-      </h3>
-      {shown.length === 0 ? (
-        <p className="text-center font-body text-[11px] leading-snug text-secondary">
-          No trophies minted this session yet.
-        </p>
-      ) : (
-        <ul className="space-y-2">
-          {shown.map((r) => (
-            <li
-              key={r.key}
-              className="rounded border border-amber-500/25 bg-amber-500/[0.06] px-2 py-2 text-center"
-            >
-              <div className="font-label text-[9px] uppercase tracking-wider text-secondary">Token #{r.tokenId.toString()}</div>
-              <div className="mt-0.5 truncate font-mono text-[11px] text-amber-100/95" title={r.to}>
-                {r.to.slice(0, 6)}…{r.to.slice(-4)}
+              <div className="mt-1 font-headline text-base font-bold tabular-nums text-emerald-200/95">
+                +{formatClickDisplayWei(r.payout, 6)} $CLICK
               </div>
             </li>
           ))}
@@ -288,6 +257,7 @@ export function ClickMintDashboard() {
 
   const { writeContractAsync, isPending: writePending } = useWriteContract();
   const publicClient = usePublicClient({ chainId: baseSepolia.id });
+  const queryClient = useQueryClient();
 
   /** First `gameHour` bucket after deploy — from `NEXT_PUBLIC_GAME_GENESIS_UNIX` or `NEXT_PUBLIC_GAME_DEPLOY_BLOCK`. */
   const [genesisGameHour, setGenesisGameHour] = useState<bigint | null>(() => readGenesisGameHourFromEnv());
@@ -489,7 +459,6 @@ export function ClickMintDashboard() {
   });
 
   const [potRows, setPotRows] = useState<PotRow[]>([]);
-  const [trophyMintRows, setTrophyMintRows] = useState<TrophyMintRow[]>([]);
   const [earlyAmt, setEarlyAmt] = useState("");
   const [mobileTab, setMobileTab] = useState<MobileTab>("terminal");
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -536,12 +505,18 @@ export function ClickMintDashboard() {
     setPotRows((r) => [row, ...r].slice(0, 48));
   }, []);
 
-  const pushTrophyMint = useCallback((row: TrophyMintRow) => {
-    setTrophyMintRows((prev) => {
-      if (prev.some((x) => x.key === row.key)) return prev;
-      return [row, ...prev].slice(0, 48);
-    });
-  }, []);
+  const { data: trophyMintHistory = [] } = useQuery({
+    queryKey: ["trophyMints", trophyAddr],
+    queryFn: async () => {
+      if (!publicClient || !trophyAddr) return [];
+      const latest = await publicClient.getBlockNumber();
+      const fromBlock = trophyHistoryFromBlock(latest);
+      return fetchTrophyMintLogs(publicClient, trophyAddr, fromBlock);
+    },
+    enabled: !!publicClient && !!trophyAddr,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
 
   useWatchContractEvent({
     address: gameAddr,
@@ -571,7 +546,7 @@ export function ClickMintDashboard() {
         sfxRef.current.playWin();
         sfxRef.current.celebrateWin();
         toast.success("POT WIN", {
-          description: `${args.winner.slice(0, 10)}… +${formatClickDisplayWei(args.clickPayout)} $CLICK`,
+          description: `${args.winner.slice(0, 10)}… +${formatClickDisplayWei(args.clickPayout, 6)} $CLICK`,
           duration: 8000,
         });
         void refetchPot();
@@ -607,8 +582,7 @@ export function ClickMintDashboard() {
         const tokenId = args?.tokenId;
         if (!from || !to || tokenId === undefined) continue;
         if (from.toLowerCase() !== ZERO_ADDR.toLowerCase()) continue;
-        const key = `${log.transactionHash}-${log.logIndex}`;
-        pushTrophyMint({ key, tokenId, to });
+        void queryClient.invalidateQueries({ queryKey: ["trophyMints", trophyAddr] });
         if (address && to.toLowerCase() === address.toLowerCase()) {
           sfxRef.current.playNft();
           toast.success("Trophy NFT received", {
@@ -1811,7 +1785,7 @@ export function ClickMintDashboard() {
             />
           </div>
           <SidebarPotWinners rows={potRows} genesisGameHour={genesisGameHour} />
-          <SidebarTrophyMints rows={trophyMintRows} />
+          <SidebarRecentTrophies trophyAddr={trophyAddr} rows={trophyMintHistory} max={5} />
         </div>
       </aside>
 
@@ -1825,8 +1799,8 @@ export function ClickMintDashboard() {
         {mobileTab === "terminal" && terminalBody}
 
         {mobileTab === "history" && (
-          <section className="w-full max-w-md pt-4">
-            <h2 className="mb-4 font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary-fixed">
+          <section className="mx-auto w-full max-w-2xl px-1 pt-4">
+            <h2 className="mb-5 text-center font-headline text-xl font-bold uppercase tracking-[0.18em] text-primary-fixed sm:text-2xl">
               POT history
             </h2>
             <WinnerTable rows={potRows} genesisGameHour={genesisGameHour} />
@@ -1834,14 +1808,17 @@ export function ClickMintDashboard() {
         )}
 
         {mobileTab === "trophies" && (
-          <section className="w-full max-w-md pt-4">
+          <section className="w-full max-w-lg pt-4">
             <h2 className="mb-4 font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary-fixed">
               Trophy room
             </h2>
             <p className="mb-4 font-body text-[10px] text-secondary opacity-80">
-              POT winners from this session. Trophies mint on lucky clicks (game odds) or via escrow on the Terminal tab.
+              On-chain Binary Trophy mints (lucky clicks). Thumbnails use metadata from the contract. Card links open
+              BaseScan. For full history if your RPC truncates logs, set{" "}
+              <code className="text-primary-fixed/90">NEXT_PUBLIC_TROPHY_DEPLOY_BLOCK</code> to the NFT contract creation
+              block.
             </p>
-            <WinnerTable rows={potRows} genesisGameHour={genesisGameHour} />
+            <TrophyRoomGrid trophyAddr={trophyAddr} rows={trophyMintHistory} />
           </section>
         )}
 

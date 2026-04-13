@@ -9,6 +9,8 @@ const SFX_PREF = "clickmint-pref-sfx";
 const SRC = {
   sfx: "/sounds/clickmint_crystal_chime.wav",
   ambient: "/sounds/cyberpunkbg.mp3",
+  potWin: "/sounds/VICTORY_POT.mp3",
+  nftWin: "/sounds/NFT_WIN.mp3",
 } as const;
 
 function readBoolPref(key: string, defaultValue: boolean) {
@@ -119,8 +121,21 @@ export function useClickMintAudio() {
   );
 
   const playClickSuccess = useCallback(() => playOneShot(0.48), [playOneShot]);
-  const playWin = useCallback(() => playOneShot(0.32), [playOneShot]);
-  const playNft = useCallback(() => playOneShot(0.32), [playOneShot]);
+
+  const playMp3 = useCallback(
+    (url: string, volume: number) => {
+      if (!sfxOn || !audioUnlocked) return;
+      const el = new Audio(url);
+      el.preload = "auto";
+      el.volume = volume;
+      el.onended = () => el.remove();
+      void el.play().catch(() => {});
+    },
+    [sfxOn, audioUnlocked]
+  );
+
+  const playWin = useCallback(() => playMp3(SRC.potWin, 0.55), [playMp3]);
+  const playNft = useCallback(() => playMp3(SRC.nftWin, 0.52), [playMp3]);
   const playError = useCallback(() => playOneShot(0.2), [playOneShot]);
 
   const celebrateWin = useCallback(() => {

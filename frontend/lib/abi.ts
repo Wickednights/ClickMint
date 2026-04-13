@@ -36,8 +36,10 @@ export const clickMintGameAbi = parseAbi([
 
 export const binaryTrophyAbi = parseAbi([
   "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
+  "event TrophyMinted(address indexed to, uint256 indexed tokenId, uint64 totalClicks, uint8 fragmentSlot, bool viaGame)",
   "function approve(address to, uint256 tokenId)",
   "function ownerOf(uint256 tokenId) view returns (address)",
+  "function tokenURI(uint256 tokenId) view returns (string)",
 ]);
 
 export const escrowAbi = parseAbi([
