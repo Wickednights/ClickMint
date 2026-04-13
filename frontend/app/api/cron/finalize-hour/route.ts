@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createPublicClient, createWalletClient, http } from "viem";
+import { BaseError, createPublicClient, createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
 import { clickMintGameAbi } from "@/lib/abi";
@@ -7,6 +7,28 @@ import { getGameAddress } from "@/lib/addresses";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+function formatKeeperError(e: unknown): string {
+  if (e instanceof BaseError) {
+    const walk = [e.shortMessage, e.details];
+    let c: unknown = e.cause;
+    let depth = 0;
+    while (c instanceof Error && depth++ < 5) {
+      walk.push(c.message);
+      c = "cause" in c ? (c as Error & { cause?: unknown }).cause : undefined;
+    }
+    return walk.filter(Boolean).join(" — ");
+  }
+  if (e instanceof Error) return e.message;
+  return String(e);
+}
+
+function isBenignFinalizeRejection(msg: string): boolean {
+  return (
+    /GameFinalizeEarly|FinalizeEarly|too early|before cutoff/i.test(msg) ||
+    /GameAlreadyFinalized|already finalized/i.test(msg)
+  );
+}
 
 /**
  * Vercel Cron: GET /api/cron/finalize-hour
@@ -16,7 +38,12 @@ export const maxDuration = 60;
  * are only set for Preview, you get 500 / Unauthorized.
  *
  * **Schedule:** `1,6,11,16,21,26,31,36,41,46,51,56 * * * *` — first tick **:01** past each hour, then every **5 minutes**
- * so the previous game hour has multiple chances to settle. Vercel cron is minute granularity only.
+ * so the previous game hour has multiple chances to settle. Vercel cron is minute granularity only (UTC); see
+ * https://vercel.com/docs/cron-jobs
+ *
+ * **Transactions:** When `finalizeHour` is sent, the **keeper address** pays gas — check that wallet on BaseScan
+ * (e.g. internal txs / latest). If this route returns **200** with `skipped`, no tx was broadcast.
+ *
  * `finalizeHour` for the *previous* game hour is only valid **after** that hour ends plus **`RESET_BUFFER` (20s)**.
  *
  * @see docs/LP_AERODROME_AND_AUTOMATION.md
@@ -36,7 +63,8 @@ export async function GET(request: NextRequest) {
     }
 
     const pkRaw = process.env.POT_KEEPER_PRIVATE_KEY?.trim() ?? "";
-    const pk = pkRaw.startsWith("0x") ? pkRaw : `0x${pkRaw}`;
+    const pkBody = pkRaw.replace(/^0x/i, "");
+    const pk = `0x${pkBody}`;
     if (!/^0x[0-9a-fA-F]{64}$/.test(pk)) {
       return NextResponse.json(
         { error: "POT_KEEPER_PRIVATE_KEY must be 32-byte hex (0x + 64 hex chars)" },
@@ -78,6 +106,7 @@ export async function GET(request: NextRequest) {
         ok: true,
         skipped: "no previous game hour yet",
         gameHourNow: gameHourNow.toString(),
+        keeper: account.address,
       });
     }
 
@@ -94,24 +123,47 @@ export async function GET(request: NextRequest) {
         ok: true,
         skipped: "already finalized",
         targetHour: targetHour.toString(),
+        keeper: account.address,
       });
     }
 
     try {
-      const hash = await walletClient.writeContract({
+      const { request: req } = await publicClient.simulateContract({
+        account,
         address: gameAddr,
         abi: clickMintGameAbi,
         functionName: "finalizeHour",
         args: [targetHour],
       });
+      const hash = await walletClient.writeContract(req);
       return NextResponse.json({
         ok: true,
         targetHour: targetHour.toString(),
         txHash: hash,
+        keeper: account.address,
       });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return NextResponse.json({ error: msg.slice(0, 500) }, { status: 502 });
+      const detail = formatKeeperError(e);
+      if (isBenignFinalizeRejection(detail)) {
+        return NextResponse.json({
+          ok: true,
+          skipped: "finalize not applicable yet (or race on finalized)",
+          targetHour: targetHour.toString(),
+          detail: detail.slice(0, 800),
+          keeper: account.address,
+        });
+      }
+      return NextResponse.json(
+        {
+          ok: false,
+          error: detail.slice(0, 800),
+          targetHour: targetHour.toString(),
+          keeper: account.address,
+          hint:
+            "Check keeper ETH on Base Sepolia, on-chain potKeeper matches this address, game not paused, and winner can receive ETH (EOA). See response body in Vercel Logs.",
+        },
+        { status: 502 }
+      );
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

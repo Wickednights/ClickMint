@@ -126,8 +126,8 @@ Coordinate **metadata trait count** with whatever the JSON files contain so Open
 - [ ] Pin **`images/`** → CID
 - [ ] Generate **10k JSON** metadata files with matching `attributes`
 - [ ] Pin **`metadata/`** → CID
-- [ ] Deploy or upgrade trophy contract to use metadata CID
-- [ ] Verify on OpenSea test / BaseScan **token URI** resolves---
+- [ ] Deploy a new trophy contract (or add a proxy upgrade path) so `tokenURI` resolves to the metadata CID — this repo’s shipped `BinaryTrophyNFT` is **not** proxied today
+- [ ] Verify on OpenSea test / BaseScan **token URI** resolves.
 
 ## References
 

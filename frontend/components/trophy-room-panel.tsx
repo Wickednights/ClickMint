@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { Address } from "viem";
 import { usePublicClient } from "wagmi";
 import { baseSepolia } from "wagmi/chains";
@@ -32,43 +32,45 @@ export function TrophyThumbnail({
   className?: string;
 }) {
   const publicClient = usePublicClient({ chainId: baseSepolia.id });
-  const [src, setSrc] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!publicClient) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const uri = await publicClient.readContract({
-          address: trophyAddr,
-          abi: binaryTrophyAbi,
-          functionName: "tokenURI",
-          args: [tokenId],
-        });
-        const img = decodeTokenImage(uri);
-        if (!cancelled) setSrc(img);
-      } catch {
-        if (!cancelled) setSrc(null);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [publicClient, trophyAddr, tokenId]);
+  const { data: src = null } = useQuery({
+    queryKey: ["trophyTokenUri", trophyAddr, tokenId.toString()],
+    queryFn: async () => {
+      if (!publicClient) return null;
+      const uri = await publicClient.readContract({
+        address: trophyAddr,
+        abi: binaryTrophyAbi,
+        functionName: "tokenURI",
+        args: [tokenId],
+      });
+      return decodeTokenImage(uri);
+    },
+    enabled: !!publicClient,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
 
-  if (src) {
-    // eslint-disable-next-line @next/next/no-img-element -- data URLs from on-chain metadata
-    return <img src={src} alt="" className={cn("h-full w-full object-cover", className)} loading="lazy" />;
+  if (!src) {
+    return (
+      <div
+        className={cn(
+          "flex h-full w-full items-center justify-center bg-surface-container-high/80 font-mono text-[10px] text-secondary",
+          className
+        )}
+      >
+        …
+      </div>
+    );
   }
+
   return (
-    <div
-      className={cn(
-        "flex h-full w-full items-center justify-center bg-surface-container-high/80 font-mono text-[10px] text-secondary",
-        className
-      )}
-    >
-      …
-    </div>
+    // eslint-disable-next-line @next/next/no-img-element -- data: URLs from on-chain metadata; next/image unsuitable
+    <img
+      src={src}
+      alt=""
+      className={cn("h-full w-full object-cover", className)}
+      loading="lazy"
+      decoding="async"
+    />
   );
 }
 
@@ -95,6 +97,7 @@ export function TrophyRoomGrid({ trophyAddr, rows }: { trophyAddr: Address; rows
             href={`${BASE_SEPOLIA_NFT}/${trophyAddr}/${r.tokenId.toString()}`}
             target="_blank"
             rel="noreferrer"
+            aria-label={`Binary Trophy #${r.tokenId.toString()} — view on BaseScan`}
             className="block aspect-square w-full overflow-hidden bg-[#0b0f14]"
           >
             <TrophyThumbnail trophyAddr={trophyAddr} tokenId={r.tokenId} />
