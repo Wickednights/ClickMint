@@ -169,7 +169,7 @@ contract BinaryTrophyNFT is ERC721, ERC2981, Ownable {
             '<text x="48" y="430" fill="#ff6bff" font-size="18" font-family="monospace" font-weight="bold">FRAG ',
             Strings.toString(uint256(cipherFragmentSlot[tokenId])),
             "</text>",
-                       '<g transform="translate(448,456)"><circle r="18" fill="#f8fafc"/><text x="0" y="6" fill="#0b0f14" font-size="17" font-family="monospace" font-weight="bold" text-anchor="middle">B</text></g>',
+            '<g transform="translate(448,456)"><circle r="18" fill="#f8fafc"/><text x="0" y="6" fill="#0b0f14" font-size="17" font-family="monospace" font-weight="bold" text-anchor="middle">B</text></g>',
             "</svg>"
         );
     }

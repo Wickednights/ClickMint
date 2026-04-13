@@ -35,7 +35,8 @@ export async function fetchTrophyMintLogs(
   let start = fromBlock;
 
   while (start <= latest) {
-    const end = start + LOG_CHUNK > latest ? latest : start + LOG_CHUNK;
+    // Inclusive range [start, end] with exactly `LOG_CHUNK` blocks when not truncated (RPCs often cap *range* size).
+    const end = start + LOG_CHUNK - 1n > latest ? latest : start + LOG_CHUNK - 1n;
     const logs = await publicClient.getLogs({
       address: trophyAddr,
       event: trophyMintedEvent,

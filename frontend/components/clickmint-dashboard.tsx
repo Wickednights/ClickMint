@@ -61,6 +61,7 @@ import {
   readGenesisGameHourFromEnv,
   GAME_RESET_BUFFER_SEC,
 } from "@/lib/game-genesis";
+import { fetchPotWinLogs, potHistoryFromBlock, type PotWinLogRow } from "@/lib/pot-win-logs";
 import { fetchTrophyMintLogs, trophyHistoryFromBlock } from "@/lib/trophy-mints";
 
 const QUICK_BUY = ["0.001", "0.01", "0.1", "0.25", "0.5", "1"] as const;
@@ -106,15 +107,7 @@ function formatCountdown(totalSec: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-type PotRow = {
-  hourId: bigint;
-  winner: Address;
-  /** ETH wei from `PotWin.ethPayout`. */
-  payout: bigint;
-  /** Start UTC minute 0–44 of the winning 15-minute span. */
-  winStartMinute: number;
-  entropy?: `0x${string}`;
-};
+type PotRow = PotWinLogRow;
 
 type MobileTab = "terminal" | "history" | "trophies" | "clicks";
 
@@ -130,7 +123,9 @@ function WinnerTable({ rows, genesisGameHour }: { rows: PotRow[]; genesisGameHou
   if (rows.length === 0) {
     return (
       <p className="text-center font-body text-sm leading-relaxed text-secondary opacity-80 md:text-base">
-        No POT wins in this session yet. Keep the tab open to catch live events, or finalize an hour on-chain.
+        No POT finalizations in the indexed block range. Set{" "}
+        <code className="text-primary-fixed/90">NEXT_PUBLIC_GAME_DEPLOY_BLOCK</code> to your game contract creation
+        block on Base Sepolia if the RPC truncates logs, then redeploy the frontend.
       </p>
     );
   }
@@ -149,7 +144,7 @@ function WinnerTable({ rows, genesisGameHour }: { rows: PotRow[]; genesisGameHou
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={`${r.hourId}-${r.entropy ?? ""}`} className="border-t border-outline-variant/20">
+              <tr key={r.key} className="border-t border-outline-variant/20">
                 <td className="px-2 py-3 pr-2 font-headline text-primary-fixed tabular-nums">
                   {hourIdForDisplay(r.hourId, genesisGameHour)}
                 </td>
@@ -157,7 +152,11 @@ function WinnerTable({ rows, genesisGameHour }: { rows: PotRow[]; genesisGameHou
                   {utcPotSpanLabel(Number(r.winStartMinute))}
                 </td>
                 <td className="truncate px-2 py-3 pr-2 font-mono text-xs md:text-sm" title={r.winner}>
-                  {r.winner}
+                  {r.winner.toLowerCase() === ZERO_ADDR.toLowerCase() ? (
+                    <span className="text-secondary">No eligible winner (carry)</span>
+                  ) : (
+                    r.winner
+                  )}
                 </td>
                 <td className="px-2 py-3 text-right font-headline font-semibold tabular-nums text-primary">
                   {formatPotEthDisplay(r.payout)}
@@ -168,16 +167,21 @@ function WinnerTable({ rows, genesisGameHour }: { rows: PotRow[]; genesisGameHou
         </table>
       </div>
       <p className="text-center font-body text-xs text-secondary opacity-75 md:text-sm">
-        Amounts match on-chain <code className="text-primary-fixed/90">PotWin.ethPayout</code> (ETH wei). The winner
-        receives that ETH from the game contract; unclaimed hours keep accruing until finalized.
+        Amounts match on-chain <code className="text-primary-fixed/90">PotWin.ethPayout</code> (wei). Winners receive
+        that ETH in the same <code className="text-primary-fixed/90">finalizeHour</code> transaction (current deploy).
+        Each hour&apos;s POT slice stays in the contract until that hour is finalized; no-winner hours roll into{" "}
+        <code className="text-primary-fixed/90">potCarry</code>.
       </p>
     </div>
   );
 }
 
-/** Desktop sidebar: last 5 POT wins (same live session state as full POT history). */
+/** Desktop sidebar: last 5 rounds with an actual winner (excludes carry-only finalizations). */
 function SidebarPotWinners({ rows, genesisGameHour }: { rows: PotRow[]; genesisGameHour: bigint | null }) {
-  const shown = rows.slice(0, 5);
+  const winnerRows = rows.filter(
+    (r) => r.winner.toLowerCase() !== ZERO_ADDR.toLowerCase() && r.payout > 0n
+  );
+  const shown = winnerRows.slice(0, 5);
   const rk = potRoundKind(genesisGameHour);
   return (
     <div className="border-t border-outline-variant/20 pt-4">
@@ -186,13 +190,13 @@ function SidebarPotWinners({ rows, genesisGameHour }: { rows: PotRow[]; genesisG
       </h3>
       {shown.length === 0 ? (
         <p className="text-center font-body text-sm leading-snug text-secondary">
-          No POT wins yet — finalize hours and watch live.
+          No POT winners in range yet — finalize hours (cron or operator) or widen log history via deploy block env.
         </p>
       ) : (
         <ul className="space-y-2.5">
           {shown.map((r) => (
             <li
-              key={`${r.hourId}-${r.entropy ?? ""}`}
+              key={r.key}
               className="rounded border border-emerald-500/25 bg-emerald-500/[0.07] px-3 py-2.5 text-center"
             >
               <div className="font-label text-xs uppercase tracking-wider text-secondary">
@@ -460,7 +464,6 @@ export function ClickMintDashboard() {
     },
   });
 
-  const [potRows, setPotRows] = useState<PotRow[]>([]);
   const [earlyAmt, setEarlyAmt] = useState("");
   const [mobileTab, setMobileTab] = useState<MobileTab>("terminal");
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -503,9 +506,18 @@ export function ClickMintDashboard() {
     return () => clearInterval(t);
   }, [cooldownMs]);
 
-  const pushPotRow = useCallback((row: PotRow) => {
-    setPotRows((r) => [row, ...r].slice(0, 48));
-  }, []);
+  const { data: potRows = [] } = useQuery({
+    queryKey: ["potWins", gameAddr],
+    queryFn: async () => {
+      if (!publicClient || !gameAddr) return [];
+      const latest = await publicClient.getBlockNumber();
+      const fromBlock = potHistoryFromBlock(latest);
+      return fetchPotWinLogs(publicClient, gameAddr, fromBlock);
+    },
+    enabled: !!publicClient && !!gameAddr,
+    staleTime: 45_000,
+    refetchInterval: 120_000,
+  });
 
   const { data: trophyMintHistory = [] } = useQuery({
     queryKey: ["trophyMints", trophyAddr],
@@ -525,6 +537,7 @@ export function ClickMintDashboard() {
     abi: clickMintGameAbi,
     eventName: "PotWin",
     onLogs(logs) {
+      let invalidatePot = false;
       for (const log of logs) {
         const args = log.args as unknown as {
           hourId: bigint;
@@ -536,15 +549,10 @@ export function ClickMintDashboard() {
         if (!args?.winner || args.winner === ZERO_ADDR) {
           toast.message("POT — no eligible winner; carry forward.");
           void refetchPot();
+          invalidatePot = true;
           continue;
         }
-        pushPotRow({
-          hourId: args.hourId,
-          winner: args.winner,
-          payout: args.ethPayout,
-          winStartMinute: args.winStartMinute,
-          entropy: args.entropy,
-        });
+        invalidatePot = true;
         sfxRef.current.playWin();
         sfxRef.current.celebrateWin();
         toast.success("POT WIN", {
@@ -553,6 +561,7 @@ export function ClickMintDashboard() {
         });
         void refetchPot();
       }
+      if (invalidatePot) void queryClient.invalidateQueries({ queryKey: ["potWins", gameAddr] });
     },
     enabled: !!gameAddr,
   });
@@ -577,6 +586,7 @@ export function ClickMintDashboard() {
     abi: binaryTrophyAbi,
     eventName: "Transfer",
     onLogs(logs) {
+      let sawMint = false;
       for (const log of logs) {
         const args = log.args as unknown as { from?: Address; to?: Address; tokenId?: bigint };
         const from = args?.from;
@@ -584,7 +594,7 @@ export function ClickMintDashboard() {
         const tokenId = args?.tokenId;
         if (!from || !to || tokenId === undefined) continue;
         if (from.toLowerCase() !== ZERO_ADDR.toLowerCase()) continue;
-        void queryClient.invalidateQueries({ queryKey: ["trophyMints", trophyAddr] });
+        sawMint = true;
         if (address && to.toLowerCase() === address.toLowerCase()) {
           sfxRef.current.playNft();
           toast.success("Trophy NFT received", {
@@ -593,6 +603,7 @@ export function ClickMintDashboard() {
           });
         }
       }
+      if (sawMint) void queryClient.invalidateQueries({ queryKey: ["trophyMints", trophyAddr] });
     },
     enabled: !!trophyAddr,
   });
