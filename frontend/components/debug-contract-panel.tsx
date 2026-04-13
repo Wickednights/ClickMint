@@ -6,12 +6,15 @@ import { formatEther, isAddress, parseEther, type Address } from "viem";
 import { baseSepolia } from "wagmi/chains";
 import { clickMintGameAbi, clickTokenAbi } from "@/lib/abi";
 import { getClickAddress, getGameAddress, getTrophyNftAddress } from "@/lib/addresses";
-import { getUiEconomyPreset } from "@/lib/economy-preset";
+import { getUiEconomyPreset, isExplicitTestnetDeployEconomy } from "@/lib/economy-preset";
 import { formatWholeCredits } from "@/lib/game-display";
 
 function TestnetMintClickSection({ clickAddr }: { clickAddr: Address }) {
+  const mintUiEnabled = isExplicitTestnetDeployEconomy();
   const preset = getUiEconomyPreset();
   const { address } = useAccount();
+  const chainId = useChainId();
+  const wrongChain = chainId !== baseSepolia.id;
   const [toInput, setToInput] = useState("");
   const [amountHuman, setAmountHuman] = useState("500000");
   const [localError, setLocalError] = useState<string | null>(null);
@@ -21,6 +24,16 @@ function TestnetMintClickSection({ clickAddr }: { clickAddr: Address }) {
     abi: clickTokenAbi,
     functionName: "owner",
     query: { enabled: !!clickAddr },
+  });
+
+  const {
+    data: mintForTestingOnChain,
+    isError: mintFlagReadError,
+  } = useReadContract({
+    address: clickAddr,
+    abi: clickTokenAbi,
+    functionName: "mintForTestingEnabled",
+    query: { enabled: !!clickAddr && mintUiEnabled, retry: false },
   });
 
   const isOwner =
@@ -52,23 +65,29 @@ function TestnetMintClickSection({ clickAddr }: { clickAddr: Address }) {
       setLocalError("Amount must be greater than zero.");
       return;
     }
+    if (wrongChain) {
+      setLocalError(`Switch wallet to Base Sepolia (chain ${baseSepolia.id}).`);
+      return;
+    }
     writeContract({
       address: clickAddr,
       abi: clickTokenAbi,
       functionName: "mintForTesting",
       args: [to, wei],
-      chainId: baseSepolia.id,
     });
-  }, [amountHuman, clickAddr, reset, toInput, writeContract]);
+  }, [amountHuman, clickAddr, reset, toInput, writeContract, wrongChain]);
 
-  if (preset !== "testnet") {
+  if (!mintUiEnabled) {
     return (
       <div className="mt-6 rounded border border-outline-variant/30 bg-black/40 p-3 text-[11px] text-secondary">
         <p className="font-label uppercase tracking-wider text-primary-fixed/80">Testnet mint (hidden)</p>
         <p className="mt-2 leading-relaxed">
-          UI is for <strong className="text-on-surface/90">NEXT_PUBLIC_DEPLOY_ECONOMY=testnet</strong> only. Mainnet
-          deploys mint <strong className="text-on-surface/90">10% of cap</strong> to the deployer at CLICK constructor
-          for LP bootstrap (see <code className="text-primary-fixed/90">deploy.ts</code>).
+          Owner mint UI is enabled only when{" "}
+          <strong className="text-on-surface/90">NEXT_PUBLIC_DEPLOY_ECONOMY=testnet</strong> is set explicitly (not
+          merely unset). On mainnet, deployment mints <strong className="text-on-surface/90">10% of cap</strong> to the
+          deployer in the CLICK constructor for LP bootstrap (see{" "}
+          <code className="text-primary-fixed/90">deploy.ts</code>). Current UI preset:{" "}
+          <strong className="text-on-surface/90">{preset}</strong>.
         </p>
       </div>
     );
@@ -85,6 +104,28 @@ function TestnetMintClickSection({ clickAddr }: { clickAddr: Address }) {
       <p className="mt-1 text-[10px] opacity-80">
         CLICK owner on-chain: {owner ?? "—"} · You: {address ?? "—"} ·{" "}
         {isOwner ? <span className="text-emerald-400/90">owner match</span> : <span className="text-amber-200/90">not owner</span>}
+        {" · "}
+        <span
+          className={
+            mintFlagReadError
+              ? "text-amber-200/90"
+              : mintForTestingOnChain
+                ? "text-emerald-400/90"
+                : "text-amber-200/90"
+          }
+        >
+          mintForTestingEnabled:{" "}
+          {mintFlagReadError
+            ? "n/a (older bytecode)"
+            : mintForTestingOnChain === undefined
+              ? "…"
+              : mintForTestingOnChain
+                ? "yes"
+                : "no"}
+        </span>
+        {wrongChain ? (
+          <span className="text-amber-200/90"> · wrong chain (need Base Sepolia)</span>
+        ) : null}
       </p>
       <label htmlFor="debug-mint-click-to" className="mt-3 block text-[10px] uppercase tracking-wider text-primary-fixed/70">
         Recipient (to)
@@ -113,7 +154,15 @@ function TestnetMintClickSection({ clickAddr }: { clickAddr: Address }) {
       />
       <button
         type="button"
-        disabled={!clickAddr || !address || !isOwner || isPending || isConfirming}
+        disabled={
+          !clickAddr ||
+          !address ||
+          !isOwner ||
+          wrongChain ||
+          (mintForTestingOnChain === false && !mintFlagReadError) ||
+          isPending ||
+          isConfirming
+        }
         onClick={() => onMint()}
         className="mt-3 w-full border border-primary-fixed bg-primary-fixed/15 py-2 font-label text-[11px] font-bold uppercase tracking-widest text-primary-fixed hover:bg-primary-fixed/25 disabled:opacity-40"
       >
