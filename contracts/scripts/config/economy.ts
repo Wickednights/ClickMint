@@ -71,7 +71,7 @@ export const TESTNET_PRESET = {
 /** Production-style: 100B cap, 7d vesting, ~1 cent/click, 10k trophies, tighter hash tier. */
 export const MAINNET_PRESET = {
   name: "mainnet" as const,
-  /** 100_000_000_000 * 1e18 */
+  /** 100_000_000_000 * 1e18 — `deploy.ts` also mints **10%** of this to the deployer at CLICK deploy for LP seed. */
   maxSupplyWei: 100_000_000_000n * 10n ** 18n,
   trophyMaxSupply: 10_000n,
   /** 604_800 seconds (7 days). */

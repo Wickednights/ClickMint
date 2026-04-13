@@ -2,6 +2,8 @@
 
 Append-only record of substantive changes. **Maintenance:** after any change to contracts, frontend, scripts, or repo config, add a new entry at the bottom with UTC timestamp and a short bullet list.
 
+**Contract redeploys:** Before replacing addresses in `frontend/lib/addresses.ts`, copy the outgoing set into **`docs/DEPLOYMENT_ADDRESSES.md`** (Archive), then update that file’s **Active deployment** table with the new addresses.
+
 Format:
 
 ```text
@@ -10,6 +12,29 @@ Format:
 ```
 
 ---
+
+### 2026-04-12T23:55:00Z — Base Sepolia redeploy (CLICK constructor + full stack)
+
+- **`DEPLOY_ECONOMY=testnet`** — `deploy.ts` run on Base Sepolia from agent shell (user `DEPLOYER_KEY` + RPC).
+- **Addresses:** `CLICK` **0xeB4928cf96D10F47d76d5997Ef1179c242C95Dc1**, `Treasury` **0x9869d1e0e4416b7e3B246D9C444a6355cA19344c**, `SecretPrizeWallet` **0xeCB7132cc27e177f7028475f58Ee8b3D43F074E2**, `ClickMintGame` **0x1EFf9a6c3F3C438a2929301d1AEeD9D048f04D6B**, `BinaryTrophyNFT` **0xd190828F946659a1ff338AD6bC6BAF7C59f9eefD**, `Escrow` **0x3F71C068aaC3359332E5c464E91F0c8b23dF590a**.
+- **`frontend/lib/addresses.ts`** + **`frontend/.env.example`** defaults updated.
+- **`CLICK.setGame(game)`** executed in deploy script.
+
+### 2026-04-12T23:30:00Z — Debug mint UI + mainnet 10% LP bootstrap at CLICK deploy
+
+- **`CLICK.sol`:** Constructor last arg **`lpBootstrapSupplyWei_`** — non-zero → one **`_mint(initialOwner, …)`** (cap-checked), **`InitialLpBootstrapMint`** event. NatSpec updated.
+- **`deploy.ts`:** **`preset === "mainnet"`** → **`lpBootstrapWei = maxSupplyWei / 10`**, else **0** (testnet uses **`mintForTesting`** / debug page).
+- **`frontend/components/debug-contract-panel.tsx`:** **`TestnetMintClickSection`** — **`mintForTesting`** when **`NEXT_PUBLIC_DEPLOY_ECONOMY`** is testnet; **`owner()`** check; amount + recipient inputs; mainnet preset shows explanatory blurb only.
+- **`frontend/lib/abi.ts`:** **`owner()`**, **`InitialLpBootstrapMint`** on **`clickTokenAbi`**.
+- **`economy.ts`:** Comment on **`MAINNET_PRESET.maxSupplyWei`** re10% deploy mint.
+- **Breaking:** Redeploy **CLICK** (new constructor arity); update **`setGame`** / env addresses. Existing deployments without new bytecode won’t have bootstrap or new constructor.
+
+### 2026-04-12T12:00:00Z — CLICK `mintForTesting` (owner, testnet bootstrap)
+
+- **`contracts/contracts/CLICK.sol`:** **`mintForTesting(address to, uint256 amount)`** — **`onlyOwner`**, **`nonReentrant`**, **`_requireSupplyRoom`**, **`_mint`**; zero **`to`** reverts **`CLICKZeroAddr`**; **`TestingMint`** event. NatSpec marks **testnet-only** / remove before mainnet.
+- **`frontend/lib/abi.ts`:** **`mintForTesting`** + **`TestingMint`** on **`clickTokenAbi`** (Remix / wagmi parity).
+- **ClickMintGame:** No proxy — owner calls **CLICK** directly.
+- **Redeploy** (or upgrade if ever proxied) required for existing chains; existing **`CLICK`** bytecode does not include this until redeployed.
 
 ### 2026-04-07T18:00:00Z — Base Sepolia redeploy (TESTNET_PRESET)
 

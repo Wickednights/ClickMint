@@ -1,11 +1,136 @@
 "use client";
 
-import { useAccount, useChainId, useReadContract } from "wagmi";
-import { formatEther } from "viem";
+import { useCallback, useEffect, useState } from "react";
+import { useAccount, useChainId, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
+import { formatEther, isAddress, parseEther, type Address } from "viem";
 import { baseSepolia } from "wagmi/chains";
 import { clickMintGameAbi, clickTokenAbi } from "@/lib/abi";
 import { getClickAddress, getGameAddress, getTrophyNftAddress } from "@/lib/addresses";
+import { getUiEconomyPreset } from "@/lib/economy-preset";
 import { formatWholeCredits } from "@/lib/game-display";
+
+function TestnetMintClickSection({ clickAddr }: { clickAddr: Address }) {
+  const preset = getUiEconomyPreset();
+  const { address } = useAccount();
+  const [toInput, setToInput] = useState("");
+  const [amountHuman, setAmountHuman] = useState("500000");
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  const { data: owner } = useReadContract({
+    address: clickAddr,
+    abi: clickTokenAbi,
+    functionName: "owner",
+    query: { enabled: !!clickAddr },
+  });
+
+  const isOwner =
+    address !== undefined && owner !== undefined && address.toLowerCase() === owner.toLowerCase();
+
+  useEffect(() => {
+    if (address) setToInput(address);
+  }, [address]);
+
+  const { writeContract, data: hash, isPending, error: writeError, reset } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+
+  const onMint = useCallback(() => {
+    setLocalError(null);
+    reset();
+    const to = toInput.trim() as Address;
+    if (!isAddress(to)) {
+      setLocalError("Recipient must be a valid address.");
+      return;
+    }
+    let wei: bigint;
+    try {
+      wei = parseEther(amountHuman.trim() === "" ? "0" : amountHuman.trim());
+    } catch {
+      setLocalError("Amount must be a decimal number (CLICK uses 18 decimals).");
+      return;
+    }
+    if (wei === 0n) {
+      setLocalError("Amount must be greater than zero.");
+      return;
+    }
+    writeContract({
+      address: clickAddr,
+      abi: clickTokenAbi,
+      functionName: "mintForTesting",
+      args: [to, wei],
+      chainId: baseSepolia.id,
+    });
+  }, [amountHuman, clickAddr, reset, toInput, writeContract]);
+
+  if (preset !== "testnet") {
+    return (
+      <div className="mt-6 rounded border border-outline-variant/30 bg-black/40 p-3 text-[11px] text-secondary">
+        <p className="font-label uppercase tracking-wider text-primary-fixed/80">Testnet mint (hidden)</p>
+        <p className="mt-2 leading-relaxed">
+          UI is for <strong className="text-on-surface/90">NEXT_PUBLIC_DEPLOY_ECONOMY=testnet</strong> only. Mainnet
+          deploys mint <strong className="text-on-surface/90">10% of cap</strong> to the deployer at CLICK constructor
+          for LP bootstrap (see <code className="text-primary-fixed/90">deploy.ts</code>).
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6 rounded border border-primary-fixed/35 bg-primary-fixed/5 p-3 text-[11px] text-secondary">
+      <p className="font-label uppercase tracking-wider text-primary-fixed">Mint CLICK (testnet owner)</p>
+      <p className="mt-2 leading-relaxed">
+        Calls <code className="text-primary-fixed/90">mintForTesting</code> on the deployed CLICK. Requires connected
+        wallet to be <strong className="text-on-surface/90">owner()</strong>. Contract must include this function
+        (redeploy after it was added).
+      </p>
+      <p className="mt-1 text-[10px] opacity-80">
+        CLICK owner on-chain: {owner ?? "—"} · You: {address ?? "—"} ·{" "}
+        {isOwner ? <span className="text-emerald-400/90">owner match</span> : <span className="text-amber-200/90">not owner</span>}
+      </p>
+      <label htmlFor="debug-mint-click-to" className="mt-3 block text-[10px] uppercase tracking-wider text-primary-fixed/70">
+        Recipient (to)
+      </label>
+      <input
+        id="debug-mint-click-to"
+        value={toInput}
+        onChange={(e) => setToInput(e.target.value)}
+        className="mt-1 w-full border border-outline-variant/40 bg-black/60 px-2 py-1.5 font-mono text-[11px] text-primary-fixed"
+        spellCheck={false}
+        placeholder="0x…"
+        autoComplete="off"
+      />
+      <label htmlFor="debug-mint-click-amount" className="mt-2 block text-[10px] uppercase tracking-wider text-primary-fixed/70">
+        Amount (CLICK, human — e.g. 500000)
+      </label>
+      <input
+        id="debug-mint-click-amount"
+        value={amountHuman}
+        onChange={(e) => setAmountHuman(e.target.value)}
+        className="mt-1 w-full border border-outline-variant/40 bg-black/60 px-2 py-1.5 font-mono text-[11px] text-primary-fixed"
+        spellCheck={false}
+        placeholder="500000"
+        inputMode="decimal"
+        autoComplete="off"
+      />
+      <button
+        type="button"
+        disabled={!clickAddr || !address || !isOwner || isPending || isConfirming}
+        onClick={() => onMint()}
+        className="mt-3 w-full border border-primary-fixed bg-primary-fixed/15 py-2 font-label text-[11px] font-bold uppercase tracking-widest text-primary-fixed hover:bg-primary-fixed/25 disabled:opacity-40"
+      >
+        {isPending || isConfirming ? "Confirm in wallet…" : "Mint CLICK (testnet)"}
+      </button>
+      {localError ? <p className="mt-2 text-amber-200/90">{localError}</p> : null}
+      {writeError ? (
+        <p className="mt-2 break-all text-amber-200/90">{writeError.message.slice(0, 280)}</p>
+      ) : null}
+      {isSuccess && hash ? (
+        <p className="mt-2 break-all text-emerald-400/90">
+          Sent: {hash}
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 /**
  * On-chain + wallet debug readout (moved off the main terminal for a minimal dashboard).
@@ -142,7 +267,7 @@ export function DebugContractPanel() {
       <p>Game link OK: {gameLinkOk ? "yes" : "NO — run CLICK.setGame(game)"}</p>
       <p>Credits (wei): {credits !== undefined ? credits.toString() : "—"}</p>
       <p>clickCostCredits (wei): {clickCostCredits !== undefined ? clickCostCredits.toString() : "—"}</p>
-      <p>Click Credits (credits ÷ cost): {creditsWhole}</p>
+      <p>Click Credits (credits / cost): {creditsWhole}</p>
       <p>baseClickReward / click: {baseClickReward !== undefined ? `${formatEther(baseClickReward)} $CLICK` : "—"}</p>
       <p>clicksPerHashTier (game hour): {clicksPerHashTier !== undefined ? clicksPerHashTier.toString() : "—"}</p>
       <p>
@@ -167,6 +292,8 @@ export function DebugContractPanel() {
       </p>
       <p>potCarry: {potCarryWei !== undefined ? `${formatEther(potCarryWei)} ETH` : "—"}</p>
       <p>gameHour (now): {gameHourNow?.toString() ?? "—"}</p>
+
+      {clickAddr ? <TestnetMintClickSection clickAddr={clickAddr} /> : null}
     </section>
   );
 }
