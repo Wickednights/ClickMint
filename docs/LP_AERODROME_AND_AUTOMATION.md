@@ -1,10 +1,22 @@
 # Aerodrome LP, initial price, and hourly settlement automation
 
-## Aerodrome vs Uniswap on Base
+## Where to add LP: mainnet vs Base Sepolia
+
+### Base mainnet — Aerodrome vs Uniswap
 
 **Aerodrome** is the dominant ve(3,3) DEX ecosystem on **Base**; liquidity and routing are strong for native Base projects. **Uniswap v3** is also deployed on Base and is a safe default if you prefer canonical tooling.
 
-For ClickMint, **either works** — choose based on where you want depth, incentives, and operational familiarity. This repo does not ship a DEX integration yet; the **CLICK** token only **mints** the early-claim “LP” share to `lpRecipient` until you point it at a router, vault, or helper contract.
+For ClickMint on **mainnet**, **either works** — choose based on where you want depth, incentives, and operational familiarity. This repo does not ship a DEX integration yet; the **CLICK** token only **mints** the early-claim “LP” share to `lpRecipient` until you point it at a router, vault, or helper contract.
+
+### Base Sepolia (testnet) — use DapDap Uniswap V3
+
+**Aerodrome** front-ends and pool flows on **Base Sepolia** are often incomplete or painful for custom testnet tokens. In practice, the most reliable place to **pick arbitrary testnet tokens** (e.g. **CLICK** + **WETH**) and add **Uniswap v3** liquidity is **DapDap’s Base testnet Uniswap UI**:
+
+- **Add liquidity:** [testnet.base.dapdap.net — Uniswap pools / add liquidity](https://testnet.base.dapdap.net/uniswap/pools-add-liquidity)
+
+Use that flow for **fee tier**, **concentrated range** (low/high price per token — watch **token0/token1** ordering vs the UI’s “per [token]” labels), and deposit amounts. If a mint or multicall reverts (e.g. tick range vs spot price, slippage), adjust the range or seed a **full-range** / wider band first, then tighten after the pool has a clear price.
+
+**Mainnet** guidance below (Aerodrome router addresses, helper contract sketch) still applies on **Base**; on **Sepolia**, prefer the DapDap Uniswap path above unless you script positions yourself.
 
 ---
 
@@ -66,16 +78,51 @@ The contract supports an optional **`potKeeper`** address:
 
 1. Create a **dedicated wallet** (or use the vendor’s **relay** address) that will submit `finalizeHour`.
 2. **`setPotKeeper(thatAddress)`** on the game (owner). **`finalizeHour`** may then be sent by **owner** or **`potKeeper`**.
-3. Schedule a job **after each UTC hour + `RESET_BUFFER` (20s)** that calls **`finalizeHour` for the hour that just ended** (same `hourId` logic the UI uses for “previous round”).
+3. Schedule a job that runs **after** each game hour boundary (see below), and calls **`finalizeHour(hourId)`** for the **previous** on-chain hour — the same `hourId` the dashboard uses as “last round to settle.”
 
-**Choosing Gelato vs Chainlink Automation vs Defender (high level):**
+**`hourId` for the keeper (match the UI):**
+
+- On-chain time buckets use **`RESET_BUFFER` = 20 seconds** (see `ClickMintGame` / `GAME_RESET_BUFFER_SEC` in the frontend). The **current** game hour is `gameHour(timestamp)`; the hour to finalize is **`gameHour(now) - 1`** once that previous hour has ended and the buffer has passed.
+- Practically: run your job **every minute** (or every few minutes) after the top of each wall-clock hour, or **once per hour ~30–60s after** `:00:20` UTC to stay safely past the buffer. Each run should:
+  1. Read **`gameHour`** for “now” (or compute the same bucket from Unix time and `RESET_BUFFER`).
+  2. Let **`targetHour = gameHourNow - 1`**. Skip if `targetHour` is absent or zero.
+  3. If **`hourFinalized(targetHour)`** is already true, exit.
+  4. Else send **`finalizeHour(targetHour)`** from the **`potKeeper`** key.
+
+Idempotent behavior: repeating the job is safe once the hour is finalized (the tx will revert or you skip on the read).
+
+---
+
+### Recommended automation (no Supabase required)
+
+**Gelato (Cloud vs legacy):** **[app.gelato.network](https://app.gelato.network/)** Web3 Functions / “Create Task” is **deprecated** for new work; **[Gelato Cloud](https://app.gelato.cloud/)** focuses on **Paymaster & Bundler, Relay, and Gas Tank**. Scheduled keeper-style **tasks** are often no longer available there after migrating accounts. You can still drive **Relay** from your own cron (your server calls Gelato), but `finalizeHour` must execute as **`potKeeper`**, so you still need that identity funded and signing — the options below are usually simpler.
+
+**Default for this repo (Vercel):** **Vercel Cron → `GET /api/cron/finalize-hour`**  
+Route Handler in **`frontend/app/api/cron/finalize-hour/route.ts`**: requires **`Authorization: Bearer $CRON_SECRET`**, uses **`POT_KEEPER_PRIVATE_KEY`** (must match on-chain **`potKeeper`**; fund with ETH), runs **`gameHour` → `targetHour = gameHourNow - 1` → `hourFinalized` → `finalizeHour`** (idempotent). Enable **`frontend/vercel.json`** `crons` (e.g. every 2–5 minutes). Optional **`POT_KEEPER_RPC_URL`**; otherwise **`NEXT_PUBLIC_QUICKNODE_RPC`**. See **`frontend/.env.example`**.
+
+**Strong alternative: [OpenZeppelin Defender](https://defender.openzeppelin.com/) — Relayer + Autotask**  
+Scheduled serverless task that submits **`finalizeHour`** from a Defender **Relayer** you set as **`potKeeper`**.
+
+**Simpler but rougher: GitHub Actions `schedule`**  
+Workflow every few minutes + viem/ethers + **`POT_KEEPER`** in repo **secrets**. Fine for testnet; lock down repo access for mainnet.
+
+**Usually skip for this job:** **Chainlink Automation** unless you already run LINK upkeeps — more setup and LINK economics for a single hourly `eth_call` + occasional tx.
+
+**Optional later:** **Supabase Edge Function + cron** — same pattern as Vercel (serverless + secrets + schedule); use only if you already standardize on Supabase for this product.
+
+---
+
+**Options at a glance:**
 
 | Option | Notes |
 |--------|--------|
-| **Gelato** | Popular for “call this contract on an interval / condition”; good DX and used widely for keepers on L2s. |
-| **Chainlink Automation** | Mature registry of **upkeeps**; you pay in **LINK** (or native where supported); strong if you already use Chainlink. |
-| **OpenZeppelin Defender** | **Relayers + Autotasks** (serverless JS) + optional timelock/multisig workflows; fits teams already on Defender for ops. |
-| **Self-hosted cron** | A small script + your own key works, but you manage uptime and key security. |
+| **Vercel Cron + `/api/cron/finalize-hour`** | **Shipped in repo** — `CRON_SECRET` + `POT_KEEPER_PRIVATE_KEY`; see `frontend/vercel.json` + `.env.example`. |
+| **OpenZeppelin Defender** | Relayer + Autotask; turnkey UI and logs. |
+| **GitHub Actions schedule** | OK for testnet; protect secrets on mainnet. |
+| **Gelato Relay + your cron** | Only if execution satisfies **`msg.sender == potKeeper`**. |
+| **Chainlink Automation** | Powerful; usually heavier than needed here unless already in use. |
+| **Self-hosted cron** | Works; you own uptime and key handling. |
+| **Supabase Edge Function + cron** | Same idea as Vercel; only if you adopt Supabase for this app. |
 
 Any of these can hold or use the **`potKeeper`** key; the contract only checks **`msg.sender == potKeeper`**.
 
@@ -86,4 +133,6 @@ You still pay **gas** for each finalization (or sponsor via your own paymaster).
 ## Related code
 
 - **POT logic:** `contracts/contracts/ClickMintGame.sol` — `finalizeHour`, `potKeeper`, `RESET_BUFFER`.
+- **Vercel keeper:** `frontend/app/api/cron/finalize-hour/route.ts`, `frontend/vercel.json`.
+- **Keeper `hourId` (frontend parity):** `frontend/lib/game-genesis.ts` — `GAME_RESET_BUFFER_SEC`, `gameHourIndexFromUnixSec`; `frontend/components/clickmint-dashboard.tsx` — `gameHourReadTs`, `prevHour = gameHourNow - 1n`.
 - **Early-claim LP mint:** `contracts/contracts/CLICK.sol` — `earlySpendPending`, `lpRecipient`, `setLpRecipient`.

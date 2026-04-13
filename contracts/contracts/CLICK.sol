@@ -9,6 +9,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 /// @title CLICK — capped supply (immutable cap from deploy), 1% transfer tax, vested “pending” rewards + 30/30/20/20 early spend.
 /// @dev Constructor args come from the deploy preset in `scripts/config/economy.ts`: **testnet** = 1M × 1e18 cap + 600s vesting; **mainnet** = 100B × 1e18 + 604800s (7d). Immutable after deploy.
 ///      **`lpBootstrapSupplyWei`**: optional one-time mint to `initialOwner` at deploy (e.g. 10% of cap on mainnet for LP seed); **0** on testnet. Does not use vesting.
+///      **`enableMintForTesting_`**: **true** on testnet preset so `mintForTesting` works; **false** on mainnet so the path is permanently disabled.
 /// All mint paths pre-check `totalSupply() + amount <= maxSupply` (strict) and use CLICKBadSupply on violation.
 contract CLICK is ERC20, ERC20Permit, Ownable, ReentrancyGuard {
     uint256 public immutable maxSupply;
@@ -45,6 +46,10 @@ contract CLICK is ERC20, ERC20Permit, Ownable, ReentrancyGuard {
     error CLICKUnauthorized();
     error CLICKZeroAddr();
     error CLICKBadSupply();
+    error CLICKTestingMintDisabled();
+
+    /// @dev When false (mainnet deploys), `mintForTesting` always reverts — avoids an owner footgun on production bytecode.
+    bool public immutable mintForTestingEnabled;
 
     modifier onlyGame() {
         if (msg.sender != game) revert CLICKUnauthorized();
@@ -57,10 +62,12 @@ contract CLICK is ERC20, ERC20Permit, Ownable, ReentrancyGuard {
         address lpRecipient_,
         uint256 vestingDuration_,
         uint256 maxSupplyWei_,
-        uint256 lpBootstrapSupplyWei_
+        uint256 lpBootstrapSupplyWei_,
+        bool enableMintForTesting_
     ) ERC20("ClickMint", "CLICK") ERC20Permit("ClickMint") Ownable(initialOwner) {
         if (treasury_ == address(0) || lpRecipient_ == address(0)) revert CLICKZeroAddr();
         if (maxSupplyWei_ == 0) revert CLICKBadSupply();
+        mintForTestingEnabled = enableMintForTesting_;
         treasury = treasury_;
         lpRecipient = lpRecipient_;
         vestingDuration = vestingDuration_;
@@ -190,9 +197,10 @@ contract CLICK is ERC20, ERC20Permit, Ownable, ReentrancyGuard {
         _mint(to, amount);
     }
 
-    /// @notice **Testnet-only:** mint liquid CLICK to `to` for LP / integration bootstrap when gameplay mints are too slow.
-    /// @dev Subject to `maxSupply` via `_requireSupplyRoom`. **Remove or disable before any mainnet deployment** — this bypasses vesting and game rules.
+    /// @notice Mint liquid CLICK to `to` for staging / testnet bootstrap when gameplay mints are too slow.
+    /// @dev Subject to `maxSupply` via `_requireSupplyRoom`. Disabled at deploy on mainnet (`mintForTestingEnabled == false`). Bypasses vesting and game rules.
     function mintForTesting(address to, uint256 amount) external onlyOwner nonReentrant {
+        if (!mintForTestingEnabled) revert CLICKTestingMintDisabled();
         if (to == address(0)) revert CLICKZeroAddr();
         _requireSupplyRoom(amount);
         _mint(to, amount);

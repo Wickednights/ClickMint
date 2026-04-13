@@ -53,13 +53,18 @@ async function main() {
   }
 
   const CLICK = await ethers.getContractFactory("CLICK");
+  const enableMintForTesting = preset === "testnet";
+  if (!enableMintForTesting) {
+    console.log("CLICK mintForTesting: disabled (mainnet preset)");
+  }
   const click = await CLICK.deploy(
     owner,
     await treasury.getAddress(),
     lpRecipient,
     vestingSec,
     caps.maxSupplyWei,
-    lpBootstrapWei
+    lpBootstrapWei,
+    enableMintForTesting
   );
   await click.waitForDeployment();
   const clickAddr = await click.getAddress();

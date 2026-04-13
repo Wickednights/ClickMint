@@ -59,6 +59,7 @@ export const clickTokenAbi = parseAbi([
   "function balanceOf(address account) view returns (uint256)",
   "function decimals() view returns (uint8)",
   "function symbol() view returns (string)",
+  "function mintForTestingEnabled() view returns (bool)",
   "function mintForTesting(address to, uint256 amount)",
   "event TestingMint(address indexed to, uint256 amount)",
   "event InitialLpBootstrapMint(address indexed to, uint256 amount)",

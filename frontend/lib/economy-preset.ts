@@ -1,13 +1,22 @@
 /**
  * Mirrors **`DEPLOY_ECONOMY`** on the contracts side for UI copy only.
- * Set **`NEXT_PUBLIC_DEPLOY_ECONOMY=testnet`** (default if unset) or **`mainnet`** to match how the
- * deployed contracts were created (`contracts/scripts/deploy.ts`). This does not read chain state.
+ * Set **`NEXT_PUBLIC_DEPLOY_ECONOMY=testnet`** or **`mainnet`** to match how contracts were deployed
+ * (`contracts/scripts/deploy.ts`). If unset, **`getUiEconomyPreset()`** behaves like testnet for labels;
+ * dangerous debug UI uses **`isExplicitTestnetDeployEconomy()`** (requires literal `testnet`). Does not read chain state.
  */
 export type UiEconomyPreset = "testnet" | "mainnet";
 
 export function getUiEconomyPreset(): UiEconomyPreset {
   const raw = process.env.NEXT_PUBLIC_DEPLOY_ECONOMY?.trim().toLowerCase();
   return raw === "mainnet" ? "mainnet" : "testnet";
+}
+
+/**
+ * `true` only when **`NEXT_PUBLIC_DEPLOY_ECONOMY=testnet`** is set explicitly.
+ * Use for dangerous debug surfaces (e.g. owner `mintForTesting`) so missing env does not enable them in production builds.
+ */
+export function isExplicitTestnetDeployEconomy(): boolean {
+  return process.env.NEXT_PUBLIC_DEPLOY_ECONOMY?.trim().toLowerCase() === "testnet";
 }
 
 /** Short header label. */

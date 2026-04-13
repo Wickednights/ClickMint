@@ -14,6 +14,7 @@ export const revertErrorsAbi = parseAbi([
   "error CLICKUnauthorized()",
   "error CLICKBadSupply()",
   "error CLICKZeroAddr()",
+  "error CLICKTestingMintDisabled()",
 ]);
 
 const errorStringAbi = parseAbi(["error Error(string message)"]);
@@ -49,6 +50,8 @@ export function explainRevertData(data: `0x${string}` | undefined): string {
         return "CLICK token rejected the game: CLICK.game is not set to this ClickMintGame (fix: owner calls CLICK.setGame(gameAddress)).";
       case "CLICKBadSupply":
         return "CLICK supply constraint: zero cap at deploy, or any mint would exceed maxSupply (CLICKBadSupply).";
+      case "CLICKTestingMintDisabled":
+        return "mintForTesting is off for this deployment (mainnet preset / CLICKTestingMintDisabled).";
       case "GameCredits":
         return "Not enough credits for this click (GameCredits).";
       case "GameCooldown":
