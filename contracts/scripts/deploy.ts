@@ -46,13 +46,20 @@ async function main() {
   /** Until you call `CLICK.setLpRecipient`, early-claim LP share mints here — default is owner for bootstrap. */
   const lpRecipient = owner;
 
+  /** Mainnet: 10% of cap minted to `owner` at deploy for LP seed; testnet: 0 (use `mintForTesting` / debug UI). */
+  const lpBootstrapWei = preset === "mainnet" ? caps.maxSupplyWei / 10n : 0n;
+  if (lpBootstrapWei > 0n) {
+    console.log("CLICK initial LP bootstrap to owner (wei):", lpBootstrapWei.toString());
+  }
+
   const CLICK = await ethers.getContractFactory("CLICK");
   const click = await CLICK.deploy(
     owner,
     await treasury.getAddress(),
     lpRecipient,
     vestingSec,
-    caps.maxSupplyWei
+    caps.maxSupplyWei,
+    lpBootstrapWei
   );
   await click.waitForDeployment();
   const clickAddr = await click.getAddress();

@@ -48,6 +48,7 @@ export const escrowAbi = parseAbi([
 ]);
 
 export const clickTokenAbi = parseAbi([
+  "function owner() view returns (address)",
   "function maxSupply() view returns (uint256)",
   "function totalSupply() view returns (uint256)",
   "function game() view returns (address)",
@@ -58,4 +59,7 @@ export const clickTokenAbi = parseAbi([
   "function balanceOf(address account) view returns (uint256)",
   "function decimals() view returns (uint8)",
   "function symbol() view returns (string)",
+  "function mintForTesting(address to, uint256 amount)",
+  "event TestingMint(address indexed to, uint256 amount)",
+  "event InitialLpBootstrapMint(address indexed to, uint256 amount)",
 ]);
