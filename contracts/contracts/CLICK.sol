@@ -7,7 +7,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /// @title CLICK — capped supply (immutable cap from deploy), 1% transfer tax, vested “pending” rewards + 30/30/20/20 early spend.
-/// @dev Constructor args come from the deploy preset in `scripts/config/economy.ts`: **testnet** = 1M × 1e18 cap + 600s vesting; **mainnet** = 100B × 1e18 + 604800s (7d). Immutable after deploy.
+/// @dev Constructor args come from the deploy preset in `scripts/config/economy.ts`: **testnet** = 1M × 1e18 cap + 600s vesting + **tCLICK**-style names; **mainnet** = 100B × 1e18 + 604800s (7d) + **CLICK** names. Immutable after deploy.
 ///      **`lpBootstrapSupplyWei`**: optional one-time mint to `initialOwner` at deploy (e.g. 10% of cap on mainnet for LP seed); **0** on testnet. Does not use vesting.
 ///      **`enableMintForTesting_`**: **true** on testnet preset so `mintForTesting` works; **false** on mainnet so the path is permanently disabled.
 /// All mint paths pre-check `totalSupply() + amount <= maxSupply` (strict) and use CLICKBadSupply on violation.
@@ -57,6 +57,9 @@ contract CLICK is ERC20, ERC20Permit, Ownable, ReentrancyGuard {
     }
 
     constructor(
+        string memory name_,
+        string memory symbol_,
+        string memory permitName_,
         address initialOwner,
         address treasury_,
         address lpRecipient_,
@@ -64,7 +67,7 @@ contract CLICK is ERC20, ERC20Permit, Ownable, ReentrancyGuard {
         uint256 maxSupplyWei_,
         uint256 lpBootstrapSupplyWei_,
         bool enableMintForTesting_
-    ) ERC20("ClickMint", "CLICK") ERC20Permit("ClickMint") Ownable(initialOwner) {
+    ) ERC20(name_, symbol_) ERC20Permit(permitName_) Ownable(initialOwner) {
         if (treasury_ == address(0) || lpRecipient_ == address(0)) revert CLICKZeroAddr();
         if (maxSupplyWei_ == 0) revert CLICKBadSupply();
         mintForTestingEnabled = enableMintForTesting_;

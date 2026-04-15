@@ -4,6 +4,10 @@
  */
 import { createConnector } from "@wagmi/core";
 
+function stubChainId(): number {
+  return process.env.NEXT_PUBLIC_CHAIN_ID?.trim() === "8453" ? 8453 : 84532;
+}
+
 export function baseAccount(): ReturnType<typeof createConnector> {
   return createConnector(() => ({
     id: "baseAccount",
@@ -17,7 +21,7 @@ export function baseAccount(): ReturnType<typeof createConnector> {
       return [];
     },
     async getChainId() {
-      return 84532;
+      return stubChainId();
     },
     async getProvider() {
       throw new Error("Base Account connector is not enabled in ClickMint");

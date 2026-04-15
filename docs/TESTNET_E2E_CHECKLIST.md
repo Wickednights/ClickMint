@@ -1,8 +1,10 @@
-# ClickMint — Base Sepolia end-to-end checklist (ordered)
+# ClickMint — Base Sepolia smoke checklist (ordered)
 
-Work **top to bottom**. For each step, record **PASS / FAIL**, **tx hash** (if any), and **Basescan** links. Do **not** paste private keys, seeds, or full API keys into chat.
+This checklist is for **cheap, fast** validation on **Base Sepolia** ( **`tCLICK` / test naming** ). For **Uniswap v3 LP**, canonical factory/NPM behavior, and keeper economics in a “real” environment, do the same flows on **Base mainnet** (**`NEXT_PUBLIC_CHAIN_ID=8453`**, funded wallet, **`docs/HOWTO.md`**).
 
-**Related:** [POST_DEPLOY_VERIFICATION.md](./POST_DEPLOY_VERIFICATION.md) (automated reads), [SYSTEM_VERIFICATION.md](./SYSTEM_VERIFICATION.md) (condensed tables).
+Work **top to bottom**. For each step, record **PASS / FAIL**, **tx hash** (if any), and explorer links. Do **not** paste private keys, seeds, or full API keys into chat.
+
+**Related:** [POST_DEPLOY_VERIFICATION.md](./POST_DEPLOY_VERIFICATION.md) (automated reads), [SYSTEM_VERIFICATION.md](./SYSTEM_VERIFICATION.md) (condensed tables), [HOWTO.md](./HOWTO.md) (dual-network deploy).
 
 ---
 

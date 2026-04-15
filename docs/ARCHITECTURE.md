@@ -47,7 +47,7 @@ Central game contract. Holds **ETH credits** per user (`credits[address]`), hour
 | `clickFor(player)` | Gasless / smart-account path: caller must be `clickExecutor[player]`; runs `_click(player)` so credits / POT / vesting stay on the EOA. |
 | `setClickExecutor(executor)` | EOA links its smart account (or revokes with `address(0)`). |
 | `depositFor(player)` | Credits `player` when caller is `player` or `clickExecutor[player]` (optional; UI uses EOA `deposit()`). |
-| `finalizeHour(hourId)` | After hour end + buffer, picks a **random 15-minute UTC span** (start minute **0–44**), intersects with each player’s **per-minute click bitmask** (`minuteMask`), then picks winner; mints POT payout via `CLICK.mint`; may carry ETH forward. Callable by **`owner`** or **`potKeeper`**. See **`docs/LP_AERODROME_AND_AUTOMATION.md`**. |
+| `finalizeHour(hourId)` | After hour end + buffer, picks a **random 15-minute UTC span** (start minute **0–44**), intersects with each player’s **per-minute click bitmask** (`minuteMask`), then picks winner; **sends accumulated POT as native ETH** to the winner (`call{value}`); may carry ETH forward. Callable by **`owner`** or **`potKeeper`**. See **`docs/LP_AERODROME_AND_AUTOMATION.md`**. |
 | `pause` / `unpause` | Owner emergency stop (blocks deposits, clicks, executor linking, finalization; sweep still allowed). Emits **`GamePaused` / `GameUnpaused`** (and OpenZeppelin **`Paused` / `Unpaused`**). |
 | `isPaused()` | Alias for **`paused()`** — convenience for integrators. |
 | `setTrophyNft` / `mintTrophyForPlayer` | Link trophy contract; owner forwards mint to Binary Trophy; emits **`TrophyMintedViaGame`**. |
@@ -57,7 +57,7 @@ Central game contract. Holds **ETH credits** per user (`credits[address]`), hour
 
 ### CLICK (ERC20 + vesting)
 
-Token cap `maxSupply` (**immutable**, set at deploy — mainnet target **100B**, testnet default **1M**). Game is **`onlyGame`**: `grantVested` (vesting vault schedule) and `mint` (POT).
+Token cap `maxSupply` (**immutable**, set at deploy — mainnet target **100B**, testnet default **1M**). Game is **`onlyGame`**: **`grantVested`** (vesting vault schedule). **POT pays ETH from the game balance**, not `CLICK.mint`.
 
 | Function | Role |
 |----------|------|
@@ -66,7 +66,7 @@ Token cap `maxSupply` (**immutable**, set at deploy — mainnet target **100B**,
 | `earlySpendPending(amount)` | User burns from **unvested** slice only (`pendingVested` view = unvested cap); applies 30/30/20/20 split (burn/treasury/LP/user mints). Reverts `click: unvested` if `amount` too large. |
 | `pendingVested(account)` | **Misleading name:** returns **unvested** wei still subject to linear vesting (and early-spend cap). |
 | `claimable(account)` | Vested amount not yet claimed (can call `claimVested`). |
-| `mint` | Game-only; used for POT winner payout (liquid mint, not vault). |
+| `mint` | Game-only; available on **CLICK** for legacy/integration paths — **hourly POT does not mint CLICK to winners** (ETH payout from **ClickMintGame**). |
 
 **Why claimable / unvested jump on every click:** `grantVested` uses `_syncAndGrant`: it first **mints** any slice that has already vested under the current schedule, then sets **`v.total = oldUnvested + newReward`** and **`v.start = block.timestamp`**. Vesting **restarts from “now”** each time you earn new rewards, so on-chain numbers move in steps (not a smooth clock independent of clicks).
 

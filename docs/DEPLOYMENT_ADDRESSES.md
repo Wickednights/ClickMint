@@ -1,21 +1,23 @@
-# Deployment addresses — Base Sepolia
+# Deployment addresses
 
-**Chain:** Base Sepolia (`84532`).  
-**Live defaults in repo:** `frontend/lib/addresses.ts` (`baseSepoliaDeployed`) and `frontend/.env.example`.
+Ledgers for **Base Sepolia** (test / smoke) and **Base mainnet** (production QA + go-live).  
+**Frontend:** `frontend/lib/addresses.ts` — Sepolia has baked-in fallbacks; **mainnet requires every `NEXT_PUBLIC_*` address** in env. See **`frontend/.env.example`**.
 
 ---
 
 ## Maintenance — on every new full deploy
 
-1. **Copy** the entire **Active deployment** table below into **Archive** as a new dated subsection (keep newest archive entries near the top).
-2. **Replace** **Active deployment** with the new addresses from `npx hardhat run scripts/deploy.ts --network baseSepolia` (or your CI output).
-3. Update **`frontend/lib/addresses.ts`**, **`frontend/.env.example`**, **`docs/DEVELOPMENT_LOG.md`**, and any Vercel / local `.env` secrets docs you maintain.
+1. **Copy** the entire **Active deployment** table for that chain into **Archive** as a new dated subsection (keep newest archive entries near the top).
+2. **Replace** **Active deployment** with the new addresses from `npx hardhat run scripts/deploy.ts --network baseSepolia` or `--network base`.
+3. Update **`frontend/lib/addresses.ts`** (if you commit defaults), **`frontend/.env.example`**, root **`/.env.example`**, **`docs/DEVELOPMENT_LOG.md`**, and Vercel env for that deployment.
 
 Do **not** delete archive rows — explorers, LP pools, and old txs stay tied to those contracts forever.
 
 ---
 
-## Active deployment
+## Base Sepolia (`84532`) — test contracts
+
+### Active deployment
 
 _Supersedes all entries in Archive._
 
@@ -28,11 +30,9 @@ _Supersedes all entries in Archive._
 | **BinaryTrophyNFT** | `0xd190828F946659a1ff338AD6bC6BAF7C59f9eefD` |
 | **Escrow** | `0x3F71C068aaC3359332E5c464E91F0c8b23dF590a` |
 
-**Notes:** `DEPLOY_ECONOMY=testnet`; deploy ~ **2026-04-12** (UTC). Includes CLICK `mintForTesting`, constructor `lpBootstrapSupplyWei` (0 on testnet), `CLICK.setGame(game)` in `deploy.ts`.
+**Notes:** `DEPLOY_ECONOMY=testnet`; on-chain token **`tCLICK`** / trophy **`tBTROPHY`**; deploy ~ **2026-04-12** (UTC). Includes CLICK `mintForTesting`, constructor `lpBootstrapSupplyWei` (0 on testnet), `CLICK.setGame(game)` in `deploy.ts`.
 
----
-
-## Archive (superseded deployments)
+### Archive (superseded — Base Sepolia)
 
 ### 2026-04-07 — prior Base Sepolia set (“Phase 1” in repo history)
 
@@ -46,3 +46,29 @@ _Supersedes all entries in Archive._
 | **Escrow** | `0x2457623b777DE271CDC9d9D37E3a93f19fcc5960` |
 
 **Notes:** Logged in `DEVELOPMENT_LOG.md` under **2026-04-07T18:00:00Z**. Older bytecode (no `mintForTesting` / no LP bootstrap constructor arg).
+
+---
+
+## Base mainnet (`8453`) — production QA / go-live
+
+**Hardhat:** `npx hardhat run scripts/deploy.ts --network base` with **`DEPLOY_ECONOMY=mainnet`**.  
+**RPC env:** `BASE_MAINNET_RPC_URL` or `QUICKNODE_BASE_RPC` (see `contracts/hardhat.config.ts`).
+
+### Active deployment
+
+_No on-chain deploy recorded in-repo yet — fill this table after first mainnet deploy._
+
+| Role | Address |
+|------|---------|
+| **CLICK** | _TBD_ |
+| **Treasury** | _TBD_ |
+| **SecretPrizeWallet** | _TBD_ |
+| **ClickMintGame** | _TBD_ |
+| **BinaryTrophyNFT** | _TBD_ |
+| **Escrow** | _TBD_ |
+
+**Post-deploy:** run **`verify-deployment.ts`**, call **`setPotKeeper`** with the automation wallet (e.g. Vercel cron signer), fund that wallet with **ETH**, set **`NEXT_PUBLIC_CHAIN_ID=8453`** and all contract env vars on the **mainnet** Vercel project.
+
+### Archive (superseded — Base mainnet)
+
+_(None yet.)_

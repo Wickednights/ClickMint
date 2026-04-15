@@ -28,7 +28,7 @@ import {
 } from "viem";
 import { entryPoint07Address } from "viem/account-abstraction";
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
-import { baseSepolia } from "wagmi/chains";
+import { clickmintChain, clickmintChainId } from "@/lib/clickmint-chain";
 import { clickMintGameAbi } from "@/lib/abi";
 
 export const KERNEL_VERSION = "0.3.3" as const;
@@ -46,7 +46,7 @@ export function getPimlicoBundlerUrl(): string {
   const key =
     (typeof process !== "undefined" && process.env.NEXT_PUBLIC_PIMLICO_API_KEY?.trim()) || "";
   if (!key) throw new Error("NEXT_PUBLIC_PIMLICO_API_KEY is not set");
-  const raw = `https://api.pimlico.io/v2/${baseSepolia.id}/rpc?apikey=${key}`;
+  const raw = `https://api.pimlico.io/v2/${clickmintChainId()}/rpc?apikey=${key}`;
   return setPimlicoAsProvider(raw);
 }
 
@@ -116,7 +116,7 @@ export function isPimlicoConfigured(): boolean {
 
 export function createAaPublicClient() {
   return createPublicClient({
-    chain: baseSepolia,
+    chain: clickmintChain(),
     transport: http(getPublicRpcUrl()),
   });
 }
@@ -196,7 +196,7 @@ export async function enableGaslessSession(ctx: GaslessKernelContext): Promise<B
 
   const masterClient = createKernelAccountClient({
     account: kernelAccount,
-    chain: baseSepolia,
+    chain: clickmintChain(),
     client: publicClient,
     bundlerTransport,
     paymaster: true,
@@ -206,7 +206,7 @@ export async function enableGaslessSession(ctx: GaslessKernelContext): Promise<B
 
   await masterClient.sendTransaction({
     account: kernelAccount,
-    chain: baseSepolia,
+    chain: clickmintChain(),
     to: kernelAccount.address,
     value: 0n,
     data: "0x",
@@ -230,7 +230,7 @@ export async function enableGaslessSession(ctx: GaslessKernelContext): Promise<B
 
   const sessionClient = createKernelAccountClient({
     account: sessionAccount,
-    chain: baseSepolia,
+    chain: clickmintChain(),
     client: publicClient,
     bundlerTransport,
     paymaster: true,
@@ -265,7 +265,7 @@ export async function sendGaslessClick(
   if (!account) throw new Error("Session client missing account");
   const hash = await sessionClient.sendTransaction({
     account,
-    chain: baseSepolia,
+    chain: clickmintChain(),
     to: gameAddress,
     value: 0n,
     data: encodeClickForCalldata(player),
@@ -281,7 +281,7 @@ export async function linkClickExecutor(
 ): Promise<Hex> {
   if (!walletClient.account) throw new Error("Wallet client has no account");
   const hash = await walletClient.writeContract({
-    chain: baseSepolia,
+    chain: clickmintChain(),
     account: walletClient.account,
     address: gameAddress,
     abi: clickMintGameAbi,

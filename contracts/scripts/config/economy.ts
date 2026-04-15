@@ -39,20 +39,39 @@ export const TESTNET_TROPHY_DROP_BPS = 2500n;
 
 /** Minimum clicks in the game hour to qualify for POT settlement (immutable per game deploy). */
 export const MAINNET_MIN_POT_CLICKS = 100n;
-export const TESTNET_MIN_POT_CLICKS = 10n;
+/** Low bar for cheap testnet POT rounds (Base Sepolia smoke only). */
+export const TESTNET_MIN_POT_CLICKS = 5n;
 
 /**
- * Testnet: **0.00001 ETH** of credits per click → ~100 clicks from **0.001 ETH** (before bonuses).
+ * Testnet: **0.0000001 ETH** of credits per click → ~10,000 clicks from **0.001 ETH** (before bonuses).
+ * Kept ultra-low for cheap Base Sepolia smoke tests; mainnet QA uses Base mainnet preset.
  */
-export const TESTNET_CLICK_COST_CREDITS = ethers.parseEther("0.00001");
+export const TESTNET_CLICK_COST_CREDITS = ethers.parseEther("0.0000001");
 
 // ---------------------------------------------------------------------------
 // Full deploy presets (caps, vesting, game economy, hash tier)
 // ---------------------------------------------------------------------------
 
-/** Base Sepolia / QA — small cap, short vesting, readable credits, fast trophy season. */
+/** On-chain names so wallets/explorers show Base Sepolia assets are test-only. */
+export type TokenBranding = {
+  erc20Name: string;
+  erc20Symbol: string;
+  /** EIP-2612 domain name — match `erc20Name` in practice. */
+  erc20PermitName: string;
+  erc721Name: string;
+  erc721Symbol: string;
+};
+
+/** Base Sepolia / QA — small cap, short vesting, ultra-cheap credits, explicit "test" ERC20/721 names. */
 export const TESTNET_PRESET = {
   name: "testnet" as const,
+  branding: {
+    erc20Name: "ClickMint Test",
+    erc20Symbol: "tCLICK",
+    erc20PermitName: "ClickMint Test",
+    erc721Name: "ClickMint Test Binary Trophy",
+    erc721Symbol: "tBTROPHY",
+  } satisfies TokenBranding,
   /** 1_000_000 * 1e18 — exercise `CLICKBadSupply` and endgame paths quickly. */
   maxSupplyWei: 1_000_000n * 10n ** 18n,
   /** 10 trophies max on testnet. */
@@ -63,7 +82,8 @@ export const TESTNET_PRESET = {
   clicksPerHashTier: 50_000n,
   clickPerEthWei: DEFAULT_CLICK_PER_ETH_WEI,
   clickCostCredits: TESTNET_CLICK_COST_CREDITS,
-  baseClickReward: DEFAULT_BASE_CLICK_REWARD,
+  /** Lower than mainnet to keep testnet supply growth cheap. */
+  baseClickReward: ethers.parseEther("5"),
   trophyDropBps: TESTNET_TROPHY_DROP_BPS,
   minPotClicks: TESTNET_MIN_POT_CLICKS,
 } as const;
@@ -71,6 +91,13 @@ export const TESTNET_PRESET = {
 /** Production-style: 100B cap, 7d vesting, ~1 cent/click, 10k trophies, tighter hash tier. */
 export const MAINNET_PRESET = {
   name: "mainnet" as const,
+  branding: {
+    erc20Name: "ClickMint",
+    erc20Symbol: "CLICK",
+    erc20PermitName: "ClickMint",
+    erc721Name: "ClickMint Binary Trophy",
+    erc721Symbol: "BTROPHY",
+  } satisfies TokenBranding,
   /** 100_000_000_000 * 1e18 — `deploy.ts` also mints **10%** of this to the deployer at CLICK deploy for LP seed. */
   maxSupplyWei: 100_000_000_000n * 10n ** 18n,
   trophyMaxSupply: 10_000n,
@@ -122,6 +149,10 @@ export function supplyCapsAndDifficulty(preset: EconomyPreset) {
 
 export function vestingSecondsForDeploy(preset: EconomyPreset): bigint {
   return (preset === "mainnet" ? MAINNET_PRESET : TESTNET_PRESET).vestingDurationSeconds;
+}
+
+export function tokenBrandingForDeploy(preset: EconomyPreset): TokenBranding {
+  return preset === "mainnet" ? MAINNET_PRESET.branding : TESTNET_PRESET.branding;
 }
 
 /** Resolve `DEPLOY_ECONOMY` env; default **testnet**. Unknown values log a warning and fall back to testnet. */

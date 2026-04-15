@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { Address } from "viem";
 import { usePublicClient } from "wagmi";
-import { baseSepolia } from "wagmi/chains";
+import { clickmintChainId } from "@/lib/clickmint-chain";
 import { binaryTrophyAbi } from "@/lib/abi";
 import type { TrophyMintLogRow } from "@/lib/trophy-mints";
 import { cn } from "@/lib/utils";
@@ -31,7 +31,7 @@ export function TrophyThumbnail({
   tokenId: bigint;
   className?: string;
 }) {
-  const publicClient = usePublicClient({ chainId: baseSepolia.id });
+  const publicClient = usePublicClient({ chainId: clickmintChainId() });
 
   const { data: src = null } = useQuery({
     queryKey: ["trophyTokenUri", trophyAddr, tokenId.toString()],

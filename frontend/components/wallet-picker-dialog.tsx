@@ -1,6 +1,6 @@
 "use client";
 
-import { baseSepolia } from "wagmi/chains";
+import { clickmintChainId, clickmintChainLabel } from "@/lib/clickmint-chain";
 import { useConnect } from "wagmi";
 import {
   Dialog,
@@ -54,7 +54,8 @@ export function WalletPickerDialog({ open, onOpenChange }: Props) {
             Connect wallet
           </DialogTitle>
           <DialogDescription className="!mt-1 text-[10px] opacity-90">
-            Network: <span className="font-mono text-primary-fixed">Base Sepolia</span> (chain {baseSepolia.id})
+            Network: <span className="font-mono text-primary-fixed">{clickmintChainLabel()}</span> (chain{" "}
+            {clickmintChainId()})
           </DialogDescription>
         </DialogHeader>
         {!process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim() && (
@@ -73,7 +74,7 @@ export function WalletPickerDialog({ open, onOpenChange }: Props) {
                 onClick={() => {
                   void (async () => {
                     try {
-                      await connectAsync({ connector: c, chainId: baseSepolia.id });
+                      await connectAsync({ connector: c, chainId: clickmintChainId() });
                       onOpenChange(false);
                     } catch (err) {
                       console.error("[ClickMint] connect failed", c.id, err);

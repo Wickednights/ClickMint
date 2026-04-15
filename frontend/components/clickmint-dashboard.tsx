@@ -34,7 +34,7 @@ import {
   onChainPlaysRemaining,
   vestingVaultDisplay,
 } from "@/lib/game-display";
-import { baseSepolia } from "wagmi/chains";
+import { clickmintChainId, clickmintChainLabel } from "@/lib/clickmint-chain";
 import { formatEther, parseEther, type Address } from "viem";
 import { toast } from "sonner";
 import { binaryTrophyAbi, clickMintGameAbi, clickTokenAbi } from "@/lib/abi";
@@ -246,7 +246,7 @@ export function ClickMintDashboard() {
   }, [playClickSuccess, playWin, playNft, playError, celebrateWin]);
 
   const { address, isConnected } = useAccount();
-  const { data: walletClient } = useWalletClient({ chainId: baseSepolia.id });
+  const { data: walletClient } = useWalletClient({ chainId: clickmintChainId() });
   const gasless = useGaslessClickSession(gameAddr);
   /** All ClickMint game balance / POT / vesting use the connected EOA; gasless uses a smart account only as tx executor. */
   const playerAddress = address;
@@ -262,7 +262,7 @@ export function ClickMintDashboard() {
   const [walletOpen, setWalletOpen] = useState(false);
 
   const { writeContractAsync, isPending: writePending } = useWriteContract();
-  const publicClient = usePublicClient({ chainId: baseSepolia.id });
+  const publicClient = usePublicClient({ chainId: clickmintChainId() });
   const queryClient = useQueryClient();
 
   /** First `gameHour` bucket after deploy — from `NEXT_PUBLIC_GAME_GENESIS_UNIX` or `NEXT_PUBLIC_GAME_DEPLOY_BLOCK`. */
@@ -473,7 +473,12 @@ export function ClickMintDashboard() {
   const [heroClickFlash, setHeroClickFlash] = useState(false);
   const heroClickFlashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastClientClick = useRef(0);
+  /** Prevents overlapping click() submissions before wagmi `writePending` flips (double taps / fast retries). */
+  const clickInFlight = useRef(false);
   const [cooldownMs, setCooldownMs] = useState(0);
+
+  /** Matches on-chain `MAX_CLICKS_PER_BLOCK` pacing — stay slightly under 2/block when blocks are fast. */
+  const MIN_CLICK_INTERVAL_MS = 750;
 
   const triggerHeroClickFlash = useCallback(() => {
     if (heroClickFlashTimerRef.current) {
@@ -608,16 +613,16 @@ export function ClickMintDashboard() {
     enabled: !!trophyAddr,
   });
 
-  const wrongChain = isConnected && chainId !== baseSepolia.id;
+  const wrongChain = isConnected && chainId !== clickmintChainId();
 
   const onDeposit = async (eth: string) => {
     if (!gameAddr || !address || !publicClient) return;
     if (wrongChain) {
       try {
-        await switchChainAsync({ chainId: baseSepolia.id });
+        await switchChainAsync({ chainId: clickmintChainId() });
       } catch {
         toast.error("Switch to Base Sepolia", {
-          description: "Deposits must be signed on chain 84532. Choose Base Sepolia in your wallet, then try again.",
+          description: `Deposits must be signed on chain ${clickmintChainId()}. Choose ${clickmintChainLabel()} in your wallet, then try again.`,
         });
         return;
       }
@@ -626,7 +631,7 @@ export function ClickMintDashboard() {
 
     try {
       const hash = await writeContractAsync({
-        chainId: baseSepolia.id,
+        chainId: clickmintChainId(),
         address: gameAddr,
         abi: clickMintGameAbi,
         functionName: "deposit",
@@ -641,7 +646,7 @@ export function ClickMintDashboard() {
       const data = extractRevertData(e);
       let msg = data ? explainRevertData(data) : (e as Error).message;
       if (/8453|84532|chain id|invalid chain|wrong chain/i.test(msg)) {
-        msg = `${msg.slice(0, 160)} — Use Base Sepolia (84532). If your wallet shows Sepolia but errors persist, set the RPC to https://sepolia.base.org (some custom RPCs confuse the signer).`;
+        msg = `${msg.slice(0, 160)} — Use ${clickmintChainLabel()} (${clickmintChainId()}). If your wallet shows the wrong network, switch RPC or network in your wallet.`;
       }
       console.error("deposit() failed", e);
       toast.error("Deposit failed", { description: msg.slice(0, 320) });
@@ -652,7 +657,7 @@ export function ClickMintDashboard() {
     if (!gameAddr || !address) return;
     if (wrongChain) {
       try {
-        await switchChainAsync({ chainId: baseSepolia.id });
+        await switchChainAsync({ chainId: clickmintChainId() });
       } catch {
         toast.error("Switch to Base Sepolia in your wallet, then tap CLICK again.");
         return;
@@ -679,13 +684,21 @@ export function ClickMintDashboard() {
       return;
     }
     const now = Date.now();
-    if (now - lastClientClick.current < 500) {
-      setCooldownMs(500 - (now - lastClientClick.current));
+    if (clickInFlight.current) {
+      sfxRef.current.playError();
+      toast.message("Previous click still in progress", {
+        description: "Wait for the wallet / network to finish the last transaction.",
+      });
+      return;
+    }
+    if (now - lastClientClick.current < MIN_CLICK_INTERVAL_MS) {
+      setCooldownMs(MIN_CLICK_INTERVAL_MS - (now - lastClientClick.current));
       sfxRef.current.playError();
       toast.message("Cooldown");
       return;
     }
     lastClientClick.current = now;
+    clickInFlight.current = true;
     try {
       if (!publicClient) throw new Error("No RPC client for Base Sepolia");
 
@@ -712,9 +725,12 @@ export function ClickMintDashboard() {
         functionName: "click",
         account: address,
       });
+      const gasHeadroom =
+        request.gas !== undefined ? (request.gas * 13n) / 10n : undefined;
       const hash = await writeContractAsync({
         ...request,
-        chainId: baseSepolia.id,
+        chainId: clickmintChainId(),
+        ...(gasHeadroom !== undefined ? { gas: gasHeadroom } : {}),
       });
       await publicClient.waitForTransactionReceipt({ hash });
       await Promise.all([refetchCredits(), refetchUnvested(), refetchClaimable()]);
@@ -725,9 +741,18 @@ export function ClickMintDashboard() {
       setCooldownMs(0);
       sfxRef.current.playError();
       const data = extractRevertData(e);
-      const msg = data ? explainRevertData(data) : (e as Error).message;
+      let msg = data ? explainRevertData(data) : (e as Error).message;
       console.error("click() failed", { error: e, revertData: data, explained: msg });
-      toast.error("Click failed", { description: msg.slice(0, 280), duration: 12_000 });
+      if (
+        !data &&
+        /out of gas|intrinsic gas too low|exceeds block gas|gas required exceeds/i.test(msg)
+      ) {
+        msg =
+          "Your wallet often labels reverts as “out of gas.” Here, rapid clicks can exceed the on-chain limit of 2 clicks per block, or the random click-hash check can fail as difficulty rises — wait for confirmation, then try again.";
+      }
+      toast.error("Click failed", { description: msg.slice(0, 320), duration: 12_000 });
+    } finally {
+      clickInFlight.current = false;
     }
   };
 
@@ -735,7 +760,7 @@ export function ClickMintDashboard() {
     if (!clickAddr || wrongChain || !publicClient) return;
     try {
       const hash = await writeContractAsync({
-        chainId: baseSepolia.id,
+        chainId: clickmintChainId(),
         address: clickAddr,
         abi: clickTokenAbi,
         functionName: "claimVested",
@@ -788,7 +813,7 @@ export function ClickMintDashboard() {
         });
       }
       await writeContractAsync({
-        chainId: baseSepolia.id,
+        chainId: clickmintChainId(),
         address: clickAddr,
         abi: clickTokenAbi,
         functionName: "earlySpendPending",
@@ -816,7 +841,7 @@ export function ClickMintDashboard() {
     if (!gameAddr || wrongChain || prevHour === undefined) return;
     try {
       await writeContractAsync({
-        chainId: baseSepolia.id,
+        chainId: clickmintChainId(),
         address: gameAddr,
         abi: clickMintGameAbi,
         functionName: "finalizeHour",
@@ -1504,7 +1529,7 @@ export function ClickMintDashboard() {
                   <button
                     type="button"
                     disabled={switchPending}
-                    onClick={() => switchChain({ chainId: baseSepolia.id })}
+                    onClick={() => switchChain({ chainId: clickmintChainId() })}
                     className="hidden font-label text-[9px] uppercase tracking-widest text-primary-fixed underline sm:inline"
                   >
                     Switch network
@@ -1699,7 +1724,7 @@ export function ClickMintDashboard() {
                   type="button"
                   disabled={switchPending}
                   onClick={() => {
-                    void switchChain({ chainId: baseSepolia.id });
+                    void switchChain({ chainId: clickmintChainId() });
                     setMobileMenuOpen(false);
                   }}
                   className="border border-amber-500/50 py-2 text-[11px] text-amber-200"

@@ -4,8 +4,21 @@
 
 - Node.js 20+ (recommended)
 - npm
-- A wallet on **Base Sepolia** (chain id `84532`)
-- Optional: [QuickNode](https://www.quicknode.com/) or other RPC URL for Base Sepolia
+- A funded wallet for the network you deploy to:
+  - **Base Sepolia** (chain id **`84532`**) — cheap smoke tests; on-chain token names include **“Test”** / **tCLICK**.
+  - **Base mainnet** (chain id **`8453`**) — production economics and **recommended** for DEX/LP / integration QA.
+- RPC URLs: [QuickNode](https://www.quicknode.com/) or public `https://sepolia.base.org` / `https://mainnet.base.org`.
+
+### Network selection (frontend + cron)
+
+1. Set **`NEXT_PUBLIC_CHAIN_ID`** in **`frontend/.env.local`** (and Vercel):
+   - **`84532`** — Base Sepolia (default if unset).
+   - **`8453`** — Base mainnet.
+2. Set RPC:
+   - Sepolia: **`NEXT_PUBLIC_QUICKNODE_RPC`** (optional; falls back to public Sepolia RPC).
+   - Mainnet: **`NEXT_PUBLIC_BASE_MAINNET_RPC`** (optional; falls back to `https://mainnet.base.org`).
+3. **Mainnet:** set **every** **`NEXT_PUBLIC_*`** contract address (there are no baked-in mainnet defaults).
+4. **Cron / keeper:** use the **same** **`NEXT_PUBLIC_CHAIN_ID`** on Vercel; set **`POT_KEEPER_RPC_URL`** or the matching public RPC; fund the keeper with **native ETH** on that chain.
 
 ## Repository layout
 
@@ -32,9 +45,11 @@ cd contracts
 npx hardhat run scripts/deploy.ts --network <networkName>
 ```
 
-Deploy preset: **`DEPLOY_ECONOMY=testnet`** (default) or **`mainnet`**. **Testnet:** 1M CLICK cap, 10 trophies, 10m vesting, readable click costs. **Mainnet:** 100B cap, 10k trophies, 7d vesting, ~1¢/click at default `MAINNET_ETH_USD`. See **`docs/ECONOMY.md`** and **`contracts/scripts/config/economy.ts`** (`TESTNET_PRESET` / `MAINNET_PRESET`).
+Deploy preset: **`DEPLOY_ECONOMY=testnet`** (default) or **`mainnet`**. **Testnet:** 1M **tCLICK** cap, 10 trophies, 10m vesting, **ultra-low** `clickCostCredits`, **`minPotClicks = 5`**. **Mainnet:** 100B cap, 10k trophies, 7d vesting, ~1¢/click at default `MAINNET_ETH_USD`. See **`docs/ECONOMY.md`** and **`contracts/scripts/config/economy.ts`**.
 
-Match the frontend header hint: **`NEXT_PUBLIC_DEPLOY_ECONOMY=testnet`** or **`mainnet`** in **`frontend/.env`**.
+**Networks (Hardhat):** `--network baseSepolia` or **`--network base`** (mainnet). Shortcuts: **`npm run deploy:base-sepolia`**, **`npm run deploy:base`**.
+
+Match the frontend header hint: **`NEXT_PUBLIC_DEPLOY_ECONOMY=testnet`** or **`mainnet`** in **`frontend/.env`** (must match how **`CLICK` / game** were deployed).
 
 Note the printed addresses for **CLICK**, **ClickMintGame**, **Treasury**, **SecretPrizeWallet**, **BinaryTrophyNFT**, **Escrow**.
 
@@ -56,6 +71,16 @@ After redeploy, confirm wiring before updating frontend `.env`:
 ```bash
 cd contracts
 CLICK_ADDRESS=0x... GAME_ADDRESS=0x... TROPHY_ADDRESS=0x... npm run verify:base-sepolia
+# Base mainnet:
+CLICK_ADDRESS=0x... GAME_ADDRESS=0x... TROPHY_ADDRESS=0x... npm run verify:base
+```
+
+After deploy on any network, set **`potKeeper`** for cron (owner signer):
+
+```bash
+cd contracts
+GAME_ADDRESS=0x... POT_KEEPER_ADDRESS=0x... npx hardhat run scripts/set-pot-keeper.ts --network baseSepolia
+# or --network base
 ```
 
 Optional: set **`EXPECTED_MAX_SUPPLY_WEI`** to the deployed cap (mainnet-style **100B** tokens: `100000000000000000000000000000`; testnet **1M**: `1000000000000000000000000`). Full checklist: **`docs/POST_DEPLOY_VERIFICATION.md`**, **`docs/SYSTEM_VERIFICATION.md`**.
