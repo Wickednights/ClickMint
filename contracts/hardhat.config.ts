@@ -70,6 +70,15 @@ const config: HardhatUserConfig = {
         "https://sepolia.base.org",
       accounts: deployerAccountsFromEnv(),
     },
+    /** Base mainnet — chain id 8453. Use for production QA / go-live deploys. */
+    base: {
+      url:
+        process.env.BASE_MAINNET_RPC_URL ||
+        process.env.QUICKNODE_BASE_RPC ||
+        "https://mainnet.base.org",
+      accounts: deployerAccountsFromEnv(),
+      chainId: 8453,
+    },
   }
 };
 

@@ -13,6 +13,15 @@ Format:
 
 ---
 
+### 2026-04-13T18:00:00Z — Mainnet-first QA wiring, cheap branded testnet, dual-network docs
+
+- **`economy.ts`:** **`TESTNET_PRESET.branding`** (`ClickMint Test` / **`tCLICK`**, trophy **`tBTROPHY`**); ultra-cheap **`clickCostCredits`** (`0.0000001` ETH); **`TESTNET_MIN_POT_CLICKS=5`**, **`baseClickReward`** `5e18` on testnet; **`tokenBrandingForDeploy()`** for deploy scripts.
+- **`CLICK.sol` / `BinaryTrophyNFT.sol`:** Constructors take **`name` / `symbol`** (and permit name on CLICK); **`deploy.ts`** passes preset branding.
+- **`hardhat.config.ts` / `contracts/package.json`:** Network **`base`** (chain id **8453**); npm scripts **`deploy:base`**, **`verify:base`**, **`set-game:base`**, etc.; RPC via **`BASE_MAINNET_RPC_URL`** / **`QUICKNODE_BASE_RPC`**.
+- **Frontend:** **`clickmint-chain.ts`** — **`NEXT_PUBLIC_CHAIN_ID`** selects Base vs Base Sepolia; **`wagmi`**, **`addresses.ts`** (mainnet requires env), cron **`finalize-hour`**, WalletConnect copy, stubs use inline chain id from env.
+- **Docs / ops:** **`ARCHITECTURE_FOR_GROK_REVIEW`**, **`ARCHITECTURE`**, **`ECONOMY`**, **`HOWTO`**, **`POST_DEPLOY_VERIFICATION`**, **`TESTNET_E2E_CHECKLIST`**, **`LP_AERODROME_AND_AUTOMATION`**, **`WHERE_WE_ARE_AND_NEXT_STEPS`**, **`README`**, **`contracts/scripts/config/README`**, **`DEPLOYMENT_ADDRESSES`** (Base mainnet section), **`.env.example`** files — dual-network, **ETH POT**, **`potKeeper`** + cron, Pimlico **8453**.
+- **Breaking:** New constructor arity → **full redeploy** of CLICK + trophy + game wiring on each chain when rolling this out.
+
 ### 2026-04-12T23:55:00Z — Base Sepolia redeploy (CLICK constructor + full stack)
 
 - **`DEPLOY_ECONOMY=testnet`** — `deploy.ts` run on Base Sepolia from agent shell (user `DEPLOYER_KEY` + RPC).

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAccount, useChainId, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { formatEther, isAddress, parseEther, type Address } from "viem";
-import { baseSepolia } from "wagmi/chains";
+import { clickmintChainId, clickmintChainLabel } from "@/lib/clickmint-chain";
 import { clickMintGameAbi, clickTokenAbi } from "@/lib/abi";
 import { getClickAddress, getGameAddress, getTrophyNftAddress } from "@/lib/addresses";
 import { getUiEconomyPreset, isExplicitTestnetDeployEconomy } from "@/lib/economy-preset";
@@ -14,7 +14,7 @@ function TestnetMintClickSection({ clickAddr }: { clickAddr: Address }) {
   const preset = getUiEconomyPreset();
   const { address } = useAccount();
   const chainId = useChainId();
-  const wrongChain = chainId !== baseSepolia.id;
+  const wrongChain = chainId !== clickmintChainId();
   const [toInput, setToInput] = useState("");
   const [amountHuman, setAmountHuman] = useState("500000");
   const [localError, setLocalError] = useState<string | null>(null);
@@ -66,7 +66,7 @@ function TestnetMintClickSection({ clickAddr }: { clickAddr: Address }) {
       return;
     }
     if (wrongChain) {
-      setLocalError(`Switch wallet to Base Sepolia (chain ${baseSepolia.id}).`);
+      setLocalError(`Switch wallet to ${clickmintChainLabel()} (chain ${clickmintChainId()}).`);
       return;
     }
     writeContract({
@@ -330,7 +330,7 @@ export function DebugContractPanel() {
       <p>claimable: {claimable !== undefined ? `${formatEther(claimable)} $CLICK` : "—"}</p>
       <p>$CLICK balance (liquid): {clickBalance !== undefined ? `${formatEther(clickBalance)} $CLICK` : "—"}</p>
       <p>
-        Chain: Base Sepolia ({baseSepolia.id}) · connected {chainId}
+        Chain: {clickmintChainLabel()} ({clickmintChainId()}) · connected {chainId}
       </p>
       <p title="Binary Trophy NFT (env)">
         Trophy NFT: {trophyAddr}

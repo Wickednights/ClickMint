@@ -3,6 +3,10 @@
  */
 import { createConnector } from "@wagmi/core";
 
+function stubChainId(): number {
+  return process.env.NEXT_PUBLIC_CHAIN_ID?.trim() === "8453" ? 8453 : 84532;
+}
+
 export function porto() {
   return createConnector(() => ({
     id: "porto",
@@ -16,7 +20,7 @@ export function porto() {
       return [];
     },
     async getChainId() {
-      return 84532;
+      return stubChainId();
     },
     async getProvider() {
       throw new Error("Porto connector is not enabled in ClickMint");

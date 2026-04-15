@@ -28,13 +28,16 @@ $env:EXPECTED_MAX_SUPPLY_WEI="1000000000000000000000000"
 npx hardhat run scripts/verify-deployment.ts --network baseSepolia
 ```
 
-Also read **`CLICK.vestingDuration()`** on Basescan if you need to confirm 600 vs 604800.
+**Base mainnet** (chain id **8453**): same env vars; use **`--network base`** or **`npm run verify:base`**. On **[Basescan](https://basescan.org)** (not Sepolia), confirm reads.
+
+Also read **`CLICK.vestingDuration()`** on the explorer if you need to confirm 600 vs 604800. On testnet, confirm **`name()`** / **`symbol()`** show **ClickMint Test** / **tCLICK** when **`DEPLOY_ECONOMY=testnet`**.
 
 npm shorthand:
 
 ```bash
 cd contracts
 CLICK_ADDRESS=0x... GAME_ADDRESS=0x... TROPHY_ADDRESS=0x... npm run verify:base-sepolia
+CLICK_ADDRESS=0x... GAME_ADDRESS=0x... TROPHY_ADDRESS=0x... npm run verify:base
 ```
 
 **Checks:**
@@ -60,7 +63,9 @@ CLICK_ADDRESS=0x... GAME_ADDRESS=0x... TROPHY_ADDRESS=0x... npm run verify:base-
 
 Set **`NEXT_PUBLIC_DEPLOY_ECONOMY=testnet`** or **`mainnet`** to match **`DEPLOY_ECONOMY`** used at deploy (header hint only).
 
-For **gasless** QA on Base Sepolia, also set **`NEXT_PUBLIC_PIMLICO_API_KEY`** and (after creating a policy in the Pimlico dashboard) **`NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID`** — see **`docs/TESTNET_E2E_CHECKLIST.md`** Part B.
+Set **`NEXT_PUBLIC_CHAIN_ID`** to **`84532`** (Sepolia) or **`8453`** (Base mainnet) so wagmi, address fallbacks, Pimlico URLs, and **`/api/cron/finalize-hour`** target the correct chain.
+
+For **gasless** QA, set **`NEXT_PUBLIC_PIMLICO_API_KEY`** and (if required) **`NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID`** — enable **84532** and/or **8453** in the Pimlico dashboard to match **`NEXT_PUBLIC_CHAIN_ID`**. See **`docs/TESTNET_E2E_CHECKLIST.md`** Part B.
 
 ## Events (owner / ops)
 

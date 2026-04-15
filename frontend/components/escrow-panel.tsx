@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { type Address, getAddress, isAddress } from "viem";
 import { useAccount, usePublicClient, useReadContracts, useWriteContract } from "wagmi";
-import { baseSepolia } from "wagmi/chains";
+import { clickmintChainId } from "@/lib/clickmint-chain";
 import {
   Dialog,
   DialogContent,
@@ -27,7 +27,7 @@ const HOLD_SCAN_CAP = 24n;
 
 export function EscrowPanel({ escrowAddr, trophyAddr }: Props) {
   const { address, isConnected } = useAccount();
-  const publicClient = usePublicClient({ chainId: baseSepolia.id });
+  const publicClient = usePublicClient({ chainId: clickmintChainId() });
   const { writeContractAsync } = useWriteContract();
 
   const { data: nextHold } = useReadContracts({
@@ -119,7 +119,7 @@ export function EscrowPanel({ escrowAddr, trophyAddr }: Props) {
         return;
       }
       const aHash = await writeContractAsync({
-        chainId: baseSepolia.id,
+        chainId: clickmintChainId(),
         address: trophyAddr,
         abi: binaryTrophyAbi,
         functionName: "approve",
@@ -128,7 +128,7 @@ export function EscrowPanel({ escrowAddr, trophyAddr }: Props) {
       await publicClient.waitForTransactionReceipt({ hash: aHash });
 
       const dHash = await writeContractAsync({
-        chainId: baseSepolia.id,
+        chainId: clickmintChainId(),
         address: escrowAddr,
         abi: escrowAbi,
         functionName: "deposit",
@@ -149,7 +149,7 @@ export function EscrowPanel({ escrowAddr, trophyAddr }: Props) {
     if (!publicClient) return;
     try {
       const hash = await writeContractAsync({
-        chainId: baseSepolia.id,
+        chainId: clickmintChainId(),
         address: escrowAddr,
         abi: escrowAbi,
         functionName: "claim",

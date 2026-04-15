@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BaseError, createPublicClient, createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { baseSepolia } from "viem/chains";
+import { base, baseSepolia } from "viem/chains";
 import { clickMintGameAbi } from "@/lib/abi";
 import { getGameAddress } from "@/lib/addresses";
 
@@ -72,14 +72,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const useMainnet = process.env.NEXT_PUBLIC_CHAIN_ID?.trim() === "8453";
+    const viemChain = useMainnet ? base : baseSepolia;
     const rpc =
-      process.env.POT_KEEPER_RPC_URL?.trim() || process.env.NEXT_PUBLIC_QUICKNODE_RPC?.trim();
-    if (!rpc) {
-      return NextResponse.json(
-        { error: "No RPC (set POT_KEEPER_RPC_URL or NEXT_PUBLIC_QUICKNODE_RPC on this deployment)" },
-        { status: 500 }
-      );
-    }
+      process.env.POT_KEEPER_RPC_URL?.trim() ||
+      (useMainnet
+        ? process.env.NEXT_PUBLIC_BASE_MAINNET_RPC?.trim() || process.env.BASE_MAINNET_RPC_URL?.trim()
+        : process.env.NEXT_PUBLIC_QUICKNODE_RPC?.trim());
+    const defaultRpc = useMainnet ? "https://mainnet.base.org" : "https://sepolia.base.org";
+    const rpcUrl = rpc || defaultRpc;
 
     const gameAddr = getGameAddress();
     let account;
@@ -89,9 +90,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Invalid POT_KEEPER_PRIVATE_KEY (failed to parse)" }, { status: 500 });
     }
 
-    const transport = http(rpc);
-    const publicClient = createPublicClient({ chain: baseSepolia, transport });
-    const walletClient = createWalletClient({ account, chain: baseSepolia, transport });
+    const transport = http(rpcUrl);
+    const publicClient = createPublicClient({ chain: viemChain, transport });
+    const walletClient = createWalletClient({ account, chain: viemChain, transport });
 
     const nowSec = BigInt(Math.floor(Date.now() / 1000));
     const gameHourNow = await publicClient.readContract({
@@ -159,8 +160,7 @@ export async function GET(request: NextRequest) {
           error: detail.slice(0, 800),
           targetHour: targetHour.toString(),
           keeper: account.address,
-          hint:
-            "Check keeper ETH on Base Sepolia, on-chain potKeeper matches this address, game not paused, and winner can receive ETH (EOA). See response body in Vercel Logs.",
+          hint: `Check keeper native ETH on ${useMainnet ? "Base mainnet" : "Base Sepolia"}, on-chain potKeeper matches this address, game not paused, and winner can receive ETH (EOA). See Vercel Logs.`,
         },
         { status: 502 }
       );

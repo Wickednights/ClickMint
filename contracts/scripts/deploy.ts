@@ -3,6 +3,7 @@ import {
   deployPresetFromEnv,
   economyForDeploy,
   supplyCapsAndDifficulty,
+  tokenBrandingForDeploy,
   vestingSecondsForDeploy,
   type EconomyPreset,
 } from "./config/economy";
@@ -20,9 +21,11 @@ async function main() {
   const owner = deployer.address;
 
   const preset = deployPresetFromEnv() as EconomyPreset;
+  const branding = tokenBrandingForDeploy(preset);
   const { clickPerEthWei, clickCostCredits, baseClickReward } = economyForDeploy(preset);
   const caps = supplyCapsAndDifficulty(preset);
   const vestingSec = vestingSecondsForDeploy(preset);
+  console.log("Token branding:", branding);
   console.log("Economy preset:", preset, {
     clickPerEthWei: clickPerEthWei.toString(),
     clickCostCredits: clickCostCredits.toString(),
@@ -106,7 +109,13 @@ async function main() {
   await (await click.setGame(await game.getAddress())).wait();
 
   const BinaryTrophyNFT = await ethers.getContractFactory("BinaryTrophyNFT");
-  const trophy = await BinaryTrophyNFT.deploy(owner, owner, caps.trophyMaxSupply);
+  const trophy = await BinaryTrophyNFT.deploy(
+    owner,
+    owner,
+    caps.trophyMaxSupply,
+    branding.erc721Name,
+    branding.erc721Symbol
+  );
   await trophy.waitForDeployment();
 
   await (await trophy.setClickMintGame(await game.getAddress())).wait();

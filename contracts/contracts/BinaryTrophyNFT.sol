@@ -46,9 +46,13 @@ contract BinaryTrophyNFT is ERC721, ERC2981, Ownable {
         _;
     }
 
-    constructor(address initialOwner, address royaltyReceiver, uint256 maxSupply_)
-        ERC721("ClickMint Binary Trophy", "BTROPHY")
-        Ownable(initialOwner)
+    constructor(
+        address initialOwner,
+        address royaltyReceiver,
+        uint256 maxSupply_,
+        string memory name_,
+        string memory symbol_
+    ) ERC721(name_, symbol_) Ownable(initialOwner)
     {
         if (royaltyReceiver == address(0)) revert TrophyZeroAddr();
         if (maxSupply_ == 0) revert TrophyBadSupply();

@@ -11,8 +11,10 @@ import { ethers } from "hardhat";
 async function main() {
   const gameAddr =
     process.env.GAME_ADDRESS?.trim() || process.env.NEXT_PUBLIC_GAME_ADDRESS?.trim();
-  if (!gameAddr) {
-    throw new Error("Set GAME_ADDRESS or NEXT_PUBLIC_GAME_ADDRESS (ClickMintGame address)");
+  if (!gameAddr || !ethers.isAddress(gameAddr)) {
+    throw new Error(
+      "Set GAME_ADDRESS or NEXT_PUBLIC_GAME_ADDRESS to a valid EVM address (ClickMintGame address)"
+    );
   }
 
   const keeper = process.env.POT_KEEPER_ADDRESS?.trim();
@@ -22,17 +24,40 @@ async function main() {
 
   const game = await ethers.getContractAt("ClickMintGame", gameAddr);
   const owner = await game.owner();
-  const [signer] = await ethers.getSigners();
+  const signers = await ethers.getSigners();
+  if (signers.length === 0) {
+    throw new Error(
+      "No signer configured for this network. Set DEPLOYER_KEY in your environment so Hardhat can load the deployer account."
+    );
+  }
+  const [signer] = signers;
   if (signer.address.toLowerCase() !== owner.toLowerCase()) {
     throw new Error(`Signer ${signer.address} is not game owner ${owner}`);
   }
 
+  const currentPotKeeper = await game.potKeeper();
+  if (currentPotKeeper.toLowerCase() === keeper.toLowerCase()) {
+    console.log("setPotKeeper skipped", {
+      game: gameAddr,
+      potKeeper: keeper,
+      reason: "potKeeper already set",
+    });
+    return;
+  }
+
   const tx = await game.setPotKeeper(keeper);
   const receipt = await tx.wait();
+  if (!receipt) {
+    throw new Error(`setPotKeeper: no receipt for tx ${tx.hash}`);
+  }
+  if (Number(receipt.status) !== 1) {
+    throw new Error(`setPotKeeper reverted (status ${receipt.status}) — tx ${receipt.hash}`);
+  }
+
   console.log("setPotKeeper ok", {
     game: gameAddr,
     potKeeper: keeper,
-    txHash: receipt?.hash,
+    txHash: receipt.hash,
   });
 }
 

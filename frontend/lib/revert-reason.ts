@@ -32,7 +32,11 @@ export function explainRevertData(data: `0x${string}` | undefined): string {
   if (data.startsWith("0x08c379a0")) {
     try {
       const decoded = decodeErrorResult({ abi: errorStringAbi, data });
-      return decoded.args[0] as string;
+      const s = decoded.args[0] as string;
+      if (s === "game: clickhash") {
+        return "Click hash check failed — as the hour fills up, clicks need more leading-zero bits (random roll). Try again.";
+      }
+      return s;
     } catch {
       return "Revert string (could not decode)";
     }

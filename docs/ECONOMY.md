@@ -9,10 +9,13 @@ All immutable deploy parameters live in **`contracts/scripts/config/economy.ts`*
 | **CLICK `maxSupply`** | `1_000_000 * 1e18` (1M tokens) | `100_000_000_000 * 1e18` (100B tokens) |
 | **Binary Trophy `maxSupply`** | `10` | `10_000` |
 | **`CLICK` vesting duration** | `600` seconds (10 minutes) | `604_800` seconds (7 days) |
-| **`clickCostCredits`** | `0.00001 ETH` in credit wei (`1e13`) — ~100 clicks per 0.001 ETH | ~**1 US cent** per click at **`MAINNET_ETH_USD`** (default 3500) |
+| **`clickCostCredits`** | **`0.0000001 ETH`** in credit wei — ~**10,000** clicks per 0.001 ETH (ultra-cheap Base Sepolia smoke) | ~**1 US cent** per click at **`MAINNET_ETH_USD`** (default 3500) |
+| **`baseClickReward`** (vested CLICK / click) | **`5 * 1e18`** wei on testnet preset | **`10 * 1e18`** (default) |
+| **`minPotClicks`** | **`5`** (short POT qualification on testnet) | **`100`** |
 | **`clicksPerHashTier`** | `50_000` (looser, QA-friendly) | `2_500` (tighter ramp) |
+| **On-chain names** | ERC20 **ClickMint Test** / **tCLICK**; ERC721 trophy **tBTROPHY** | **ClickMint** / **CLICK**; **BTROPHY** |
 
-Testnet values exist so you can hit **`CLICKBadSupply`** and trophy cap quickly; mainnet values match production intent.
+Testnet values exist so you can hit **`CLICKBadSupply`** and trophy cap quickly; mainnet values match production intent. **Primary “real world” QA** (Uniswap v3 LP, explorers, keeper gas) targets **Base mainnet** — see **`docs/HOWTO.md`**.
 
 **Frontend:** set **`NEXT_PUBLIC_DEPLOY_ECONOMY=testnet`** or **`mainnet`** to match how the contracts were deployed (header copy only; not enforced on-chain).
 

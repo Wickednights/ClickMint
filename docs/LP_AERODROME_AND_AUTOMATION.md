@@ -2,13 +2,19 @@
 
 ## Where to add LP: mainnet vs Base Sepolia
 
+**Product stance:** Use **Base mainnet** for serious LP and DEX integration QA; Base Sepolia often has incomplete front-ends, high CREATE2 gas / factory quirks, and mislabeled explorers — fine for token smoke only.
+
 ### Base mainnet — Aerodrome vs Uniswap
 
 **Aerodrome** is the dominant ve(3,3) DEX ecosystem on **Base**; liquidity and routing are strong for native Base projects. **Uniswap v3** is also deployed on Base and is a safe default if you prefer canonical tooling.
 
 For ClickMint on **mainnet**, **either works** — choose based on where you want depth, incentives, and operational familiarity. This repo does not ship a DEX integration yet; the **CLICK** token only **mints** the early-claim “LP” share to `lpRecipient` until you point it at a router, vault, or helper contract.
 
-### Base Sepolia (testnet) — use DapDap Uniswap V3
+### Base Sepolia (testnet) — optional smoke only
+
+Prefer **mainnet** for pool creation + liquidity that should mirror production. Below: historical notes for testnet-only experiments.
+
+### Base Sepolia — DapDap Uniswap V3 (may be flaky)
 
 **Aerodrome** front-ends and pool flows on **Base Sepolia** are often incomplete or painful for custom testnet tokens. In practice, the most reliable place to **pick arbitrary testnet tokens** (e.g. **CLICK** + **WETH**) and add **Uniswap v3** liquidity is **DapDap’s Base testnet Uniswap UI**:
 

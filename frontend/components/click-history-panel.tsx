@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { decodeEventLog, type Address } from "viem";
 import { useAccount, usePublicClient, useWatchContractEvent } from "wagmi";
-import { baseSepolia } from "wagmi/chains";
+import { clickmintChainId } from "@/lib/clickmint-chain";
 import { clickMintGameAbi } from "@/lib/abi";
 import { hourIdForDisplay } from "@/lib/game-genesis";
 import { cn } from "@/lib/utils";
@@ -168,7 +168,7 @@ export function ClickHistoryPanel({
 }: ClickHistoryPanelProps) {
   const liveCap = liveFeedMaxProp ?? DEFAULT_LIVE_FEED_MAX;
   const { address: viewerAddress } = useAccount();
-  const publicClient = usePublicClient({ chainId: baseSepolia.id });
+  const publicClient = usePublicClient({ chainId: clickmintChainId() });
   const [rows, setRows] = useState<ClickLogRow[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "error">("idle");
   const [archivePage, setArchivePage] = useState(0);

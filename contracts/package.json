@@ -7,9 +7,13 @@
     "build": "hardhat compile",
     "test": "hardhat test",
     "deploy:base-sepolia": "hardhat run scripts/deploy.ts --network baseSepolia",
+    "deploy:base": "hardhat run scripts/deploy.ts --network base",
     "set-game:base-sepolia": "hardhat run scripts/set-game.ts --network baseSepolia",
+    "set-game:base": "hardhat run scripts/set-game.ts --network base",
     "deploy-game:base-sepolia": "hardhat run scripts/deploy-game-and-relink.ts --network baseSepolia",
+    "deploy-game:base": "hardhat run scripts/deploy-game-and-relink.ts --network base",
     "verify:base-sepolia": "hardhat run scripts/verify-deployment.ts --network baseSepolia",
+    "verify:base": "hardhat run scripts/verify-deployment.ts --network base",
     "peek:deployer-meta": "node scripts/peek-deployer-key-meta.cjs"
   },
   "devDependencies": {

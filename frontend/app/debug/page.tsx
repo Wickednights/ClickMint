@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { DebugContractPanel } from "@/components/debug-contract-panel";
-import { baseSepoliaDeployed, getClickAddress, getGameAddress } from "@/lib/addresses";
+import { getClickAddress, getGameAddress, getTreasuryAddress } from "@/lib/addresses";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +13,7 @@ export default async function DebugPage() {
 
   const game = getGameAddress();
   const click = getClickAddress();
+  const treasury = getTreasuryAddress();
 
   return (
     <main className="min-h-screen bg-black p-6 font-mono text-xs text-primary-container">
@@ -37,7 +38,7 @@ export default async function DebugPage() {
           <strong>CLICK</strong> {click}
         </li>
         <li>
-          <strong>Treasury</strong> {baseSepoliaDeployed.treasury}
+          <strong>Treasury</strong> {treasury}
         </li>
         <li>
           <strong>NEXT_PUBLIC_QUICKNODE_RPC</strong>{" "}
