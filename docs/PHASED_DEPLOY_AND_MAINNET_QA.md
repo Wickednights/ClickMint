@@ -2,13 +2,15 @@
 
 Step-by-step checklist: **Base Sepolia smoke** first, then **Base mainnet** for real-ETH integration testing. Complete each phase before moving on; pause to update env, ledgers, and docs after deploys.
 
+**Paths:** `<repo-root>` means the directory where you cloned this monorepo (any OS, any folder name). All `cd` examples assume you start at `<repo-root>`.
+
 **Related:** [HOWTO.md](HOWTO.md), [DEPLOYMENT_ADDRESSES.md](DEPLOYMENT_ADDRESSES.md), [POST_DEPLOY_VERIFICATION.md](POST_DEPLOY_VERIFICATION.md), [LP_AERODROME_AND_AUTOMATION.md](LP_AERODROME_AND_AUTOMATION.md), [WHERE_WE_ARE_AND_NEXT_STEPS.md](WHERE_WE_ARE_AND_NEXT_STEPS.md).
 
 ---
 
 ## Phase 0 — Right now (one-time setup)
 
-1. **Confirm tooling** — Node/npm installed; you can open a terminal in `C:\ClickMint`.
+1. **Confirm tooling** — Node/npm installed; open a terminal at `<repo-root>` (clone directory).
 2. **Clone / pull** — Repo matches the branch you intend to deploy from (e.g. `main`).
 3. **Never commit secrets** — Private keys and RPC URLs with secrets stay in local `.env` files or the Vercel env UI only.
 
@@ -16,7 +18,7 @@ Step-by-step checklist: **Base Sepolia smoke** first, then **Base mainnet** for 
 
 ## Phase 1 — Local secrets (contracts)
 
-1. **Create `contracts\.env`** — Copy from [`contracts/.env.example`](../contracts/.env.example).
+1. **Create `contracts/.env`** — Copy from [`contracts/.env.example`](../contracts/.env.example).
 2. **Set `DEPLOYER_KEY`** — 64 hex chars (optional `0x`). Fund this wallet with **ETH on the chain you will use** (Sepolia ETH for testnet; Base ETH for mainnet).
 3. **Set RPC for Base Sepolia** — `QUICKNODE_RPC` (or `BASE_SEPOLIA_RPC_URL`) to a working Base Sepolia HTTPS endpoint.
 4. **(Later, for mainnet)** Set **`BASE_MAINNET_RPC_URL`** or **`QUICKNODE_BASE_RPC`** for Base mainnet (see `contracts/hardhat.config.ts`).
@@ -26,19 +28,37 @@ Step-by-step checklist: **Base Sepolia smoke** first, then **Base mainnet** for 
 
 ## Phase 2 — Deploy / verify on Base Sepolia (smoke, cheap, `tCLICK`)
 
-1. **Open terminal:** `cd C:\ClickMint\contracts`
+1. **Open terminal** at `<repo-root>`, then go to contracts (POSIX / macOS / Linux / Git Bash):
+
+   ```bash
+   cd contracts
+   ```
+
+   PowerShell (same result):
+
+   ```powershell
+   cd contracts
+   ```
+
 2. **Install deps** — `npm install` (if not already).
 3. **Compile** — `npx hardhat compile` (should succeed).
 4. **Deploy testnet preset**
 
-   PowerShell:
+   PowerShell (session env):
 
    ```powershell
    $env:DEPLOY_ECONOMY = "testnet"
    npx hardhat run scripts/deploy.ts --network baseSepolia
    ```
 
-   Or: `npm run deploy:base-sepolia` after setting `DEPLOY_ECONOMY=testnet` in `contracts\.env`.
+   bash / zsh (session env):
+
+   ```bash
+   export DEPLOY_ECONOMY=testnet
+   npx hardhat run scripts/deploy.ts --network baseSepolia
+   ```
+
+   Or: `npm run deploy:base-sepolia` after setting `DEPLOY_ECONOMY=testnet` in `contracts/.env`.
 
 5. **Save output** — All contract addresses (CLICK, game, treasury, secret wallet, trophy, escrow).
 6. **Verify on explorer** — Use Hardhat verify / `npm run verify:base-sepolia` as in [HOWTO.md](HOWTO.md). Confirm token shows **ClickMint Test** / **`tCLICK`** and trophy **`tBTROPHY`** (for current `economy.ts` testnet branding).
@@ -49,15 +69,23 @@ Step-by-step checklist: **Base Sepolia smoke** first, then **Base mainnet** for 
 
 ## Phase 3 — Point the frontend at Sepolia
 
-1. **Create `frontend\.env.local`** — From [`frontend/.env.example`](../frontend/.env.example).
+1. **Create `frontend/.env.local`** — From [`frontend/.env.example`](../frontend/.env.example).
 2. **Chain** — Leave **`NEXT_PUBLIC_CHAIN_ID`** unset or set **`84532`** for Base Sepolia.
 3. **RPC** — Set **`NEXT_PUBLIC_QUICKNODE_RPC`** to your Sepolia HTTPS RPC.
 4. **Contracts** — Set all **`NEXT_PUBLIC_*_ADDRESS`** values to the addresses from Phase 2.
 5. **Preset label** — Set **`NEXT_PUBLIC_DEPLOY_ECONOMY=testnet`** (matches deploy).
-6. **Build locally**
+6. **Build locally** — From `<repo-root>`:
+
+   ```bash
+   cd frontend
+   npm install
+   npm run build
+   ```
+
+   PowerShell:
 
    ```powershell
-   cd C:\ClickMint\frontend
+   cd frontend
    npm install
    npm run build
    ```
@@ -89,8 +117,8 @@ Step-by-step checklist: **Base Sepolia smoke** first, then **Base mainnet** for 
 
 1. **Fund a dedicated deployer** — Small amount of Base ETH; prefer a separate wallet from your personal hot wallet.
 2. **Fund a dedicated keeper** — For **`finalizeHour`** gas on **8453** (can be the same as deployer only if you accept the risk).
-3. **`contracts\.env`** — **`DEPLOY_ECONOMY=mainnet`**, mainnet RPC set (**`BASE_MAINNET_RPC_URL`** or **`QUICKNODE_BASE_RPC`**), **`DEPLOYER_KEY`** as chosen.
-4. **Deploy**
+3. **`contracts/.env`** — **`DEPLOY_ECONOMY=mainnet`**, mainnet RPC set (**`BASE_MAINNET_RPC_URL`** or **`QUICKNODE_BASE_RPC`**), **`DEPLOYER_KEY`** as chosen.
+4. **Deploy** — From `<repo-root>/contracts`:
 
    PowerShell:
 
@@ -99,7 +127,14 @@ Step-by-step checklist: **Base Sepolia smoke** first, then **Base mainnet** for 
    npx hardhat run scripts/deploy.ts --network base
    ```
 
-   Or: `npm run deploy:base` with `DEPLOY_ECONOMY=mainnet` in `.env`.
+   bash / zsh:
+
+   ```bash
+   export DEPLOY_ECONOMY=mainnet
+   npx hardhat run scripts/deploy.ts --network base
+   ```
+
+   Or: `npm run deploy:base` with `DEPLOY_ECONOMY=mainnet` in `contracts/.env`.
 
 5. **Save all mainnet addresses.**
 6. **Verify on Basescan** — e.g. `npm run verify:base` plus your usual Hardhat verify args for contracts.
