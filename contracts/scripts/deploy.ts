@@ -61,6 +61,9 @@ async function main() {
     console.log("CLICK mintForTesting: disabled (mainnet preset)");
   }
   const click = await CLICK.deploy(
+    branding.erc20Name,
+    branding.erc20Symbol,
+    branding.erc20PermitName,
     owner,
     await treasury.getAddress(),
     lpRecipient,
