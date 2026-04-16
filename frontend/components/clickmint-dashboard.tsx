@@ -125,7 +125,7 @@ function WinnerTable({ rows, genesisGameHour }: { rows: PotRow[]; genesisGameHou
       <p className="text-center font-body text-sm leading-relaxed text-secondary opacity-80 md:text-base">
         No POT finalizations in the indexed block range. Set{" "}
         <code className="text-primary-fixed/90">NEXT_PUBLIC_GAME_DEPLOY_BLOCK</code> to your game contract creation
-        block on Base Sepolia if the RPC truncates logs, then redeploy the frontend.
+        block on {clickmintChainLabel()} if the RPC truncates logs, then redeploy the frontend.
       </p>
     );
   }
@@ -621,7 +621,7 @@ export function ClickMintDashboard() {
       try {
         await switchChainAsync({ chainId: clickmintChainId() });
       } catch {
-        toast.error("Switch to Base Sepolia", {
+        toast.error(`Switch to ${clickmintChainLabel()} (${clickmintChainId()})`, {
           description: `Deposits must be signed on chain ${clickmintChainId()}. Choose ${clickmintChainLabel()} in your wallet, then try again.`,
         });
         return;
@@ -659,7 +659,9 @@ export function ClickMintDashboard() {
       try {
         await switchChainAsync({ chainId: clickmintChainId() });
       } catch {
-        toast.error("Switch to Base Sepolia in your wallet, then tap CLICK again.");
+        toast.error(
+          `Switch to ${clickmintChainLabel()} (${clickmintChainId()}) in your wallet, then tap CLICK again.`
+        );
         return;
       }
     }
@@ -700,7 +702,7 @@ export function ClickMintDashboard() {
     lastClientClick.current = now;
     clickInFlight.current = true;
     try {
-      if (!publicClient) throw new Error("No RPC client for Base Sepolia");
+      if (!publicClient) throw new Error(`No RPC client for ${clickmintChainLabel()}`);
 
       if (gasless.status === "ready" && address) {
         try {
@@ -1132,7 +1134,7 @@ export function ClickMintDashboard() {
         </button>
         {wrongChain && (
           <p className="max-w-xs text-center font-body text-[10px] uppercase tracking-wider text-amber-200/90 md:text-[11px]">
-            Wrong network — tap CLICK to switch to Base Sepolia, or use the header link.
+            Wrong network — tap CLICK to switch to {clickmintChainLabel()}, or use the header link.
           </p>
         )}
         <div className="flex flex-col items-center gap-1.5">
@@ -1616,7 +1618,8 @@ export function ClickMintDashboard() {
               </p>
             )}
             <p className="text-center font-body text-[10px] leading-snug text-secondary opacity-90">
-              Deposits use native ETH. To fund from USDC or other tokens, swap to ETH on Base Sepolia first (e.g.{" "}
+              Deposits use native ETH. To fund from USDC or other tokens, swap to ETH on {clickmintChainLabel()} first
+              (e.g.{" "}
               <a
                 href="https://app.uniswap.org/"
                 target="_blank"
@@ -1729,7 +1732,7 @@ export function ClickMintDashboard() {
                   }}
                   className="border border-amber-500/50 py-2 text-[11px] text-amber-200"
                 >
-                  Switch to Base Sepolia
+                  Switch to {clickmintChainLabel()}
                 </button>
               )}
               <Link
