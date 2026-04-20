@@ -280,7 +280,7 @@ export function BlockBetSidebarCard({
         </Link>
       </p>
       <label className="flex w-full items-center justify-between gap-1 rounded border border-cyan-500/30 bg-black/40 px-2 py-1.5 text-[10px] md:text-[11px]">
-        <span className="shrink-0 text-cyan-400/90">Stake</span>
+        <span className="shrink-0 text-cyan-400/90">Default Bet</span>
         <input
           value={betEth}
           onChange={(e) => setBetEth(e.target.value)}
@@ -359,7 +359,7 @@ export function BlockBetPanel({
             type="button"
             disabled={!canAct || !address || wrongChain || isPending}
             title={`Window ${windowLabel(slot)} · on-chain slot ${slot}`}
-            aria-label={`Stake block bet on window ${windowLabel(slot)}`}
+            aria-label={`Place default bet on window ${windowLabel(slot)}`}
             onClick={() => void onBet(slot)}
             className={cn(
               "relative z-20 min-h-0 min-w-0 rounded-sm border text-[0.5rem] font-bold leading-none shadow-md transition-transform active:scale-90 disabled:opacity-35 md:text-[0.55rem]",
@@ -420,7 +420,9 @@ export function BlockBetPanel({
           className={cn(
             "relative mx-auto w-fit max-w-full",
             /* Mobile: gutter outside the tile grid so corner HUD clears perimeter buttons (overlay is md:hidden inside). */
-            mobileRingOverlay ? "max-md:px-3 max-md:pb-[4.75rem] max-md:pt-14 sm:max-md:px-4 sm:max-md:pb-[5.25rem] sm:max-md:pt-16" : null
+            mobileRingOverlay
+              ? "max-md:px-3 max-md:pb-[6.75rem] max-md:pt-14 sm:max-md:px-4 sm:max-md:pb-[7.25rem] sm:max-md:pt-16"
+              : null
           )}
         >
           {mobileRingOverlay}
