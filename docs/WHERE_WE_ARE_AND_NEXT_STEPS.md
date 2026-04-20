@@ -18,7 +18,7 @@ Living snapshot for founders and reviewers. Update this when milestones shift.
 |-------|--------|
 | Solidity | Core contracts implemented; parameterized **CLICK** / **BinaryTrophyNFT** names for test vs prod; **`potKeeper`** + owner may **`finalizeRound`**. **Not** a substitute for professional audit. |
 | POT randomness | Pseudorandom — **needs upgrade** (e.g. VRF) for high-stakes mainnet. |
-| Trophy ↔ game | Trophy **not** auto-minted from `click()` in MVP — manual/ops path; on-chain SVG metadata. |
+| Trophy ↔ game | Probabilistic **`mintTrophyForPlayer`** from **`_click`** (`trophyDropWeight` / denom); owner mint path for ops; on-chain SVG metadata. |
 | Escrow | Deployed; integration optional. |
 | Frontend | Next.js 15, wagmi, **`NEXT_PUBLIC_CHAIN_ID`** (8453 vs 84532), dashboard, POT history (ETH), audio, in-flight click guards, AA hook. |
 | Automation | **`potKeeper`** on game + optional **Vercel cron** → `/api/cron/finalize-round` (keeper key pays gas). |
@@ -26,21 +26,21 @@ Living snapshot for founders and reviewers. Update this when milestones shift.
 
 ### Docs & ops
 
-- HOWTO, ARCHITECTURE, ECONOMY, KNOWN_ISSUES, DEVELOPMENT_LOG, **POST_DEPLOY_VERIFICATION** present.
+- HOWTO, ARCHITECTURE, ECONOMY, **ENVIRONMENT_VARIABLES**, KNOWN_ISSUES, DEVELOPMENT_LOG, **POST_DEPLOY_VERIFICATION** present.
 - **ARCHITECTURE_FOR_GROK_REVIEW.md** for external model check (Grok / advisors); second **Grok** pass noted stronger **cap + events**.
 
 ---
 
 ## Near-term next steps (suggested)
 
-1. **Base mainnet QA** — Deploy with **`DEPLOY_ECONOMY=mainnet`**, verify, set **`potKeeper`** to the Vercel cron wallet (or ops bot), fund keeper with **ETH**, exercise **real** LP / Aerodrome or Uniswap v3 path; see **HOWTO** + **LP_AERODROME_AND_AUTOMATION**.
-2. **Solidity review / audit scope** — PRI: `ClickMintGame` (fees, reentrancy, POT finalization), `CLICK` (cap, vesting, early spend), `clickFor` / executor abuse model, `BinaryTrophyNFT` revenue math.
-3. **Production POT fairness** — Replace prevrandao-only draw with **Chainlink VRF** (or agreed alternative) before mainnet marketing.
-4. **Deploy discipline** — Constructor/name changes require **full redeploy** of CLICK + trophy + game wiring; refresh **`frontend/lib/addresses.ts`**, **`.env`**, and **`docs/DEPLOYMENT_ADDRESSES.md`** after every deploy.
-5. **POT finalization UX** — **`finalizeRound`**: **`owner`** or **`potKeeper`**; document/hide manual “Finalize” for EOAs if desired.
-6. **Pimlico / scale** — Confirm **sponsorship policy** on **8453** and **84532**, **rate limits**, and **billing tier**; monitor UserOp failures.
-7. **Optional: protocol-funded gas** — If product should self-fund sponsorship from volume, spec **BPS → vault → paymaster top-up** (see ARCHITECTURE_FOR_GROK_REVIEW) before coding.
-8. **Trophy integration** — On-click probability → `trophyNft.mintTrophyForPlayer` from `_click`, or keep **owner `mintTrophyForPlayer`** on game for ops drops.
+1. **Base Sepolia Phase 0** — Full **`deploy.ts`** with **`DEPLOY_ECONOMY=testnet`**, update [DEPLOYMENT_ADDRESSES.md](DEPLOYMENT_ADDRESSES.md), all **`NEXT_PUBLIC_*`** (see [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md)), **`set-pot-keeper`** if using cron, then run [TESTNET_E2E_CHECKLIST.md](TESTNET_E2E_CHECKLIST.md).
+2. **Base mainnet QA** — Deploy with **`DEPLOY_ECONOMY=mainnet`**, verify, set **`potKeeper`**, fund keeper, exercise **LP** (Uniswap v2–style per [LP_AERODROME_AND_AUTOMATION.md](LP_AERODROME_AND_AUTOMATION.md)).
+3. **Solidity review / audit scope** — PRI: `ClickMintGame` (fees, reentrancy, POT + Block Bet finalization), `CLICK` (cap, vesting, early spend), `clickFor` / executor abuse model, `BinaryTrophyNFT` revenue math.
+4. **Production POT fairness** — Replace prevrandao-only draw with **Chainlink VRF** (or agreed alternative) before mainnet marketing.
+5. **Deploy discipline** — Constructor/name changes require **full redeploy** of CLICK + trophy + game wiring; refresh **`frontend/lib/addresses.ts`**, **`.env`**, and **`docs/DEPLOYMENT_ADDRESSES.md`** after every deploy.
+6. **POT finalization UX** — **`finalizeRound`**: **`owner`** or **`potKeeper`**; cron route **`/api/cron/finalize-round`**.
+7. **Pimlico / scale** — Confirm **sponsorship policy** on **8453** and **84532**, **rate limits**, and **billing tier**; monitor UserOp failures.
+8. **Optional: protocol-funded gas** — If product should self-fund sponsorship from volume, spec **BPS → vault → paymaster top-up** (see ARCHITECTURE_FOR_GROK_REVIEW) before coding.
 9. **Go-live checklist** — Legal/terms, key custody, multisig owner, incident runbooks, subgraph/indexer if needed.
 
 ---
@@ -54,4 +54,4 @@ Living snapshot for founders and reviewers. Update this when milestones shift.
 
 ### Last oriented update
 
-- **2026-04-13:** **Mainnet-first QA** — Hardhat **`base`** network, frontend **`NEXT_PUBLIC_CHAIN_ID`**, testnet **tCLICK** branding + cheaper economy; **ETH POT** + **`potKeeper`** + cron documented across **ARCHITECTURE_FOR_GROK_REVIEW**, **HOWTO**, and env examples. Base Sepolia remains **smoke** only.
+- **2026-04-06:** **Docs + Phase 0 prep** — Canonical **10B / 30d** mainnet preset, **50/29.5/20/0.5** deposit BPS, **`finalizeRound`** + Block Bet **`claimBlockBetEth`** reflected across **ARCHITECTURE**, **ECONOMY**, **HOWTO**, **POST_DEPLOY**, **TESTNET_E2E**, **GROK review**, **`/documentation`**, **`ENVIRONMENT_VARIABLES.md`**, **README**. **Phase 0** expanded in **PHASED_DEPLOY_AND_MAINNET_QA**. Next: redeploy contracts on Sepolia and refresh env + **DEPLOYMENT_ADDRESSES**.

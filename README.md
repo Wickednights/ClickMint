@@ -1,6 +1,6 @@
 # ClickMint
 
-ClickMint — on-chain clicker on Base: **minute rounds**, ETH **Click Pot**, **Block Bet** (46 overlapping 15s windows per minute, `k = 0..45`), **50 / 30 / 20 / ~0.5%** deposit routing (pot / treasury / block bet / trophy `receive`), **$CLICK** vesting + 30/30/20/20 early spend, and optional **gasless** clicks (Pimlico). See [`docs/GAME_MECHANICS.md`](docs/GAME_MECHANICS.md) for the canonical spec.
+ClickMint — on-chain clicker on Base: **minute rounds**, ETH **Click Pot**, **Block Bet** (46 fifteen-second windows per minute, slots `0..45`), **50 / 29.5 / 20 / 0.5%** deposit routing (pot / treasury / block bet / trophy `receive`), **$CLICK** vesting + 30/30/20/20 early spend, and optional **gasless** clicks (Pimlico). See [`docs/GAME_MECHANICS.md`](docs/GAME_MECHANICS.md) for the canonical spec.
 
 ## Docs
 
@@ -15,6 +15,7 @@ ClickMint — on-chain clicker on Base: **minute rounds**, ETH **Click Pot**, **
 | [docs/TESTNET_E2E_CHECKLIST.md](docs/TESTNET_E2E_CHECKLIST.md) | Base Sepolia smoke order; mainnet QA for DEX/LP |
 | [docs/DEVELOPMENT_LOG.md](docs/DEVELOPMENT_LOG.md) | Timestamped change log — **append an entry for every change** |
 | [docs/PHASED_DEPLOY_AND_MAINNET_QA.md](docs/PHASED_DEPLOY_AND_MAINNET_QA.md) | Phase-by-phase Sepolia → mainnet QA checklist |
+| [docs/ENVIRONMENT_VARIABLES.md](docs/ENVIRONMENT_VARIABLES.md) | **Env reference** — Hardhat, `NEXT_PUBLIC_*`, cron/keeper |
 
 **Networks:** **Base Sepolia (`84532`)** is the primary environment for full-loop testing. **Base mainnet (`8453`)** is for real-ETH work — e.g. **Uniswap v2–style LP** — and optional staging on **Vercel Preview** / **preview.clickmint.app** without treating every experiment as production. Frontend: set **`NEXT_PUBLIC_CHAIN_ID`** and matching RPC + contract env vars per [docs/HOWTO.md](docs/HOWTO.md). Prefer **separate Vercel projects** (or env groups) if you run cron/keepers on both chains so `CRON_SECRET` / `POT_KEEPER_PRIVATE_KEY` never cross wires.
 

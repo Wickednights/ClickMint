@@ -1,7 +1,9 @@
 # Deployment addresses
 
 Ledgers for **Base Sepolia** (test / smoke) and **Base mainnet** (production QA + go-live).  
-**Frontend:** `frontend/lib/addresses.ts` — Sepolia has baked-in fallbacks; **mainnet requires every `NEXT_PUBLIC_*` address** in env. See **`frontend/.env.example`**.
+**Frontend:** `frontend/lib/addresses.ts` — Sepolia has baked-in fallbacks; **mainnet requires every `NEXT_PUBLIC_*` address** in env. Full variable list: [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md).
+
+> **Fresh testnet deploy (Phase 0):** Run `deploy.ts`, then **replace** the **Active** Sepolia table below with the new addresses, **archive** the old row set with a date, update **`frontend/.env.local`** + **Vercel**, genesis/deploy blocks, and run **`verify:base-sepolia`**.
 
 ## Quick reference
 
@@ -63,7 +65,7 @@ Copy/paste checklist for **local** `.env.local` and **Vercel** (Production / Pre
 | `NEXT_PUBLIC_CLICK_ADDRESS` | CLICK (tCLICK) |
 | `NEXT_PUBLIC_GAME_ADDRESS` | ClickMintGame |
 | `NEXT_PUBLIC_TREASURY_ADDRESS` | Treasury |
-| `NEXT_PUBLIC_SECRET_WALLET_ADDRESS` | SecretPrizeWallet |
+| `NEXT_PUBLIC_SECRET_WALLET_ADDRESS` | SecretPrizeWallet (deployed by `deploy.ts`; **not** used in `ClickMintGame` deposit split — keep for ledger/explorer) |
 | `NEXT_PUBLIC_TROPHY_NFT_ADDRESS` | BinaryTrophyNFT |
 | `NEXT_PUBLIC_ESCROW_ADDRESS` | Escrow |
 | `NEXT_PUBLIC_GAME_GENESIS_UNIX` | Game contract deployment **time** (Unix seconds) from block explorer — drives “rounds since launch” |

@@ -176,6 +176,17 @@ Format:
 - **`docs/KNOWN_ISSUES.md`:** Gasless marked **in repo**; trophy/IPFS clarified; multi-click-in-one-tx note.
 - **`docs/HOWTO.md`**, **`docs/POST_DEPLOY_VERIFICATION.md`**, **`README.md`:** Pimlico env vars + link to testnet checklist.
 
+### 2026-04-06T12:00:00Z — Documentation sync for Phase 0 (testnet) restart
+
+- **`docs/ENVIRONMENT_VARIABLES.md`:** New canonical list (Hardhat, all `NEXT_PUBLIC_*`, cron/keeper, Vercel checklist).
+- **Economy / deploy truth:** Mainnet **10B** cap, **30d** vesting, **`baseClickReward` 1e18**, **`minPotClicks` 10**, **`clicksPerHashTier` 1000**; testnet **1M**, **600s** vesting, **`minPotClicks` 5** — aligned **`ECONOMY.md`**, **`POST_DEPLOY_VERIFICATION.md`**, **`HOWTO.md`**, **`contracts/scripts/config/README.md`**, **`contracts/.env.example`**, **`frontend/lib/economy-preset.ts`**.
+- **Deposit routing:** **50 / 29.5 / 20 / 0.5%** BPS on **`ClickMintGame`** — **`README.md`**, **`/documentation`**, **`ARCHITECTURE.md`**, **`ARCHITECTURE_FOR_GROK_REVIEW.md`** (removed stale **3×1%** / hourly model).
+- **Settlement:** **`finalizeRound`**, **`/api/cron/finalize-round`** — **`SYSTEM_VERIFICATION.md`**, **`TESTNET_E2E_CHECKLIST.md`**, **`KNOWN_ISSUES.md`**, **`POST_DEPLOY_VERIFICATION.md`**.
+- **Block Bet:** **`blockBetClaimableEth` / `claimBlockBetEth`** noted on docs site + testnet checklist.
+- **`SecretPrizeWallet`:** Documented as deployed but **not** in current game deposit split — **`DEPLOYMENT_ADDRESSES.md`**, **`ARCHITECTURE*.md`**.
+- **`PHASED_DEPLOY_AND_MAINNET_QA.md`:** Phase 0 expanded; link **`ENVIRONMENT_VARIABLES`**.
+- **`WHERE_WE_ARE_AND_NEXT_STEPS.md`:** Phase 0 first; trophy line corrected for on-click mint.
+
 ---
 
 ## Index by area (manual)
