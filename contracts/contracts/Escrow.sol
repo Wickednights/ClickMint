@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 /// @title Escrow — temporary ERC721 hold; beneficiary claims; emits confetti-style event for UI.
@@ -29,7 +30,9 @@ contract Escrow is Ownable, ERC721Holder {
     constructor(address initialOwner) Ownable(initialOwner) {}
 
     function deposit(address token, uint256 tokenId, address beneficiary) external returns (uint256 holdId) {
+        require(token != address(0), "escrow: token");
         require(beneficiary != address(0), "escrow: beneficiary");
+        require(IERC165(token).supportsInterface(type(IERC721).interfaceId), "escrow: erc721");
         holdId = nextHoldId++;
         holds[holdId] = Hold({token: token, tokenId: tokenId, depositor: msg.sender, beneficiary: beneficiary, released: false});
         IERC721(token).safeTransferFrom(msg.sender, address(this), tokenId);

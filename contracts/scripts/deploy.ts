@@ -43,11 +43,12 @@ async function main() {
   await treasury.waitForDeployment();
   console.log("Treasury (deployed):", await treasury.getAddress());
 
+  /** Legacy sink — **not** wired into `ClickMintGame` deposit splits (v2 routes per BPS to treasury / pot / block bet / trophy). */
   const SecretPrizeWallet = await ethers.getContractFactory("SecretPrizeWallet");
   const secret = await SecretPrizeWallet.deploy(owner);
   await secret.waitForDeployment();
   const secretAddr = await secret.getAddress();
-  console.log("SecretPrizeWallet (deployed):", secretAddr);
+  console.log("SecretPrizeWallet (deployed, optional/legacy):", secretAddr);
 
   /** Until you call `CLICK.setLpRecipient`, early-claim LP share mints here — default is owner for bootstrap. */
   const lpRecipient = owner;
