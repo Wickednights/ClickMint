@@ -1080,11 +1080,19 @@ export function ClickMintDashboard() {
 
   const blockBetPotEthDisplay = formatCompactHudPotEthDisplay(blockBet.totalPotWei);
 
+  /** Fixed cell height so every HUD window + early tile matches (symmetric grid). */
+  const hudCellH = "min-h-[2.75rem]";
   const hudCol = "flex min-h-0 min-w-0 flex-col gap-0.5";
-  const hudCardPrimary = "w-full rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1 shadow-[0_0_20px_rgba(0,251,251,0.15)]";
-  const hudCardCyan = "w-full rounded-md border border-cyan-400/55 bg-black/55 px-1.5 py-1 shadow-[0_0_20px_rgba(34,211,238,0.18)]";
+  const hudCardPrimary = cn(
+    hudCellH,
+    "flex w-full flex-col justify-center rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1 shadow-[0_0_20px_rgba(0,251,251,0.15)]"
+  );
+  const hudCardCyan = cn(
+    hudCellH,
+    "flex w-full flex-col justify-center rounded-md border border-cyan-400/55 bg-black/55 px-1.5 py-1 shadow-[0_0_20px_rgba(34,211,238,0.18)]"
+  );
 
-  /** Mobile-only: equal 3-column grids so tiles line up; default bet + early row share gutter with ring. */
+  /** Mobile-only: equal 3×3-style bands; ring gutter pb mirrors pt + cell stack height. */
   const mobileGameCornerHud = (
     <div className="pointer-events-none absolute inset-0 z-[25] md:hidden" role="region" aria-label="Game quick stats">
       <div className="pointer-events-none absolute inset-x-0 top-0 grid grid-cols-3 gap-x-1.5">
@@ -1119,7 +1127,7 @@ export function ClickMintDashboard() {
           </div>
         </div>
       </div>
-      <div className="absolute inset-x-0 bottom-0 grid grid-cols-3 items-end gap-x-1.5">
+      <div className="absolute inset-x-0 bottom-0 grid grid-cols-3 items-stretch gap-x-1.5">
         <div className={hudCol}>
           <div className={cn(hudCardCyan, "pointer-events-none text-left")} title="Block Bet pot (ETH)">
             <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-cyan-300/95">
@@ -1130,7 +1138,10 @@ export function ClickMintDashboard() {
             </span>
           </div>
           <label
-            className="pointer-events-auto flex w-full items-center justify-between gap-0.5 rounded-md border border-cyan-500/40 bg-black/60 px-1.5 py-0.5 text-[8px] shadow-[0_0_16px_rgba(34,211,238,0.12)]"
+            className={cn(
+              hudCellH,
+              "pointer-events-auto flex w-full items-center justify-between gap-0.5 rounded-md border border-cyan-500/40 bg-black/60 px-1.5 py-0.5 text-[8px] shadow-[0_0_16px_rgba(34,211,238,0.12)]"
+            )}
             title="ETH per tap on a block-bet window (same as Block bet card in the menu)"
           >
             <span className="shrink-0 font-label text-[6px] font-bold uppercase tracking-wide text-cyan-300/90">Default Bet</span>
@@ -1145,26 +1156,33 @@ export function ClickMintDashboard() {
             <span className="shrink-0 font-mono text-[8px] text-cyan-400/90">ETH</span>
           </label>
         </div>
-        <div className={cn(hudCol, "items-stretch")}>
-          <button
-            type="button"
-            className="pointer-events-auto w-full rounded-md border border-amber-400/55 bg-amber-500/15 px-1 py-0.5 font-label text-[7px] font-bold uppercase leading-tight tracking-[0.05em] text-amber-100 shadow-[0_0_12px_rgba(251,191,36,0.12)] transition-colors hover:bg-amber-500/25 disabled:opacity-35"
-            disabled={!isConnected || !canAct || unvestedCap === 0n}
-            title={earlyClaimHoverSummary}
-            onClick={() => {
-              setEarlyAmt(formatEther(unvestedCap));
-              void onEarlySpend(unvestedCap);
-            }}
+        <div className={hudCol}>
+          <div
+            className={cn(
+              hudCellH,
+              "pointer-events-auto flex w-full flex-col justify-between gap-0.5 rounded-md border border-amber-400/55 bg-amber-500/15 px-1 py-1 shadow-[0_0_12px_rgba(251,191,36,0.12)]"
+            )}
           >
-            Early claim
-          </button>
-          <button
-            type="button"
-            className="pointer-events-auto w-full text-center font-body text-[6px] leading-tight text-primary-fixed/85 underline-offset-2 hover:underline"
-            onClick={() => setEarlyClaimInfoOpen(true)}
-          >
-            Early vs vested
-          </button>
+            <button
+              type="button"
+              className="w-full shrink-0 text-center font-body text-[6px] leading-tight text-amber-100/90 underline-offset-2 hover:underline"
+              onClick={() => setEarlyClaimInfoOpen(true)}
+            >
+              Early vs vested
+            </button>
+            <button
+              type="button"
+              className="flex min-h-0 flex-1 items-center justify-center rounded border border-amber-300/35 bg-amber-500/20 px-0.5 font-label text-[7px] font-bold uppercase leading-tight tracking-[0.04em] text-amber-100 transition-colors hover:bg-amber-500/30 disabled:opacity-35"
+              disabled={!isConnected || !canAct || unvestedCap === 0n}
+              title={earlyClaimHoverSummary}
+              onClick={() => {
+                setEarlyAmt(formatEther(unvestedCap));
+                void onEarlySpend(unvestedCap);
+              }}
+            >
+              Early claim
+            </button>
+          </div>
           <div className={cn(hudCardPrimary, "pointer-events-none text-center")} title={vestingDisplay.claimable.caption}>
             <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
               Vested $CLICK
