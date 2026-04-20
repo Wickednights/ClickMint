@@ -9,10 +9,16 @@ import {CLICK} from "./CLICK.sol";
 import {BinaryTrophyNFT} from "./BinaryTrophyNFT.sol";
 
 /// @title ClickMintGame — ETH credits, deposit splits, rate-limited clicks, minute-round ETH POT + Block Bet.
-/// @dev Randomness: pseudo-random — upgrade to Chainlink VRF for high-stakes mainnet fairness.
+/// @dev Randomness: pseudo-random (`prevrandao`) — miners/validators can bias; use Chainlink VRF for high-stakes fairness.
 ///      Deposits: 50% Click Pot accrual, 30% treasury, 10% Block Bet pool, 10% trophy NFT revshare (or treasury if trophy unset).
 ///      Block bet stakes (`placeBet`): 10% treasury, 90% credited to the selected 15s window (that slice joins the round block-bet pool).
 ///      Credits granted: full `msg.value` wei + bonus (same UX as legacy; ETH is routed per BPS).
+///
+///      **Pot payout:** push to winner in `finalizeRound`; if the transfer fails (e.g. smart wallet without receive), ETH stays in
+///      the contract and the winner uses `claimPotEth` (same pattern as `claimBlockBetEth`). Plain `receive()` ETH (no calldata) is
+///      credited to `potCarry` as a donation.
+///      **Block bet views:** after settlement, `userBetOnSlot` / `totalBetOnSlot` for that `roundId` are stale (not zeroed); only
+///      `finalizeRound` + accounting must be trusted for fund safety.
 contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     CLICK public immutable clickToken;
 
@@ -72,6 +78,8 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     uint256 public blockBetCarry;
     /// @notice ETH owed from block-bet settlement when a push payment failed (claim via `claimBlockBetEth`).
     mapping(address => uint256) public blockBetClaimableEth;
+    /// @notice ETH owed when POT push to `roundWinner` failed (claim via `claimPotEth`).
+    mapping(address => uint256) public potClaimableEth;
 
     mapping(address => mapping(uint256 => uint8)) internal _clicksInBlock;
 
@@ -89,6 +97,8 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     event BlockBetPaid(uint256 indexed roundId, uint8 winSlot, uint256 totalPot, uint256 winnersPaid);
     event BlockBetCarried(uint256 indexed roundId, uint256 amount);
     event BlockBetEthClaimed(address indexed to, uint256 amount);
+    event PotEthClaimed(address indexed to, uint256 amount);
+    event StrayEthToPotCarry(uint256 amount);
     event AddressesUpdated(address indexed treasury);
     event EconomyUpdated(uint256 clickPerEthWei, uint256 clickCostCredits, uint256 baseClickReward);
     event ClickExecutorSet(address indexed player, address indexed executor);
@@ -404,7 +414,9 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
 
         if (gross > 0) {
             (bool paid,) = payable(winner).call{value: gross}("");
-            require(paid, "game: pot pay");
+            if (!paid) {
+                potClaimableEth[winner] += gross;
+            }
         }
 
         emit PotWin(roundId, winner, gross, winSlot, entropy);
@@ -525,11 +537,23 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         emit BlockBetEthClaimed(msg.sender, v);
     }
 
+    /// @notice Claim POT ETH that could not be pushed to `roundWinner` during `finalizeRound`.
+    function claimPotEth() external nonReentrant {
+        uint256 v = potClaimableEth[msg.sender];
+        if (v == 0) revert GameBadParam();
+        potClaimableEth[msg.sender] = 0;
+        (bool ok,) = payable(msg.sender).call{value: v}("");
+        require(ok, "game: claim pot");
+        emit PotEthClaimed(msg.sender, v);
+    }
+
     function currentPotEth() external view returns (uint256) {
         uint256 rid = gameRound(block.timestamp);
         return potEthByRound[rid] + potCarry;
     }
 
+    /// @dev Sweeps only the `potCarry` bookkeeping bucket. Do not sweep so aggressively that pending
+    ///      `potClaimableEth` / `blockBetClaimableEth` payouts cannot be honored (insolvency is on the owner).
     function ownerSweepPotCarry(address payable to, uint256 amount) external onlyOwner {
         require(to != address(0), "game: zero");
         require(amount <= potCarry, "game: carry");
@@ -545,5 +569,11 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         emit TrophyMintedViaGame(to, totalClicks, fragmentSlot);
     }
 
-    receive() external payable {}
+    /// @dev Plain ETH transfers (no calldata) credit `potCarry` so accidental sends are not stranded.
+    receive() external payable {
+        if (msg.value > 0) {
+            potCarry += msg.value;
+            emit StrayEthToPotCarry(msg.value);
+        }
+    }
 }

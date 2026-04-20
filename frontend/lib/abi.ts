@@ -33,7 +33,9 @@ export const clickMintGameAbi = parseAbi([
   "function userBetOnSlot(uint256 roundId, address user, uint8 slot) view returns (uint256)",
   "function blockBetCarry() view returns (uint256)",
   "function blockBetClaimableEth(address user) view returns (uint256)",
+  "function potClaimableEth(address user) view returns (uint256)",
   "function claimBlockBetEth()",
+  "function claimPotEth()",
   "function TROPHY_ROLL_DENOM() view returns (uint256)",
   "function trophyDropWeight() view returns (uint256)",
   "function setTrophyDropWeight(uint256 weight)",
@@ -46,6 +48,8 @@ export const clickMintGameAbi = parseAbi([
   "event BlockBetPaid(uint256 indexed roundId, uint8 winSlot, uint256 totalPot, uint256 winnersPaid)",
   "event BlockBetCarried(uint256 indexed roundId, uint256 amount)",
   "event BlockBetEthClaimed(address indexed to, uint256 amount)",
+  "event PotEthClaimed(address indexed to, uint256 amount)",
+  "event StrayEthToPotCarry(uint256 amount)",
 ]);
 
 export const binaryTrophyAbi = parseAbi([

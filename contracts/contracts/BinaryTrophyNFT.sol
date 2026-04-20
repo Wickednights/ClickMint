@@ -9,6 +9,8 @@ import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 
 /// @title BinaryTrophyNFT — deploy-set cap, 10% royalties (EIP-2981), on-chain SVG+stats + scalable ETH revenue share.
 /// @dev Revenue uses a per-share accumulator so `receive()` stays O(1) (required for caps up to 10,000).
+///      If **no trophy is minted yet** (`n == 0`), incoming ETH is **forwarded to `owner()`** so deposits from the game are not
+///      stranded before the first drop (after the first mint, `receive` accrues to per-share rewards as usual).
 ///
 /// Minting model:
 /// - **Owner `mint`** — bootstrap / admin (MVP).
@@ -33,6 +35,8 @@ contract BinaryTrophyNFT is ERC721, ERC2981, Ownable {
 
     event ClickMintGameSet(address indexed game);
     event TrophyMinted(address indexed to, uint256 indexed tokenId, uint64 totalClicks, uint8 fragmentSlot, bool viaGame);
+    /// @dev Emitted when `receive` forwards to `owner()` because no NFT exists yet (`_nextId == 1`).
+    event RevEthForwardedToOwner(uint256 amount);
 
     error TrophyCap();
     error TrophyZeroAddr();
@@ -92,8 +96,14 @@ contract BinaryTrophyNFT is ERC721, ERC2981, Ownable {
     }
 
     receive() external payable {
+        if (msg.value == 0) return;
         uint256 n = _nextId - 1;
-        if (n == 0 || msg.value == 0) return;
+        if (n == 0) {
+            (bool ok,) = payable(owner()).call{value: msg.value}("");
+            require(ok, "trophy: forward owner");
+            emit RevEthForwardedToOwner(msg.value);
+            return;
+        }
         rewardPerShareStored += (msg.value * _REWARD_PRECISION) / n;
     }
 

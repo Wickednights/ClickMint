@@ -36,6 +36,9 @@ export function explainRevertData(data: `0x${string}` | undefined): string {
       if (s === "game: clickhash") {
         return "Click hash check failed — as the hour fills up, clicks need more leading-zero bits (random roll). Try again.";
       }
+      if (s === "game: claim pot") {
+        return "claimPotEth transfer failed (e.g. smart wallet cannot receive ETH). Use an EOA or a wallet that accepts ETH.";
+      }
       return s;
     } catch {
       return "Revert string (could not decode)";
@@ -59,7 +62,7 @@ export function explainRevertData(data: `0x${string}` | undefined): string {
       case "GameCredits":
         return "Not enough credits for this click (GameCredits).";
       case "GameCooldown":
-        return "Block click limit reached — max ~2 clicks per block (GameCooldown).";
+        return "Block click limit reached — max clicks per block exceeded (GameCooldown).";
       case "GameBadAddr":
         return "Game misconfigured address (GameBadAddr).";
       case "GameBadParam":
