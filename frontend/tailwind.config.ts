@@ -1,4 +1,5 @@
 import type { Config } from "tailwindcss";
+import { BLOCK_BET_RING_OUTER_WIDTH_REM } from "./lib/block-bet-ring-layout";
 
 export default {
   content: [
@@ -46,6 +47,9 @@ export default {
         lg: "0",
         xl: "0",
         full: "9999px",
+      },
+      maxWidth: {
+        "block-bet-ring": `${BLOCK_BET_RING_OUTER_WIDTH_REM}rem`,
       },
     },
   },

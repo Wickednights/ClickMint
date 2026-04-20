@@ -15,11 +15,14 @@ import { clickMintGameAbi } from "@/lib/abi";
 import { clickmintChainId } from "@/lib/clickmint-chain";
 import { cn } from "@/lib/utils";
 import { GAME_ROUND_BUFFER_SEC } from "@/lib/game-genesis";
+import { BLOCK_BET_GRID_COLS, BLOCK_BET_TILE_REM } from "@/lib/block-bet-ring-layout";
 
 /** Hollow frame: 12×13 grid → 46 perimeter cells; each cell is on-chain slot 0..45 (15s window [slot, slot+14]). */
 const GRID_ROWS = 13;
-const GRID_COLS = 12;
+const GRID_COLS = BLOCK_BET_GRID_COLS;
+const TILE_REM = BLOCK_BET_TILE_REM;
 export const BLOCK_BET_PERIMETER_COUNT = 46;
+export { BLOCK_BET_RING_OUTER_WIDTH_REM } from "@/lib/block-bet-ring-layout";
 
 function formatCountdownShort(totalSec: number): string {
   if (totalSec <= 0) return "0:00";
@@ -73,9 +76,6 @@ function secondInMinute(epochSec: number): number {
 function windowCoversSecond(slot: number, sec: number): boolean {
   return sec >= slot && sec <= slot + 14;
 }
-
-/** Tile size — smaller cells = larger inner hole for the CLICK control. */
-const TILE_REM = 1.5;
 
 export type UseBlockBetGameParams = {
   gameAddr: `0x${string}`;

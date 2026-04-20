@@ -118,9 +118,17 @@ type PotRow = PotWinLogRow;
 
 type MobileTab = "terminal" | "history" | "trophies" | "clicks";
 
-function Icon({ name, className }: { name: string; className?: string }) {
+function Icon({
+  name,
+  className,
+  style,
+}: {
+  name: string;
+  className?: string;
+  style?: CSSProperties;
+}) {
   return (
-    <span className={cn("material-symbols-outlined text-lg", className)} aria-hidden>
+    <span className={cn("material-symbols-outlined text-lg", className)} style={style} aria-hidden>
       {name}
     </span>
   );
@@ -1094,8 +1102,13 @@ export function ClickMintDashboard() {
 
   /** Mobile-only: equal 3×3-style bands; ring gutter pb mirrors pt + cell stack height. */
   const mobileGameCornerHud = (
-    <div className="pointer-events-none absolute inset-0 z-[25] md:hidden" role="region" aria-label="Game quick stats">
-      <div className="pointer-events-none absolute inset-x-0 top-0 grid grid-cols-3 gap-x-1.5">
+    <div
+      className="pointer-events-none absolute inset-0 z-[25] md:hidden flex justify-center"
+      role="region"
+      aria-label="Game quick stats"
+    >
+      <div className="pointer-events-none relative h-full w-full max-w-block-bet-ring">
+        <div className="pointer-events-none absolute inset-x-0 top-0 grid grid-cols-3 gap-x-1.5">
         <div className={hudCol}>
           <div className={cn(hudCardPrimary, "text-left")} title="Credits — remaining full clicks at current click cost">
             <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
@@ -1126,8 +1139,8 @@ export function ClickMintDashboard() {
             </span>
           </div>
         </div>
-      </div>
-      <div className="absolute inset-x-0 bottom-0 grid grid-cols-3 items-stretch gap-x-1.5">
+        </div>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 grid grid-cols-3 items-stretch gap-x-1.5">
         <div className={hudCol}>
           <div className={cn(hudCardCyan, "pointer-events-none text-left")} title="Block Bet pot (ETH)">
             <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-cyan-300/95">
@@ -1160,19 +1173,19 @@ export function ClickMintDashboard() {
           <div
             className={cn(
               hudCellH,
-              "pointer-events-auto flex w-full flex-col justify-between gap-0.5 rounded-md border border-amber-400/55 bg-amber-500/15 px-1 py-1 shadow-[0_0_12px_rgba(251,191,36,0.12)]"
+              "pointer-events-auto flex w-full flex-col justify-between gap-0.5 rounded-md border border-[#ff2ee8]/50 bg-[#ff2ee8]/10 px-1 py-1 shadow-[0_0_14px_rgba(255,46,232,0.22)]"
             )}
           >
             <button
               type="button"
-              className="w-full shrink-0 text-center font-body text-[6px] leading-tight text-amber-100/90 underline-offset-2 hover:underline"
+              className="w-full shrink-0 text-center font-body text-[6px] leading-tight text-[#fec8f4]/95 underline-offset-2 hover:underline"
               onClick={() => setEarlyClaimInfoOpen(true)}
             >
               Early vs vested
             </button>
             <button
               type="button"
-              className="flex min-h-0 flex-1 items-center justify-center rounded border border-amber-300/35 bg-amber-500/20 px-0.5 font-label text-[7px] font-bold uppercase leading-tight tracking-[0.04em] text-amber-100 transition-colors hover:bg-amber-500/30 disabled:opacity-35"
+              className="flex min-h-0 flex-1 items-center justify-center rounded border border-[#ff2ee8]/40 bg-[#ff2ee8]/18 px-0.5 font-label text-[7px] font-bold uppercase leading-tight tracking-[0.04em] text-[#ffb8f0] transition-colors hover:bg-[#ff2ee8]/28 disabled:opacity-35"
               disabled={!isConnected || !canAct || unvestedCap === 0n}
               title={earlyClaimHoverSummary}
               onClick={() => {
@@ -1216,6 +1229,7 @@ export function ClickMintDashboard() {
               {gameRoundNow === undefined ? "—" : roundsSinceLaunch !== undefined ? roundsSinceLaunch.toString() : `#${gameRoundNow.toString()}`}
             </span>
           </div>
+        </div>
         </div>
       </div>
     </div>
@@ -1336,15 +1350,14 @@ export function ClickMintDashboard() {
           }
           belowRing={
             <div className="flex w-full flex-col items-center gap-1.5 md:gap-2">
-              <div className="flex w-full max-w-md flex-row items-stretch justify-center gap-2 md:max-w-none md:flex-col md:items-center">
+              <div className="mx-auto flex w-full max-md:max-w-block-bet-ring max-w-md flex-row items-stretch justify-center gap-2 md:max-w-none md:flex-col md:items-center">
                 <div className="min-h-[2.5rem] min-w-0 flex-1 border border-outline-variant/30 bg-surface-container-low px-2 py-1.5 font-label text-[10px] uppercase tracking-widest text-primary-fixed md:min-h-0 md:flex-none md:px-3">
-                  <span className="flex h-full items-center justify-center gap-1.5 md:inline-flex">
-                    <span
-                      className="material-symbols-outlined shrink-0 text-xs"
+                  <span className="flex h-full min-w-0 items-center justify-center gap-1.5 md:inline-flex">
+                    <Icon
+                      name="bolt"
+                      className="shrink-0 text-xs"
                       style={{ fontVariationSettings: `"FILL" 1, "wght" 400` } as CSSProperties}
-                    >
-                      bolt
-                    </span>
+                    />
                     <span className="text-center leading-tight">
                       {cooldownLabel !== null ? (
                         <>RATE LIMIT: {cooldownLabel}s</>
@@ -1380,7 +1393,7 @@ export function ClickMintDashboard() {
                   )}
                 >
                   <Icon name="add_circle" className="shrink-0 text-sm opacity-90" />
-                  <span className="truncate">Add credits</span>
+                  <span className="min-w-0 flex-1 truncate">Add credits</span>
                 </button>
               </div>
               {totalClicksThisRound !== undefined ? (
