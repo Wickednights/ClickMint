@@ -30,6 +30,7 @@ import {
   earlySpendLiquidWei,
   earlySpendSplitWei,
   formatClickDisplayWei,
+  formatCompactHudPotEthDisplay,
   formatPotEthDisplay,
   formatWholeCredits,
   isTinyClickCostWei,
@@ -1060,11 +1061,11 @@ export function ClickMintDashboard() {
       <p className="font-body text-[11px] text-secondary">Loading clock…</p>
     );
 
-  const blockBetPotEthDisplay = formatPotEthDisplay(blockBet.totalPotWei);
+  const blockBetPotEthDisplay = formatCompactHudPotEthDisplay(blockBet.totalPotWei);
 
   /** Mobile-only: 3-column top/bottom bands in the gutter; default bet under block pot, same state as menu card. */
   const mobileGameCornerHud = (
-    <div className="absolute inset-0 z-[25] md:hidden" role="region" aria-label="Game quick stats">
+    <div className="pointer-events-none absolute inset-0 z-[25] md:hidden" role="region" aria-label="Game quick stats">
       <div className="pointer-events-none absolute left-0 right-0 top-0 grid grid-cols-[1fr_minmax(0,auto)_1fr] items-start gap-x-1 sm:gap-x-2">
         <div
           className="min-w-0 rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1.5 text-left shadow-[0_0_20px_rgba(0,251,251,0.15)] sm:px-2"
@@ -1114,7 +1115,7 @@ export function ClickMintDashboard() {
             </span>
           </div>
           <label
-            className="flex items-center justify-between gap-0.5 rounded-md border border-cyan-500/40 bg-black/60 px-1.5 py-1 text-[9px] shadow-[0_0_16px_rgba(34,211,238,0.12)] sm:gap-1 sm:px-2 sm:py-1.5 sm:text-[10px]"
+            className="pointer-events-auto flex items-center justify-between gap-0.5 rounded-md border border-cyan-500/40 bg-black/60 px-1.5 py-1 text-[9px] shadow-[0_0_16px_rgba(34,211,238,0.12)] sm:gap-1 sm:px-2 sm:py-1.5 sm:text-[10px]"
             title="ETH per tap on a block-bet window (same as Block bet card in the menu)"
           >
             <span className="shrink-0 font-label text-[7px] font-bold uppercase tracking-wide text-cyan-300/90 sm:text-[8px]">
@@ -1496,32 +1497,34 @@ export function ClickMintDashboard() {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center justify-center gap-1.5">
-                  <button
-                    type="button"
-                    aria-pressed={musicOn}
-                    aria-label="Background music"
-                    title="Background music"
-                    onClick={() => setMusicOn(!musicOn)}
-                    className={cn(
-                      "border border-outline-variant/50 px-2 py-1 font-label text-[8px] font-bold tracking-widest transition-colors md:px-2.5 md:text-[9px]",
-                      musicOn ? "border-primary-fixed text-primary-fixed" : "text-secondary opacity-60 hover:text-primary-fixed"
-                    )}
-                  >
-                    BGM
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={sfxOn}
-                    aria-label="Click sounds"
-                    title="Click sounds"
-                    onClick={() => setSfxOn(!sfxOn)}
-                    className={cn(
-                      "border border-outline-variant/50 px-2 py-1 font-label text-[8px] font-bold tracking-widest transition-colors md:px-2.5 md:text-[9px]",
-                      sfxOn ? "border-primary-fixed text-primary-fixed" : "text-secondary opacity-60 hover:text-primary-fixed"
-                    )}
-                  >
-                    SFX
-                  </button>
+                  <div className="hidden items-center gap-1.5 md:flex">
+                    <button
+                      type="button"
+                      aria-pressed={musicOn}
+                      aria-label="Background music"
+                      title="Background music"
+                      onClick={() => setMusicOn(!musicOn)}
+                      className={cn(
+                        "border border-outline-variant/50 px-2 py-1 font-label text-[8px] font-bold tracking-widest transition-colors md:px-2.5 md:text-[9px]",
+                        musicOn ? "border-primary-fixed text-primary-fixed" : "text-secondary opacity-60 hover:text-primary-fixed"
+                      )}
+                    >
+                      BGM
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={sfxOn}
+                      aria-label="Click sounds"
+                      title="Click sounds"
+                      onClick={() => setSfxOn(!sfxOn)}
+                      className={cn(
+                        "border border-outline-variant/50 px-2 py-1 font-label text-[8px] font-bold tracking-widest transition-colors md:px-2.5 md:text-[9px]",
+                        sfxOn ? "border-primary-fixed text-primary-fixed" : "text-secondary opacity-60 hover:text-primary-fixed"
+                      )}
+                    >
+                      SFX
+                    </button>
+                  </div>
                   {isPimlicoConfigured() ? (
                     gasless.status === "ready" ? (
                       <button
