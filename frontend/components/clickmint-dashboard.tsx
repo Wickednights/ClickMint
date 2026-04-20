@@ -14,6 +14,7 @@ import {
   useSwitchChain,
   useConnect,
   useDisconnect,
+  useBalance,
   usePublicClient,
   useWalletClient,
 } from "wagmi";
@@ -35,7 +36,7 @@ import {
   onChainPlaysRemaining,
   vestingVaultDisplay,
 } from "@/lib/game-display";
-import { clickmintChainId, clickmintChainLabel } from "@/lib/clickmint-chain";
+import { clickmintChainId, clickmintChainLabel, isClickmintBaseMainnet } from "@/lib/clickmint-chain";
 import { formatEther, parseEther, type Address } from "viem";
 import { toast } from "sonner";
 import { binaryTrophyAbi, clickMintGameAbi, clickTokenAbi } from "@/lib/abi";
@@ -106,6 +107,11 @@ function Icon({ name, className }: { name: string; className?: string }) {
   );
 }
 
+function addressExplorerUrl(addr: string): string {
+  const base = isClickmintBaseMainnet() ? "https://basescan.org" : "https://sepolia.basescan.org";
+  return `${base}/address/${addr}`;
+}
+
 function WinnerTable({ rows, genesisGameHour }: { rows: PotRow[]; genesisGameHour: bigint | null }) {
   if (rows.length === 0) {
     return (
@@ -157,8 +163,8 @@ function WinnerTable({ rows, genesisGameHour }: { rows: PotRow[]; genesisGameHou
         </table>
       </div>
       <p className="text-center font-body text-[11px] text-secondary opacity-75 md:text-xs">
-        On-chain <code className="text-primary-fixed/90">PotWin</code> / <code className="text-primary-fixed/90">finalizeRound</code>
-        .{" "}
+        On-chain <code className="text-primary-fixed/90">PotWin</code> /{" "}
+        <code className="text-primary-fixed/90">finalizeRound</code>.{" "}
         <Link href="/documentation#pot" className="text-primary-fixed underline-offset-2 hover:underline">
           Details
         </Link>
@@ -233,6 +239,28 @@ export function ClickMintDashboard() {
     sfxRef.current = { playClickSuccess, playWin, playNft, playError, celebrateWin };
   }, [playClickSuccess, playWin, playNft, playError, celebrateWin]);
 
+  const [walletOpen, setWalletOpen] = useState(false);
+  const [walletAccountOpen, setWalletAccountOpen] = useState(false);
+  const walletAccountRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!walletAccountOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (walletAccountRef.current && !walletAccountRef.current.contains(e.target as Node)) {
+        setWalletAccountOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setWalletAccountOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [walletAccountOpen]);
+
   const { address, isConnected } = useAccount();
   const { data: walletClient } = useWalletClient({ chainId: clickmintChainId() });
   const gasless = useGaslessClickSession(gameAddr);
@@ -246,8 +274,11 @@ export function ClickMintDashboard() {
   const { isPending: connectPending } = useConnect();
   const { disconnect } = useDisconnect();
   const { switchChain, switchChainAsync, isPending: switchPending } = useSwitchChain();
-
-  const [walletOpen, setWalletOpen] = useState(false);
+  const { data: walletEthBalance } = useBalance({
+    address,
+    chainId: clickmintChainId(),
+    query: { enabled: !!address },
+  });
 
   const { writeContractAsync, isPending: writePending } = useWriteContract();
   const publicClient = usePublicClient({ chainId: clickmintChainId() });
@@ -994,11 +1025,22 @@ export function ClickMintDashboard() {
 
   const terminalBody = (
     <>
-      <section className="mx-auto w-full max-w-md px-2 text-center">
-        <p className="font-body text-[11px] text-secondary md:text-xs">
-          Credits → <span className="text-primary-fixed/90">CLICK</span> → $CLICK + POT + block bet.{" "}
-          <Link href="/documentation" className="text-primary-fixed underline-offset-2 hover:underline">
-            How it works
+      <section className="mx-auto w-full max-w-4xl space-y-2 px-2 text-center">
+        <p className="font-mono text-[10px] leading-snug text-on-surface/90 md:text-[11px]">
+          <span className="font-semibold text-primary-fixed/95">Main Game</span> → Buy Credits → Press{" "}
+          <span className="text-primary-fixed/95">CLICK</span> → Earn $CLICK → Win Revshare NFTs + Chance at ETH Pot → No
+          Winner, Pot Rolls
+        </p>
+        <p className="font-mono text-[10px] leading-snug text-on-surface/90 md:text-[11px]">
+          <span className="font-semibold text-primary-fixed/95">Degen Game</span> → Block bet → Choose 15 Block → Bet ETH →
+          Winner Takes All of Block Bet Pot → No Winner, Pot Rolls
+        </p>
+        <p className="pt-0.5">
+          <Link
+            href="/documentation"
+            className="font-mono text-[10px] font-semibold uppercase tracking-wide text-primary-fixed underline-offset-4 hover:underline md:text-[11px]"
+          >
+            How It Works
           </Link>
         </p>
       </section>
@@ -1373,7 +1415,7 @@ export function ClickMintDashboard() {
               <span className="truncate text-lg font-black tracking-tighter text-white md:text-2xl">CLICKMINT</span>
               <Link
                 href="/documentation"
-                className="ml-1 hidden shrink-0 font-label text-[9px] uppercase tracking-widest text-primary-fixed/75 hover:text-primary-fixed sm:inline md:ml-2"
+                className="ml-1 shrink-0 font-label text-[9px] uppercase tracking-widest text-primary-fixed/75 hover:text-primary-fixed sm:inline md:ml-2 md:hidden"
               >
                 Docs
               </Link>
@@ -1468,15 +1510,99 @@ export function ClickMintDashboard() {
             >
               <span className="material-symbols-outlined text-xl">menu</span>
             </button>
-            {isConnected ? (
+            {isConnected && address ? (
               <>
-                <button
-                  type="button"
-                  onClick={() => disconnect()}
-                  className="max-w-[11rem] truncate bg-primary-container px-2 py-1.5 font-headline text-[10px] font-bold tracking-widest text-on-primary-fixed transition-all hover:brightness-110 active:scale-95 sm:max-w-[13rem] sm:px-3 md:max-w-[14rem] md:px-4 md:text-xs"
-                >
-                  {address?.slice(0, 6)}…{address?.slice(-4)}
-                </button>
+                <div className="relative" ref={walletAccountRef}>
+                  <button
+                    type="button"
+                    aria-expanded={walletAccountOpen ? true : false}
+                    aria-haspopup="menu"
+                    aria-label="Account and holdings"
+                    onClick={() => setWalletAccountOpen((o) => !o)}
+                    className="max-w-[11rem] truncate bg-primary-container px-2 py-1.5 font-headline text-[10px] font-bold tracking-widest text-on-primary-fixed transition-all hover:brightness-110 active:scale-95 sm:max-w-[13rem] sm:px-3 md:max-w-[14rem] md:px-4 md:text-xs"
+                  >
+                    {address.slice(0, 6)}…{address.slice(-4)}
+                  </button>
+                  {walletAccountOpen ? (
+                    <div
+                      className="absolute right-0 z-[60] mt-1 w-[min(calc(100vw-1rem),17.5rem)] rounded border border-outline-variant/40 bg-surface-container-highest p-3 shadow-[0_8px_32px_rgba(0,0,0,0.45)]"
+                      role="menu"
+                    >
+                      <p className="border-b border-outline-variant/30 pb-2 font-label text-[9px] uppercase tracking-[0.2em] text-primary-fixed">
+                        Account
+                      </p>
+                      {wrongChain ? (
+                        <p className="mt-2 font-body text-[10px] text-amber-200/95">Wrong network — switch to play.</p>
+                      ) : null}
+                      <dl className="mt-2 space-y-2 font-mono text-[11px] normal-case leading-snug text-on-surface/95">
+                        <div className="flex justify-between gap-2">
+                          <dt className="text-secondary">Credits</dt>
+                          <dd className="text-right tabular-nums text-primary-fixed">
+                            {clickCostCredits === undefined
+                              ? "—"
+                              : unlimitedClicks
+                                ? "∞"
+                                : formatWholeCredits(playsRemainingBig)}
+                          </dd>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <dt className="text-secondary">Unvested</dt>
+                          <dd className="text-right tabular-nums">{vestingDisplay.unvested.headline}</dd>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <dt className="text-secondary">Claimable</dt>
+                          <dd className="text-right tabular-nums text-primary-fixed/90">{vestingDisplay.claimable.headline}</dd>
+                        </div>
+                        <div className="flex justify-between gap-2">
+                          <dt className="text-secondary">ETH</dt>
+                          <dd className="text-right tabular-nums">
+                            {wrongChain
+                              ? "—"
+                              : walletEthBalance
+                                ? Number(formatEther(walletEthBalance.value)).toLocaleString(undefined, {
+                                    maximumFractionDigits: 6,
+                                  })
+                                : "—"}{" "}
+                            <span className="text-[10px] text-secondary">{clickmintChainLabel()}</span>
+                          </dd>
+                        </div>
+                      </dl>
+                      <p className="mt-2 break-all font-mono text-[9px] text-secondary opacity-90" title={address}>
+                        {address.slice(0, 10)}…{address.slice(-8)}
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2 border-t border-outline-variant/25 pt-3">
+                        <button
+                          type="button"
+                          className="font-label text-[9px] uppercase tracking-wider text-primary-fixed underline-offset-2 hover:underline"
+                          onClick={() => {
+                            void navigator.clipboard.writeText(address);
+                            toast.message("Address copied");
+                          }}
+                        >
+                          Copy
+                        </button>
+                        <a
+                          href={addressExplorerUrl(address)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-label text-[9px] uppercase tracking-wider text-primary-fixed underline-offset-2 hover:underline"
+                        >
+                          Explorer
+                        </a>
+                        <button
+                          type="button"
+                          className="ml-auto font-label text-[9px] uppercase tracking-wider text-secondary underline-offset-2 hover:text-amber-200 hover:underline"
+                          onClick={() => {
+                            setWalletAccountOpen(false);
+                            disconnect();
+                          }}
+                        >
+                          Disconnect
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
                 {wrongChain && (
                   <button
                     type="button"
@@ -1500,6 +1626,65 @@ export function ClickMintDashboard() {
             )}
           </div>
         </div>
+
+        <nav
+          className="hidden border-t border-outline-variant/25 bg-surface-container-lowest/95 md:block md:pl-72"
+          aria-label="Sections"
+        >
+          <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-center gap-1 px-4 py-2 font-label text-[10px] uppercase tracking-[0.12em] lg:justify-start">
+            <button
+              type="button"
+              onClick={() => setMobileTab("terminal")}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 transition-colors hover:bg-surface-container-low hover:text-white",
+                mobileTab === "terminal" ? "bg-surface-container-low text-primary-fixed" : "text-secondary"
+              )}
+            >
+              <Icon name="terminal" className="text-sm" />
+              Terminal
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileTab("clicks")}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 transition-colors hover:bg-surface-container-low hover:text-white",
+                mobileTab === "clicks" ? "bg-surface-container-low text-primary-fixed" : "text-secondary"
+              )}
+            >
+              <Icon name="touch_app" className="text-sm" />
+              Click history
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileTab("history")}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 transition-colors hover:bg-surface-container-low hover:text-white",
+                mobileTab === "history" ? "bg-surface-container-low text-primary-fixed" : "text-secondary"
+              )}
+            >
+              <Icon name="military_tech" className="text-sm" />
+              Pot history
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileTab("trophies")}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 transition-colors hover:bg-surface-container-low hover:text-white",
+                mobileTab === "trophies" ? "bg-surface-container-low text-primary-fixed" : "text-secondary"
+              )}
+            >
+              <Icon name="workspace_premium" className="text-sm" />
+              Trophy room
+            </button>
+            <Link
+              href="/documentation"
+              className="inline-flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 text-secondary transition-colors hover:bg-surface-container-low hover:text-primary-fixed"
+            >
+              <Icon name="description" className="text-sm" />
+              Documentation
+            </Link>
+          </div>
+        </nav>
 
         <Dialog open={depositOpen} onOpenChange={setDepositOpen}>
           <DialogContent className="max-h-[min(90dvh,32rem)] overflow-y-auto sm:max-w-lg" aria-describedby="deposit-dialog-desc">
@@ -1687,74 +1872,9 @@ export function ClickMintDashboard() {
         </Dialog>
       </header>
 
-      {/* Desktop sidebar */}
-      <aside className="fixed left-0 top-0 z-40 hidden h-full w-72 flex-col overflow-y-auto border-r border-outline-variant/30 bg-surface-container-lowest pt-28 md:flex">
-        <div className="mb-6 shrink-0 px-6">
-          <h3 className="font-label text-xs uppercase tracking-[0.15em] text-primary-fixed">Operations</h3>
-          <p className="text-[11px] text-secondary opacity-55">BASE_NETWORK_ACTIVE</p>
-        </div>
-        <nav className="shrink-0 flex flex-col space-y-1">
-          <button
-            type="button"
-            onClick={() => setMobileTab("terminal")}
-            className={cn(
-              "flex w-full items-center gap-3 px-6 py-3 text-left font-label text-xs uppercase tracking-[0.15em] transition-all hover:bg-surface-container-low hover:text-white",
-              mobileTab === "terminal"
-                ? "border-l-2 border-primary-container bg-surface-container-low text-white"
-                : "text-secondary"
-            )}
-          >
-            <Icon name="terminal" className="text-sm" />
-            Terminal
-          </button>
-          <button
-            type="button"
-            onClick={() => setMobileTab("clicks")}
-            className={cn(
-              "flex w-full items-center gap-3 px-6 py-3 text-left font-label text-xs uppercase tracking-[0.15em] transition-all hover:bg-surface-container-low hover:text-white",
-              mobileTab === "clicks"
-                ? "border-l-2 border-primary-container bg-surface-container-low text-white"
-                : "text-secondary"
-            )}
-          >
-            <Icon name="touch_app" className="text-sm" />
-            Click history
-          </button>
-          <button
-            type="button"
-            onClick={() => setMobileTab("history")}
-            className={cn(
-              "flex w-full items-center gap-3 px-6 py-3 text-left font-label text-xs uppercase tracking-[0.15em] transition-all hover:bg-surface-container-low hover:text-white",
-              mobileTab === "history"
-                ? "border-l-2 border-primary-container bg-surface-container-low text-white"
-                : "text-secondary"
-            )}
-          >
-            <Icon name="military_tech" className="text-sm" />
-            Pot history
-          </button>
-          <button
-            type="button"
-            onClick={() => setMobileTab("trophies")}
-            className={cn(
-              "flex w-full items-center gap-3 px-6 py-3 text-left font-label text-xs uppercase tracking-[0.15em] transition-all hover:bg-surface-container-low hover:text-white",
-              mobileTab === "trophies"
-                ? "border-l-2 border-primary-container bg-surface-container-low text-white"
-                : "text-secondary"
-            )}
-          >
-            <Icon name="workspace_premium" className="text-sm" />
-            Trophy room
-          </button>
-          <Link
-            href="/documentation"
-            className="flex items-center gap-3 px-6 py-3 font-label text-xs uppercase tracking-[0.15em] text-secondary transition-all hover:bg-surface-container-low hover:text-white"
-          >
-            <Icon name="description" className="text-sm" />
-            Documentation
-          </Link>
-        </nav>
-        <div className="mt-4 space-y-4 border-t border-outline-variant/25 px-4 pb-36 pt-4 md:pb-44">
+      {/* Desktop sidebar — live feed + POT widgets (nav is in header) */}
+      <aside className="fixed left-0 top-0 z-40 hidden h-full w-72 flex-col overflow-y-auto border-r border-outline-variant/30 bg-surface-container-lowest md:flex md:pt-36">
+        <div className="space-y-4 px-4 pb-36 pt-5 md:pb-44">
           <div className="mx-auto w-full max-w-[17rem]">{resetTimerStrip}</div>
           <div className="mx-auto flex w-full max-w-[17rem] justify-center">{minutePotCard}</div>
           <div className="border-t border-outline-variant/20 pt-4">
@@ -1773,7 +1893,7 @@ export function ClickMintDashboard() {
       {/* Main */}
       <main
         className={cn(
-          "relative z-10 mx-auto flex max-w-4xl flex-col items-center space-y-8 px-4 pb-24 pt-28 md:ml-72 md:mr-0 md:pb-16 md:pt-32",
+          "relative z-10 mx-auto flex max-w-4xl flex-col items-center space-y-8 px-4 pb-24 pt-28 md:ml-72 md:mr-0 md:pb-16 md:pt-36",
           mobileTab !== "terminal" && "md:space-y-6"
         )}
       >

@@ -16,8 +16,8 @@ const walletConnectProjectId =
   (typeof process !== "undefined" && process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID?.trim()) || "";
 
 const wcDescription = isClickmintBaseMainnet()
-  ? "Base — credits, CLICK, hourly POT"
-  : "Base Sepolia — credits, tCLICK, hourly POT (test)";
+  ? "Base — credits, CLICK, minute POT, block bet"
+  : "Base Sepolia — credits, tCLICK, minute POT, block bet (test)";
 
 /** WalletConnect metadata requires absolute icon URLs when possible. */
 const walletConnectIcons = [`${getSiteUrl().replace(/\/$/, "")}/ClickMint_logo_solid.jpg`];
