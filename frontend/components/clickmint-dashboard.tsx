@@ -1060,56 +1060,57 @@ export function ClickMintDashboard() {
       <p className="font-body text-[11px] text-secondary">Loading clock…</p>
     );
 
-  const blockBetPotEthDisplay = Number(formatEther(blockBet.totalPotWei)).toLocaleString(undefined, {
-    maximumFractionDigits: 4,
-    minimumFractionDigits: 0,
-  });
+  const blockBetPotEthDisplay = formatPotEthDisplay(blockBet.totalPotWei);
 
   /** Mobile-only: four corner readouts in the gutter outside the tile ring (full controls live in the header menu). */
   const mobileGameCornerHud = (
     <div className="pointer-events-none absolute inset-0 z-[25] md:hidden" aria-hidden>
       <div
-        className="absolute left-0 top-0 max-w-[min(92%,11.5rem)] rounded-md border border-primary-fixed/35 bg-black/80 px-2 py-1 text-left shadow-[0_0_16px_rgba(0,0,0,0.75)] backdrop-blur-[2px]"
+        className="absolute left-0 top-0 max-w-[min(96%,13.5rem)] rounded-md border border-primary-fixed/50 bg-black/55 px-2 py-1.5 text-left shadow-[0_0_20px_rgba(0,251,251,0.15)]"
         title="Credits — remaining full clicks at current click cost"
       >
-        <span className="block font-label text-[10px] font-bold uppercase leading-none tracking-widest text-secondary">
-          Cr
+        <span className="block font-label text-[9px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
+          Credits
         </span>
         <span className="mt-0.5 block font-mono text-sm font-bold tabular-nums leading-none text-primary-fixed">
           {!isConnected ? "—" : clickCostCredits === undefined ? "…" : unlimitedClicks ? "∞" : formatWholeCredits(playsRemainingBig)}
         </span>
       </div>
       <div
-        className="absolute right-0 top-0 max-w-[min(92%,11.5rem)] rounded-md border border-primary-fixed/35 bg-black/80 px-2 py-1 text-right shadow-[0_0_16px_rgba(0,0,0,0.75)] backdrop-blur-[2px]"
-        title="Minute POT (ETH)"
+        className="absolute right-0 top-0 max-w-[min(96%,13.5rem)] rounded-md border border-primary-fixed/50 bg-black/55 px-2 py-1.5 text-right shadow-[0_0_20px_rgba(0,251,251,0.15)]"
+        title="Minute Click Pot (ETH)"
       >
-        <span className="block font-label text-[10px] font-bold uppercase leading-none tracking-widest text-secondary">
-          Pot
+        <span className="block font-label text-[9px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
+          Click Pot
         </span>
         <span className="mt-0.5 block font-mono text-sm font-bold tabular-nums leading-none text-primary-fixed">
-          {potEthStr} Ξ
+          {potEthStr} ETH
         </span>
       </div>
       <div
-        className="absolute bottom-0 left-0 max-w-[min(92%,11.5rem)] rounded-md border border-cyan-400/40 bg-black/80 px-2 py-1 text-left shadow-[0_0_16px_rgba(0,0,0,0.75)] backdrop-blur-[2px]"
-        title="Block bet pot (ETH)"
+        className="absolute bottom-0 left-0 max-w-[min(96%,13.5rem)] rounded-md border border-cyan-400/55 bg-black/55 px-2 py-1.5 text-left shadow-[0_0_20px_rgba(34,211,238,0.18)]"
+        title="Block Bet pot (ETH)"
       >
-        <span className="block font-label text-[10px] font-bold uppercase leading-none tracking-widest text-cyan-500/90">
-          BB
+        <span className="block font-label text-[9px] font-bold uppercase leading-tight tracking-wide text-cyan-300/95">
+          Block Bet Pot
         </span>
         <span className="mt-0.5 block font-mono text-sm font-bold tabular-nums leading-none text-cyan-100">
-          {blockBetPotEthDisplay} Ξ
+          {blockBetPotEthDisplay} ETH
         </span>
       </div>
       <div
-        className="absolute bottom-0 right-0 max-w-[min(92%,11.5rem)] rounded-md border border-primary-fixed/35 bg-black/80 px-2 py-1 text-right shadow-[0_0_16px_rgba(0,0,0,0.75)] backdrop-blur-[2px]"
-        title="Total on-chain clicks this minute round (all players)"
+        className="absolute bottom-0 right-0 max-w-[min(96%,13.5rem)] rounded-md border border-primary-fixed/50 bg-black/55 px-2 py-1.5 text-right shadow-[0_0_20px_rgba(0,251,251,0.15)]"
+        title={
+          roundsSinceLaunch !== undefined
+            ? "Minute rounds since this game was deployed."
+            : "On-chain minute round id (all players share the same round)."
+        }
       >
-        <span className="block font-label text-[10px] font-bold uppercase leading-none tracking-widest text-secondary">
-          Rnd
+        <span className="block font-label text-[9px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
+          Round
         </span>
         <span className="mt-0.5 block font-mono text-sm font-bold tabular-nums leading-none text-primary-fixed/95">
-          {totalClicksThisRound !== undefined ? totalClicksThisRound.toString() : "—"}
+          {gameRoundNow === undefined ? "—" : roundsSinceLaunch !== undefined ? roundsSinceLaunch.toString() : `#${gameRoundNow.toString()}`}
         </span>
       </div>
     </div>
@@ -1189,8 +1190,8 @@ export function ClickMintDashboard() {
           }
           center={
             <div className="relative flex min-h-0 w-full flex-col items-center justify-center">
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-10 md:hidden">
-                <div className="pulse-ring h-56 w-56 rounded-full border border-primary-container" />
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-[0.22] md:hidden">
+                <div className="pulse-ring h-56 w-56 rounded-full border border-primary-fixed/60" />
               </div>
               <button
                 type="button"
@@ -1213,7 +1214,7 @@ export function ClickMintDashboard() {
                     heroClickFlash && "click-hero-flash"
                   )}
                 />
-                <span className="absolute inset-0 z-[1] rounded-full bg-gradient-to-tr from-primary-container/20 to-transparent md:rounded-2xl md:hidden" />
+                <span className="absolute inset-0 z-[1] rounded-full bg-gradient-to-tr from-primary-fixed/8 to-transparent md:rounded-2xl md:hidden" />
                 <span className="relative z-20 font-headline text-4xl font-extrabold tracking-tighter text-white glitch-text md:text-5xl md:text-on-primary-fixed md:[text-shadow:none]">
                   CLICK
                 </span>
@@ -1240,6 +1241,8 @@ export function ClickMintDashboard() {
                   </span>
                   {cooldownLabel !== null ? (
                     <>RATE LIMIT: {cooldownLabel}s</>
+                  ) : !isConnected ? (
+                    <>Connect wallet</>
                   ) : needsBuyCredits ? (
                     <>Buy credits</>
                   ) : (
@@ -1260,13 +1263,18 @@ export function ClickMintDashboard() {
                 type="button"
                 id="hero-add-credits"
                 aria-haspopup="dialog"
-                aria-expanded={depositOpen}
-                disabled={!isConnected}
-                onClick={() => setDepositOpen(true)}
+                aria-expanded={isConnected ? depositOpen : walletOpen}
+                onClick={() => {
+                  if (!isConnected) {
+                    setWalletOpen(true);
+                    return;
+                  }
+                  setDepositOpen(true);
+                }}
                 className={cn(
                   "inline-flex items-center gap-1.5 px-3 py-1.5 font-label text-[10px] font-bold uppercase tracking-[0.15em] transition-colors",
                   !isConnected
-                    ? "cursor-not-allowed border-2 border-outline-variant/30 text-secondary opacity-50"
+                    ? cn(NEON_MAGENTA_BTN, "opacity-95")
                     : depositOpen
                       ? cn(NEON_MAGENTA_BTN, "bg-[#ff2ee8]/20")
                       : cn(NEON_MAGENTA_BTN)
@@ -1391,7 +1399,7 @@ export function ClickMintDashboard() {
       {/* Background */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
         <div className="absolute left-1/2 top-1/2 h-[150%] w-[150%] -translate-x-1/2 -translate-y-1/2 bg-noise" />
-        <div className="absolute inset-0 grid-accent opacity-40" />
+        <div className="absolute inset-0 grid-accent opacity-40 max-md:opacity-[0.22]" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-primary-container/[0.04]" />
       </div>
 
@@ -1776,6 +1784,30 @@ export function ClickMintDashboard() {
               </DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-3 font-headline uppercase tracking-widest">
+              <div className="flex flex-wrap gap-2 border-b border-outline-variant/20 pb-3">
+                <button
+                  type="button"
+                  aria-pressed={musicOn}
+                  onClick={() => setMusicOn(!musicOn)}
+                  className={cn(
+                    "border border-outline-variant/50 px-3 py-2 text-[10px]",
+                    musicOn ? "border-primary-fixed text-primary-fixed" : "text-secondary"
+                  )}
+                >
+                  BGM {musicOn ? "on" : "off"}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={sfxOn}
+                  onClick={() => setSfxOn(!sfxOn)}
+                  className={cn(
+                    "border border-outline-variant/50 px-3 py-2 text-[10px]",
+                    sfxOn ? "border-primary-fixed text-primary-fixed" : "text-secondary"
+                  )}
+                >
+                  SFX {sfxOn ? "on" : "off"}
+                </button>
+              </div>
               <p
                 className="truncate font-label text-[9px] leading-tight text-secondary normal-case"
                 title={`${economyPresetShortLabel()} — ${economyPresetHint()}`}
@@ -1787,7 +1819,8 @@ export function ClickMintDashboard() {
                 className="border border-primary-fixed/40 bg-primary-fixed/10 px-3 py-2 text-left text-[11px] text-primary-fixed"
                 onClick={() => {
                   setMobileMenuOpen(false);
-                  setDepositOpen(true);
+                  if (!isConnected) setWalletOpen(true);
+                  else setDepositOpen(true);
                 }}
               >
                 + Add credits
@@ -1822,30 +1855,6 @@ export function ClickMintDashboard() {
                 <div className="max-h-[min(42vh,16rem)] overflow-y-auto rounded-md border border-outline-variant/20 bg-surface-container-low/30 p-2">
                   <ClickHistoryPanel gameAddr={gameAddr} compact genesisGameHour={genesisGameHour} liveFeedMax={12} />
                 </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  aria-pressed={musicOn}
-                  onClick={() => setMusicOn(!musicOn)}
-                  className={cn(
-                    "border border-outline-variant/50 px-3 py-2 text-[10px]",
-                    musicOn ? "border-primary-fixed text-primary-fixed" : "text-secondary"
-                  )}
-                >
-                  BGM {musicOn ? "on" : "off"}
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={sfxOn}
-                  onClick={() => setSfxOn(!sfxOn)}
-                  className={cn(
-                    "border border-outline-variant/50 px-3 py-2 text-[10px]",
-                    sfxOn ? "border-primary-fixed text-primary-fixed" : "text-secondary"
-                  )}
-                >
-                  SFX {sfxOn ? "on" : "off"}
-                </button>
               </div>
               {isPimlicoConfigured() ? (
                 <div className="border border-outline-variant/30 bg-surface-container-low/50 px-3 py-2">
@@ -2042,9 +2051,6 @@ export function ClickMintDashboard() {
           Trophy
         </button>
       </nav>
-
-      {/* Mobile scanline hint */}
-      <div className="pointer-events-none fixed inset-0 z-[100] opacity-[0.02] md:hidden bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(0,251,251,0.03)_2px,rgba(0,251,251,0.03)_4px)]" />
 
       <Dialog open={earlyClaimInfoOpen} onOpenChange={setEarlyClaimInfoOpen}>
         <DialogContent className="max-h-[min(90dvh,32rem)] overflow-y-auto border-outline-variant/40">
