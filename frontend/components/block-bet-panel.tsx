@@ -282,7 +282,7 @@ export function BlockBetPanel({
         <div>
           <h3 className="font-label text-[10px] uppercase tracking-[0.28em] text-cyan-200/95">Block bet</h3>
           <p className="mt-1 max-w-xl font-body text-[11px] text-cyan-100/75 md:text-xs">
-            46 pools · 15s windows · one winner/round.{" "}
+            {PERIMETER_COUNT} pools · 15s windows · one winner/round.{" "}
             <Link href="/documentation#block-bet" className="text-cyan-300 underline-offset-2 hover:underline">
               Rules
             </Link>

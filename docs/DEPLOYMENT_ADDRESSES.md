@@ -74,7 +74,7 @@ Copy/paste checklist for **local** `.env.local` and **Vercel** (Production / Pre
 | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Optional WalletConnect |
 | `NEXT_PUBLIC_PIMLICO_API_KEY` | Optional gasless |
 | `NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID` | Optional Pimlico policy |
-| `CRON_SECRET` | Server: authorizes `POST /api/cron/finalize-round` |
+| `CRON_SECRET` | Server: authorizes `GET /api/cron/finalize-round` |
 | `POT_KEEPER_PRIVATE_KEY` | Server/cron: signs `finalizeRound` (fund with ETH; must match on-chain `potKeeper` after `setPotKeeper`) |
 | `BASE_SEPOLIA_RPC_URL` / `QUICKNODE_RPC` | Contracts deploy + cron (can match public RPC) |
 

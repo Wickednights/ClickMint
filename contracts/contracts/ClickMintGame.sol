@@ -67,6 +67,8 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     mapping(uint256 roundId => address[]) internal _roundBettors;
     mapping(uint256 roundId => mapping(address => bool)) internal _roundBettorSeen;
     uint256 public blockBetCarry;
+    /// @notice ETH owed from block-bet settlement when a push payment failed (claim via `claimBlockBetEth`).
+    mapping(address => uint256) public blockBetClaimableEth;
 
     mapping(address => mapping(uint256 => uint8)) internal _clicksInBlock;
 
@@ -83,6 +85,7 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     );
     event BlockBetPaid(uint256 indexed roundId, uint8 winSlot, uint256 totalPot, uint256 winnersPaid);
     event BlockBetCarried(uint256 indexed roundId, uint256 amount);
+    event BlockBetEthClaimed(address indexed to, uint256 amount);
     event AddressesUpdated(address indexed treasury);
     event EconomyUpdated(uint256 clickPerEthWei, uint256 clickCostCredits, uint256 baseClickReward);
     event ClickExecutorSet(address indexed player, address indexed executor);
@@ -231,6 +234,8 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         uint256 toPot = (v * POT_BPS) / BPS;
         uint256 toBlockBet = (v * BLOCK_BET_DEPOSIT_BPS) / BPS;
         uint256 toTrophy = (v * TROPHY_REV_BPS) / BPS;
+        uint256 remainder = v - (toTreasury + toPot + toBlockBet + toTrophy);
+        toPot += remainder;
 
         (bool okTreasury,) = treasury.call{value: toTreasury}("");
         require(okTreasury, "game: treasury");
@@ -408,7 +413,7 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         uint256 blen = bettorsArr.length;
         (address[] memory pAddr, uint256[] memory pStake, uint256 nP) =
             _snapshotWinningBets(roundId, winSlot, bettorsArr, blen);
-        _clearAllBets(roundId, bettorsArr, blen);
+        _clearAllBets(roundId);
 
         if (pot == 0) {
             emit BlockBetPaid(roundId, winSlot, 0, 0);
@@ -457,17 +462,9 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         }
     }
 
-    function _clearAllBets(uint256 roundId, address[] storage bettorsArr, uint256 blen) internal {
-        for (uint256 s = 0; s < BLOCK_BET_SLOT_COUNT; ++s) {
-            totalBetOnSlot[roundId][uint8(s)] = 0;
-        }
-        for (uint256 i = 0; i < blen; ++i) {
-            address a = bettorsArr[i];
-            for (uint256 s = 0; s < BLOCK_BET_SLOT_COUNT; ++s) {
-                userBetOnSlot[roundId][a][uint8(s)] = 0;
-            }
-            _roundBettorSeen[roundId][a] = false;
-        }
+    /// @dev Bet state is keyed by `roundId`; new rounds use new ids, so zeroing O(slots×bettors) storage on settlement is unnecessary
+    ///      and can exceed block gas limits. Drop only the bettor list for this round to refund storage where possible.
+    function _clearAllBets(uint256 roundId) internal {
         delete _roundBettors[roundId];
     }
 
@@ -497,10 +494,23 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
             uint256 share = (totalPot * payStake[i]) / winStake;
             if (share > 0) {
                 (bool ok,) = payable(payAddr[i]).call{value: share}("");
-                require(ok, "game: block bet pay");
-                paidOut += share;
+                if (ok) {
+                    paidOut += share;
+                } else {
+                    blockBetClaimableEth[payAddr[i]] += share;
+                }
             }
         }
+    }
+
+    /// @notice Claim block-bet ETH that could not be pushed during `finalizeRound` (e.g. recipient reverted).
+    function claimBlockBetEth() external nonReentrant {
+        uint256 v = blockBetClaimableEth[msg.sender];
+        if (v == 0) revert GameBadParam();
+        blockBetClaimableEth[msg.sender] = 0;
+        (bool ok,) = payable(msg.sender).call{value: v}("");
+        require(ok, "game: claim block bet");
+        emit BlockBetEthClaimed(msg.sender, v);
     }
 
     function currentPotEth() external view returns (uint256) {

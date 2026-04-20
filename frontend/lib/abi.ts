@@ -32,6 +32,8 @@ export const clickMintGameAbi = parseAbi([
   "function userBetsAllSlots(uint256 roundId, address bettor) view returns (uint256[46])",
   "function userBetOnSlot(uint256 roundId, address user, uint8 slot) view returns (uint256)",
   "function blockBetCarry() view returns (uint256)",
+  "function blockBetClaimableEth(address user) view returns (uint256)",
+  "function claimBlockBetEth()",
   "function TROPHY_ROLL_DENOM() view returns (uint256)",
   "function trophyDropWeight() view returns (uint256)",
   "function setTrophyDropWeight(uint256 weight)",
@@ -43,11 +45,12 @@ export const clickMintGameAbi = parseAbi([
   "event PotWin(uint256 indexed roundId, address indexed winner, uint256 ethPayout, uint8 winSlot, bytes32 entropy)",
   "event BlockBetPaid(uint256 indexed roundId, uint8 winSlot, uint256 totalPot, uint256 winnersPaid)",
   "event BlockBetCarried(uint256 indexed roundId, uint256 amount)",
+  "event BlockBetEthClaimed(address indexed to, uint256 amount)",
 ]);
 
 export const binaryTrophyAbi = parseAbi([
   "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)",
-  "event TrophyMinted(address indexed to, uint256 tokenId, uint64 totalClicks, uint8 fragmentSlot, bool viaGame)",
+  "event TrophyMinted(address indexed to, uint256 indexed tokenId, uint64 totalClicks, uint8 fragmentSlot, bool viaGame)",
   "function approve(address to, uint256 tokenId)",
   "function ownerOf(uint256 tokenId) view returns (address)",
   "function tokenURI(uint256 tokenId) view returns (string)",

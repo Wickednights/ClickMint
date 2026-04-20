@@ -50,8 +50,8 @@ const config: HardhatUserConfig = {
   solidity: {
     version: "0.8.24",
     settings: {
-      // `viaIR: true` + optimizer enabled can hit solc CodeGenerationError on large `ClickMintGame`; revisit after splitting Block Bet logic or solc bump.
-      optimizer: { enabled: false },
+      // Minimal runs keeps bytecode smaller; if solc hits CodeGenerationError on `ClickMintGame`, revert to `enabled: false` or split logic.
+      optimizer: { enabled: true, runs: 1 },
       viaIR: true,
       evmVersion: "cancun"
     }
