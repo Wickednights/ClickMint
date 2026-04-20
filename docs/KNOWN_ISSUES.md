@@ -16,14 +16,14 @@ Use this as a living QA list. Update checkboxes as you verify. **Maintenance:** 
 
 | Status | Item | Notes |
 |--------|------|--------|
-| [ ] | POT shows 0 with many clicks | **Expected** if no `deposit()` in *current* game hour — only deposits add to `potEthByHour`; see Architecture. |
-| [ ] | Hour / winner “auto” | **`finalizeHour` is not cron by default** — run manually or set **`potKeeper`** to a Gelato/Automation relay (see **`docs/LP_AERODROME_AND_AUTOMATION.md`**). VRF = randomness upgrade, not scheduling. |
+| [ ] | POT shows 0 with many clicks | **Expected** if no `deposit()` in the *current* **minute** round — only deposits add to the pot accrual path; see Architecture. |
+| [ ] | Minute / winner “auto” | **`finalizeRound` is not magic** — run **`owner`/`potKeeper`** manually or use **Vercel Cron** → **`/api/cron/finalize-round`** (see **`docs/LP_AERODROME_AND_AUTOMATION.md`**). VRF = randomness upgrade, not scheduling. |
 | [ ] | `deposit()` credits user and splits fees | Verify on Base Sepolia with small ETH. |
 | [ ] | `click()` deducts credits when `clickCostCredits > 0` | Deploy script used `0` in sample; retest if owner changes economy. |
 | [ ] | `click()` grants vesting when `baseClickReward > 0` | If reward is `0`, UI correctly shows no unvested from clicks. |
-| [ ] | `finalizeHour()` after buffer | Needs enough clicks + window eligibility; min clicks constant in contract. |
+| [ ] | `finalizeRound(roundId)` after buffer | Needs enough clicks + winning-slot eligibility; **`minPotClicks`** on contract. |
 | [ ] | `CLICK.setGame(game)` matches deployed game | Run `set-game.ts` if needed; frontend “Game link OK” must be yes. |
-| [ ] | Post-deploy script | Run **`npm run verify:base-sepolia`** (or `hardhat run scripts/verify-deployment.ts`) with deployed addresses; optional **`EXPECTED_MAX_SUPPLY_WEI`** for 100B mainnet cap — see **`docs/POST_DEPLOY_VERIFICATION.md`**. |
+| [ ] | Post-deploy script | Run **`npm run verify:base-sepolia`** (or `hardhat run scripts/verify-deployment.ts`) with deployed addresses; optional **`EXPECTED_MAX_SUPPLY_WEI`** for **10B** mainnet cap — see **`docs/POST_DEPLOY_VERIFICATION.md`**. |
 
 ## CLICK token & vesting
 
@@ -31,7 +31,7 @@ Use this as a living QA list. Update checkboxes as you verify. **Maintenance:** 
 |--------|------|--------|
 | [ ] | `claimVested()` mints after time elapsed | Testnet vesting duration set in CLICK constructor (e.g. 10 min). |
 | [ ] | `earlySpendPending` only when `amount <= pendingVested` | Wallets often show “User rejected” on revert; UI now validates and explains. |
-| [ ] | POT winner receives **liquid** `mint`, not vault | Different path from `grantVested`. |
+| [ ] | POT winner receives **native ETH** | Paid from game balance via **`finalizeRound`**, not CLICK vesting. |
 
 ## Frontend
 

@@ -23,10 +23,10 @@ Use this after each deployment or before mainnet. Work **top to bottom**. For ev
 |---|--------|----------------|-------------|
 | A1 | `CLICK.game` == `ClickMintGame` | Basescan: CLICK contract → Read `game` | |
 | A2 | Game `clickToken` == CLICK address | Read `clickToken` on game | |
-| A3 | Treasury / secret wallet non-zero | Read `treasury`, `secretWallet` on game |    
+| A3 | Treasury non-zero | Read `treasury` on game (`SecretPrizeWallet` is deployed but **not** referenced by `deposit` today) |
 | A4 | `clickCostCredits` | Read on game — **1 wei** ⇒ huge UI credit counts; use `setEconomy` / `set-economy-round.ts` for readable test economics | |
 | A5 | `baseClickReward` | Read on game — `0` ⇒ no vesting from clicks | |
-| A6 | `CLICK.maxSupply` matches intent | Read `maxSupply` — testnet **1M** / mainnet-style **100B** token cap (wei = whole tokens × 1e18) | |
+| A6 | `CLICK.maxSupply` matches intent | Read `maxSupply` — testnet **1M** / mainnet **10B** (wei = whole tokens × 1e18) | |
 | A7 | Pause state | Read `paused()` or **`isPaused()`** on game — both must agree | |
 
 ---
@@ -70,12 +70,12 @@ Use this after each deployment or before mainnet. Work **top to bottom**. For ev
 
 ---
 
-## F. Hourly POT (ops / power users)
+## F. Minute POT + Block Bet (ops / power users)
 
 | # | Action | Expected | Your result |
 |---|--------|----------|-------------|
-| F1 | Note `currentPotEth` after deposits | Increases when deposits fund pot slice per contract | |
-| F2 | After UTC hour + buffer | **Owner** calls `finalizeHour(prevHour)`; winner or carry per rules (permissionless settlement deferred until VRF/keeper design) | |
+| F1 | Note `currentPotEth` after deposits | Increases when deposits fund **pot BPS** per contract | |
+| F2 | After UTC minute + `ROUND_BUFFER` | **`owner`** or **`potKeeper`** calls **`finalizeRound(roundId)`**; POT ETH winner + Block Bet settlement (or carry / claimable pull) | |
 
 ---
 

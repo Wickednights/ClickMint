@@ -41,14 +41,7 @@ import { formatEther, parseEther, type Address } from "viem";
 import { toast } from "sonner";
 import { binaryTrophyAbi, clickMintGameAbi, clickTokenAbi } from "@/lib/abi";
 import { explainRevertData, extractRevertData } from "@/lib/revert-reason";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { BlockBetPanel, BlockBetSidebarCard, useBlockBetGame } from "@/components/block-bet-panel";
 import { ClickHistoryPanel } from "@/components/click-history-panel";
@@ -502,7 +495,6 @@ export function ClickMintDashboard() {
 
   const [earlyAmt, setEarlyAmt] = useState("");
   const [mobileTab, setMobileTab] = useState<MobileTab>("terminal");
-  const [historyOpen, setHistoryOpen] = useState(false);
   const [earlyClaimInfoOpen, setEarlyClaimInfoOpen] = useState(false);
   const [depositOpen, setDepositOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -958,6 +950,24 @@ export function ClickMintDashboard() {
     return earlySpendSplitWei(earlyBreakdownSpend);
   }, [earlyBreakdownSpend]);
 
+  const earlyClaimHoverSummary = useMemo(() => {
+    const parts = [
+      "Early claim: 30% burn, 30% treasury, 20% LP, 20% to you (on the unvested amount you enter or Max). Claim vested only releases time-unlocked tokens.",
+    ];
+    if (earlySplitDisplay && earlyBreakdownSpend) {
+      parts.push(
+        `Estimate on ${formatClickDisplayWei(earlyBreakdownSpend)} unvested: burn ${formatClickDisplayWei(earlySplitDisplay.burn)}, treasury ${formatClickDisplayWei(earlySplitDisplay.treasury)}, LP ${formatClickDisplayWei(earlySplitDisplay.lp)}, you ${formatClickDisplayWei(earlySplitDisplay.you)}.`,
+      );
+    }
+    if (earlyLiquidPreview) {
+      parts.push(
+        `~${formatClickDisplayWei(earlyLiquidPreview.liquid)} liquid to you from ${formatClickDisplayWei(earlyLiquidPreview.spend)} unvested (approx).`,
+      );
+    }
+    parts.push("Documentation: /documentation#early-claim");
+    return parts.join(" ");
+  }, [earlySplitDisplay, earlyBreakdownSpend, earlyLiquidPreview]);
+
   const canAct = isConnected && !wrongChain && !writePending && !gaslessActionPending;
   /** Allow CLICK on wrong chain so the handler can prompt a network switch. */
   const canSendClick =
@@ -1106,159 +1116,6 @@ export function ClickMintDashboard() {
         )}
       </section>
 
-      {/* Stats — before ring on desktop so balances + early claim stay above the fold */}
-      <section className="flex w-full max-w-2xl flex-col items-center md:max-w-3xl">
-        <div className="w-full text-center">
-          <div className="flex items-center justify-center gap-6 md:gap-8">
-            <div className="text-center">
-              <p className="mb-0.5 font-label text-[11px] uppercase tracking-widest text-secondary md:text-xs">
-                Click Credits
-              </p>
-              <p className="font-headline text-2xl font-black text-white tabular-nums md:text-3xl lg:text-4xl">
-                {clickCostCredits === undefined ? "—" : unlimitedClicks ? "∞" : formatWholeCredits(playsRemainingBig)}
-              </p>
-              <p className="mt-0.5 font-body text-[11px] text-primary-fixed/80 md:text-xs">
-                {clickCostCredits === undefined ? "…" : unlimitedClicks ? "Free mode" : "1 credit / click"}
-              </p>
-            </div>
-            <div className="h-10 w-px bg-outline-variant/30" aria-hidden />
-            <div className="text-center">
-              <p className="mb-0.5 font-label text-[11px] uppercase tracking-widest text-secondary md:text-xs">
-                Unvested $CLICK
-              </p>
-              <div className="flex flex-col items-center gap-0.5">
-                <span className="font-headline text-2xl font-black text-primary-fixed text-glow tabular-nums md:text-3xl lg:text-4xl">
-                  {vestingDisplay.unvested.headline}
-                </span>
-                <span className="max-w-[11rem] font-body text-[10px] font-medium leading-snug tracking-wide text-primary-fixed/85 md:text-[11px]">
-                  {vestingDisplay.unvested.caption}
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="mt-2 flex flex-col items-center gap-0.5 font-body text-[12px] text-outline md:mt-3 md:text-sm">
-            <span className="inline-flex flex-wrap items-center justify-center gap-1.5 normal-case">
-              <span
-                className="material-symbols-outlined text-base text-primary-fixed/75"
-                style={{ fontVariationSettings: `"FILL" 0, "wght" 400` } as CSSProperties}
-              >
-                redeem
-              </span>
-              <span className="text-primary-fixed/90">{vestingDisplay.claimable.headline}</span>
-              <span className="opacity-90">{vestingDisplay.claimable.caption}</span>
-            </span>
-            <button
-              type="button"
-              className="mt-0.5 font-label text-[11px] uppercase tracking-wider text-primary-fixed/90 underline-offset-2 hover:underline disabled:opacity-30"
-              disabled={!canAct}
-              onClick={() => void onClaim()}
-            >
-              Claim vested
-            </button>
-          </div>
-          <div className="mt-2 w-full max-w-lg border border-outline-variant/20 bg-surface-container-low/50 px-3 py-1.5 md:mt-3 md:py-2">
-            <div className="mx-auto flex w-full max-w-md flex-wrap items-center justify-center gap-2">
-              <input
-                value={earlyAmt}
-                onChange={(e) => setEarlyAmt(e.target.value)}
-                className="min-w-[5rem] flex-1 border-b border-outline bg-transparent py-1 text-center font-body text-[11px] text-primary-fixed focus:border-primary-fixed focus:outline-none sm:max-w-[7rem] md:text-xs"
-                placeholder="0"
-                title="Amount of unvested $CLICK to claim early (≤ Unvested)"
-              />
-              <button
-                type="button"
-                disabled={!canAct || unvestedCap === 0n}
-                onClick={() => setEarlyAmt(formatEther(unvestedCap))}
-                className="font-label text-[10px] font-bold uppercase tracking-widest text-secondary hover:text-primary-fixed disabled:opacity-30 md:text-[11px]"
-              >
-                Max
-              </button>
-              <button
-                type="button"
-                disabled={!canAct}
-                onClick={() => void onEarlySpend()}
-                className="font-label text-[11px] font-bold uppercase tracking-widest text-primary-fixed hover:text-white disabled:opacity-30 md:text-xs"
-              >
-                Early claim
-              </button>
-            </div>
-            {earlySplitDisplay !== null && earlyBreakdownSpend !== null ? (
-              <div className="mx-auto mt-2 w-full max-w-md border-t border-outline-variant/25 pt-2 md:mt-3 md:pt-3">
-                <p className="mb-0.5 text-center font-label text-[9px] uppercase tracking-widest text-secondary md:text-[10px]">
-                  Burn / Treasury / LP / You
-                </p>
-                <p className="mb-1 text-center font-mono text-[10px] tabular-nums text-primary-fixed/85 md:text-[11px]">
-                  30 / 30 / 20 / 20
-                </p>
-                <p className="mb-1 text-center font-body text-[10px] text-secondary opacity-90 md:text-[11px]">
-                  $CLICK split on{" "}
-                  <span className="font-semibold text-on-surface/90">{formatClickDisplayWei(earlyBreakdownSpend)}</span>{" "}
-                  unvested (estimate)
-                </p>
-                <div className="grid grid-cols-4 gap-1 text-center font-mono text-[10px] tabular-nums leading-tight text-on-surface md:text-[11px] md:leading-snug">
-                  <span className="text-secondary">{formatClickDisplayWei(earlySplitDisplay.burn)}</span>
-                  <span className="text-secondary">{formatClickDisplayWei(earlySplitDisplay.treasury)}</span>
-                  <span className="text-secondary">{formatClickDisplayWei(earlySplitDisplay.lp)}</span>
-                  <span className="text-primary-fixed">{formatClickDisplayWei(earlySplitDisplay.you)}</span>
-                </div>
-              </div>
-            ) : null}
-          </div>
-          <div className="mx-auto mt-1 flex max-w-md flex-col items-center gap-0.5 md:mt-2">
-            <button
-              type="button"
-              onClick={() => setEarlyClaimInfoOpen(true)}
-              className="font-label text-[10px] uppercase tracking-wider text-primary-fixed underline-offset-2 hover:underline md:text-[11px]"
-            >
-              Early vs vested — what’s the difference?
-            </button>
-          </div>
-          <Dialog open={earlyClaimInfoOpen} onOpenChange={setEarlyClaimInfoOpen}>
-            <DialogContent className="max-h-[min(90dvh,32rem)] overflow-y-auto border-outline-variant/40">
-              <DialogHeader>
-                <DialogTitle>Early claim</DialogTitle>
-                <DialogDescription className="text-left text-secondary">
-                  Unvested exit ≠ time-unlocked claim.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-2 text-left font-body text-sm text-secondary">
-                <p>
-                  <span className="font-semibold text-on-surface/95">Early</span> spends locked balance; protocol keeps a
-                  cut. <span className="font-semibold text-on-surface/95">Claim vested</span> only releases schedule-unlocked
-                  tokens.
-                </p>
-                <p>
-                  <Link href="/documentation#early-claim" className="text-primary-fixed underline-offset-2 hover:underline">
-                    Full docs
-                  </Link>
-                </p>
-              </div>
-            </DialogContent>
-          </Dialog>
-          {earlyLiquidPreview !== null && canAct && parsedEarlySpend.ok && (
-            <p className="mx-auto mt-1 max-w-md text-center font-mono text-[11px] text-primary-fixed/95 md:mt-2 md:text-xs">
-              ~{formatClickDisplayWei(earlyLiquidPreview.liquid)} liquid from {formatClickDisplayWei(earlyLiquidPreview.spend)}{" "}
-              unvested
-            </p>
-          )}
-          {canAct && !parsedEarlySpend.ok && (
-            <p className="mt-0.5 text-center font-body text-[11px] text-amber-200/90 md:text-xs">
-              Invalid amount — use a decimal number (wei parsed as ether).
-            </p>
-          )}
-          {canAct && parsedEarlySpend.ok && earlySpendWei > unvestedCap && unvestedCap > 0n && (
-            <p className="mt-0.5 text-center font-body text-[11px] text-amber-200/90 md:text-xs">
-              Amount exceeds unvested ({formatClickDisplayWei(unvestedCap)} $CLICK max). Try Max.
-            </p>
-          )}
-          {canAct && unvestedCap === 0n && (
-            <p className="mt-0.5 text-center font-body text-[11px] text-secondary opacity-85 md:text-xs">
-              No unvested balance — early claim will revert (wallet may show “User rejected”).
-            </p>
-          )}
-        </div>
-      </section>
-
       {/* CLICK hero inside 46-tile block-bet ring (4×15s sides). */}
       <div className="mx-auto w-full max-w-3xl px-2 py-1 md:py-2">
         <BlockBetPanel
@@ -1386,35 +1243,6 @@ export function ClickMintDashboard() {
           }
         />
       </div>
-
-      {/* Minimal footer strip */}
-      <section className="flex max-w-lg flex-col items-center gap-4 text-center">
-        <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
-          <DialogTrigger asChild>
-            <button
-              type="button"
-              className="group inline-flex items-center gap-3 text-primary-fixed transition-colors hover:text-white"
-            >
-              <Icon name="workspace_premium" className="text-xl" />
-              <span className="border-b border-primary-fixed/20 font-label text-xs uppercase tracking-[0.2em] transition-all group-hover:border-primary-fixed">
-                POT winners
-              </span>
-            </button>
-          </DialogTrigger>
-          <DialogContent className="border-outline-variant/40">
-            <DialogHeader>
-              <DialogTitle>POT winners</DialogTitle>
-              <DialogDescription className="sr-only">POT payout history from this browser session</DialogDescription>
-            </DialogHeader>
-            <WinnerTable rows={potRows} genesisGameHour={genesisGameHour} />
-          </DialogContent>
-        </Dialog>
-        <p className="font-body text-[11px] text-secondary opacity-65 md:text-xs">
-          <Link href="/documentation" className="text-primary-fixed underline-offset-2 hover:underline">
-            Rules & mechanics
-          </Link>
-        </p>
-      </section>
     </>
   );
 
@@ -1660,6 +1488,109 @@ export function ClickMintDashboard() {
           </div>
         </div>
 
+        {isConnected ? (
+          <div className="border-t border-outline-variant/20 bg-surface/95 px-2 py-1 sm:px-4 sm:py-1.5">
+            <div className="mx-auto flex max-w-6xl flex-col gap-0.5">
+              <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 sm:gap-x-5 md:justify-between">
+                <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+                  <div
+                    className="text-center"
+                    title={
+                      clickCostCredits === undefined
+                        ? "Loading credit balance from chain."
+                        : unlimitedClicks
+                          ? "Unlimited plays when per-click credit cost is zero or not enforced."
+                          : "Remaining full clicks at current clickCostCredits. Add ETH via Add credits (bookkeeping credits, not the $CLICK token)."
+                    }
+                  >
+                    <p className="mb-0 font-label text-[7px] uppercase tracking-widest text-secondary md:text-[8px]">
+                      Credits
+                    </p>
+                    <p className="font-headline text-base font-black tabular-nums text-white md:text-lg">
+                      {clickCostCredits === undefined ? "—" : unlimitedClicks ? "∞" : formatWholeCredits(playsRemainingBig)}
+                    </p>
+                  </div>
+                  <div className="hidden h-7 w-px bg-outline-variant/30 sm:block" aria-hidden />
+                  <div
+                    className="text-center"
+                    title={`${vestingDisplay.unvested.caption} On-chain pendingVested = unvested in the vesting vault (early-claim cap).`}
+                  >
+                    <p className="mb-0 font-label text-[7px] uppercase tracking-widest text-secondary md:text-[8px]">
+                      Unvested
+                    </p>
+                    <p className="font-headline text-base font-black tabular-nums text-primary-fixed text-glow md:text-lg">
+                      {vestingDisplay.unvested.headline}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    className="shrink-0 border border-outline-variant/40 px-2 py-1 font-label text-[8px] uppercase tracking-wider text-primary-fixed/90 hover:bg-surface-container-low disabled:opacity-30 md:text-[9px]"
+                    disabled={!canAct}
+                    title={vestingDisplay.claimable.caption}
+                    onClick={() => void onClaim()}
+                  >
+                    Claim vested
+                  </button>
+                  <div className="flex items-center gap-1 border border-outline-variant/25 bg-surface-container-low/40 px-1 py-0.5 sm:gap-1.5 sm:px-1.5">
+                    <input
+                      value={earlyAmt}
+                      onChange={(e) => setEarlyAmt(e.target.value)}
+                      className="w-11 border-b border-outline-variant/50 bg-transparent py-0.5 text-center font-mono text-[10px] text-primary-fixed focus:border-primary-fixed focus:outline-none sm:w-12 md:text-[11px]"
+                      placeholder="0"
+                      title="Amount of unvested $CLICK to exit early (≤ Unvested). Hover the box for 30/30/20/20 split details."
+                      aria-label="Early claim amount"
+                    />
+                    <button
+                      type="button"
+                      disabled={!canAct || unvestedCap === 0n}
+                      onClick={() => setEarlyAmt(formatEther(unvestedCap))}
+                      className="font-label text-[8px] font-bold uppercase text-secondary hover:text-primary-fixed disabled:opacity-30"
+                    >
+                      Max
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!canAct}
+                      title={earlyClaimHoverSummary}
+                      onClick={() => void onEarlySpend()}
+                      className="font-label text-[8px] font-bold uppercase tracking-wide text-primary-fixed hover:text-white disabled:opacity-30 md:text-[9px]"
+                    >
+                      Early
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Early vs vested explainer"
+                      title="Open full early vs vested explainer"
+                      onClick={() => setEarlyClaimInfoOpen(true)}
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-outline-variant/50 font-mono text-[10px] leading-none text-primary-fixed hover:bg-surface-container"
+                    >
+                      ?
+                    </button>
+                  </div>
+                </div>
+              </div>
+              {canAct && !parsedEarlySpend.ok ? (
+                <p className="text-center font-body text-[9px] text-amber-200/90">Invalid amount — use a decimal $CLICK amount.</p>
+              ) : null}
+              {canAct && parsedEarlySpend.ok && earlySpendWei > unvestedCap && unvestedCap > 0n ? (
+                <p className="text-center font-body text-[9px] text-amber-200/90">
+                  Over unvested ({formatClickDisplayWei(unvestedCap)} max).
+                </p>
+              ) : null}
+              {canAct && unvestedCap === 0n ? (
+                <p
+                  className="text-center font-body text-[9px] text-secondary/80"
+                  title="Early claim applies the 30/30/20/20 split on unvested balance only. With 0 unvested the transaction reverts (wallet may say User rejected)."
+                >
+                  No unvested — early claim reverts.
+                </p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
         <nav
           className="hidden border-t border-outline-variant/25 bg-surface-container-lowest/95 md:block md:pl-72"
           aria-label="Sections"
@@ -1903,10 +1834,32 @@ export function ClickMintDashboard() {
             </div>
           </DialogContent>
         </Dialog>
+
+        <Dialog open={earlyClaimInfoOpen} onOpenChange={setEarlyClaimInfoOpen}>
+          <DialogContent className="max-h-[min(90dvh,32rem)] overflow-y-auto border-outline-variant/40">
+            <DialogHeader>
+              <DialogTitle>Early claim</DialogTitle>
+              <DialogDescription className="text-left text-secondary">
+                Unvested exit ≠ time-unlocked claim.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2 text-left font-body text-sm text-secondary">
+              <p>
+                <span className="font-semibold text-on-surface/95">Early</span> spends locked balance; protocol keeps a cut.{" "}
+                <span className="font-semibold text-on-surface/95">Claim vested</span> only releases schedule-unlocked tokens.
+              </p>
+              <p>
+                <Link href="/documentation#early-claim" className="text-primary-fixed underline-offset-2 hover:underline">
+                  Full docs
+                </Link>
+              </p>
+            </div>
+          </DialogContent>
+        </Dialog>
       </header>
 
       {/* Desktop sidebar — live feed + POT widgets (nav is in header) */}
-      <aside className="fixed left-0 top-0 z-40 hidden h-full w-72 flex-col overflow-y-auto border-r border-outline-variant/30 bg-surface-container-lowest md:flex md:pt-36">
+      <aside className="fixed left-0 top-0 z-40 hidden h-full w-72 flex-col overflow-y-auto border-r border-outline-variant/30 bg-surface-container-lowest md:flex md:pt-44">
         <div className="space-y-4 px-4 pb-36 pt-5 md:pb-44">
           <div className="mx-auto w-full max-w-[17rem]">{resetTimerStrip}</div>
           <div className="mx-auto flex w-full max-w-[17rem] justify-center">{minutePotCard}</div>
@@ -1929,7 +1882,7 @@ export function ClickMintDashboard() {
       {/* Main */}
       <main
         className={cn(
-          "relative z-10 mx-auto flex max-w-4xl flex-col items-center px-4 pb-24 pt-28 md:ml-72 md:mr-0 md:pb-16 md:pt-36",
+          "relative z-10 mx-auto flex max-w-4xl flex-col items-center px-4 pb-24 pt-36 md:ml-72 md:mr-0 md:pb-16 md:pt-44",
           mobileTab === "terminal" ? "space-y-4 md:space-y-5" : "space-y-8 md:space-y-6"
         )}
       >

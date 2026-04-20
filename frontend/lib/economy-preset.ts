@@ -29,6 +29,6 @@ export function economyPresetShortLabel(): string {
  */
 export function economyPresetHint(): string {
   return getUiEconomyPreset() === "mainnet"
-    ? "100B CLICK cap, 7d vest, ~1¢/click scale — align NEXT_PUBLIC_DEPLOY_ECONOMY=mainnet with deploy."
+    ? "10B CLICK cap, 30d vest, ~$0.10/click scale — align NEXT_PUBLIC_DEPLOY_ECONOMY=mainnet with deploy."
     : "1M cap, 10m vest, readable credits — default; matches DEPLOY_ECONOMY=testnet or unset.";
 }

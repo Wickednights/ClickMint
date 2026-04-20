@@ -76,7 +76,7 @@ Use **Base Sepolia** explorer: `https://sepolia.basescan.org/address/<0x…>`
 | Step | Contract | Address source | What to verify |
 |------|----------|----------------|----------------|
 | C.1 | **CLICK** | `NEXT_PUBLIC_CLICK_ADDRESS` | Contract is verified (if you verified); **Read**: `game`, `maxSupply`, `vestingDuration`. |
-| C.2 | **ClickMintGame** | `NEXT_PUBLIC_GAME_ADDRESS` | **Read**: `clickToken`, `paused` / `isPaused`, `trophyNft`, `treasury`, `secretWallet`, economy getters. |
+| C.2 | **ClickMintGame** | `NEXT_PUBLIC_GAME_ADDRESS` | **Read**: `clickToken`, `paused` / `isPaused`, `trophyNft`, `treasury`, economy getters (`clickCostCredits`, `baseClickReward`, …). **`SecretPrizeWallet`** is a separate deployed contract — not a field on the game. |
 | C.3 | **BinaryTrophyNFT** | trophy from game or env | **Read**: `clickMintGame`, `maxSupply`, royalty info. |
 | C.4 | **Treasury** | env or deploy log | Contract exists; optional **Read** owner. |
 | C.5 | **SecretPrizeWallet** | env or deploy log | Contract exists. |
@@ -149,12 +149,13 @@ Use **Base Sepolia** explorer: `https://sepolia.basescan.org/address/<0x…>`
 | D.8.1 | Amount **>** unvested | Clear error or revert; no silent failure. | |
 | D.8.2 | Amount **≤** unvested | Tx succeeds per token rules. | |
 
-### D.9 Hourly POT and settlement
+### D.9 Minute POT, Block Bet, and settlement
 
 | Step | Action | Expected | Pass? |
 |------|--------|----------|-------|
-| D.9.1 | Note **POT** / hour display after deposits | Can be **zero** if no qualifying deposits in that hour — see `KNOWN_ISSUES.md`. | |
-| D.9.2 | **`finalizeHour`** | **Owner-only** (connected wallet must be game **owner**). Non-owner sees revert. No automatic cron in MVP. | |
+| D.9.1 | Note **POT** after deposits | Can be **zero** if no qualifying deposits in the current **minute** round — see `KNOWN_ISSUES.md`. | |
+| D.9.2 | **`finalizeRound`** | **`owner`** or **`potKeeper`** (non-zero). Optional: Vercel **`/api/cron/finalize-round`**. | |
+| D.9.3 | Block Bet pull balance | If push failed at settlement, **`blockBetClaimableEth`** &gt; 0 → **`claimBlockBetEth()`**. | |
 
 ### D.10 Binary Trophy NFT — metadata and images (**no IPFS**)
 
@@ -194,7 +195,7 @@ Use **Base Sepolia** explorer: `https://sepolia.basescan.org/address/<0x…>`
 |------|---------------------------|
 | **IPFS / external trophy images** | Trophy **`tokenURI`** is **on-chain** (base64 JSON + SVG). IPFS or static hosting is **optional polish** after core flows pass; changing it needs a **new** metadata approach (not required for Phase 1 testing). |
 | **VRF / trustless POT randomness** | MVP uses pseudo-random; documented in architecture. |
-| **Permissionless `finalizeHour`** | Owner-only in current design. |
+| **Permissionless `finalizeRound`** | Not public; **`owner`** or **`potKeeper`** only. |
 | **Trustless on-click trophy randomness** | Drops use the same block-entropy family as POT (miner-influenced); upgrade if you need VRF-level fairness. |
 
 ---

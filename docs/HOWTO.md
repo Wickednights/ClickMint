@@ -45,7 +45,7 @@ cd contracts
 npx hardhat run scripts/deploy.ts --network <networkName>
 ```
 
-Deploy preset: **`DEPLOY_ECONOMY=testnet`** (default) or **`mainnet`**. **Testnet:** 1M **tCLICK** cap, 10 trophies, 10m vesting, **ultra-low** `clickCostCredits`, **`minPotClicks = 5`**. **Mainnet:** 100B cap, 10k trophies, 7d vesting, ~1¢/click at default `MAINNET_ETH_USD`. See **`docs/ECONOMY.md`** and **`contracts/scripts/config/economy.ts`**.
+Deploy preset: **`DEPLOY_ECONOMY=testnet`** (default) or **`mainnet`**. **Testnet:** 1M **tCLICK** cap, 10 trophies, **10 min** vesting, **ultra-low** `clickCostCredits`, **`minPotClicks = 5`**. **Mainnet:** **10B** cap, 10k trophies, **30d** vesting, ~**$0.10/click** at default `MAINNET_ETH_USD`. See **`docs/ECONOMY.md`** and **`contracts/scripts/config/economy.ts`**.
 
 **Networks (Hardhat):** `--network baseSepolia` or **`--network base`** (mainnet). Shortcuts: **`npm run deploy:base-sepolia`**, **`npm run deploy:base`**.
 
@@ -83,13 +83,13 @@ GAME_ADDRESS=0x... POT_KEEPER_ADDRESS=0x... npx hardhat run scripts/set-pot-keep
 # or --network base
 ```
 
-Optional: set **`EXPECTED_MAX_SUPPLY_WEI`** to the deployed cap (mainnet-style **100B** tokens: `100000000000000000000000000000`; testnet **1M**: `1000000000000000000000000`). Full checklist: **`docs/POST_DEPLOY_VERIFICATION.md`**, **`docs/SYSTEM_VERIFICATION.md`**.
+Optional: set **`EXPECTED_MAX_SUPPLY_WEI`** to the deployed cap (mainnet **10B** tokens: `10000000000000000000000000000`; testnet **1M**: `1000000000000000000000000`). Full checklist: **`docs/POST_DEPLOY_VERIFICATION.md`**, **`docs/SYSTEM_VERIFICATION.md`**.
 
 ### Economy tuning (owner)
 
 On **ClickMintGame**, owner can call:
 
-- `setEconomy(clickPerEthWei, clickCostCredits, baseClickReward)` — **`clickPerEthWei` is legacy** (kept for ABI / deploy compat); the hourly **POT pays accumulated ETH**, not minted $CLICK. **`clickCostCredits`** and **`baseClickReward`** still tune per-click credits and vested CLICK grants.
+- `setEconomy(clickPerEthWei, clickCostCredits, baseClickReward)` — **`clickPerEthWei` is legacy** (kept for ABI / deploy compat); the **minute POT** pays accumulated **native ETH**, not minted $CLICK. **`clickCostCredits`** and **`baseClickReward`** still tune per-click credits and vested CLICK grants.
 
 If **`baseClickReward`** is `0`, clicks do not add to users’ CLICK vesting vault; early spend will have no unvested balance.
 

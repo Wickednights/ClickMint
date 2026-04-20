@@ -4,15 +4,19 @@ Step-by-step checklist: **Base Sepolia first** for the full game loop (minute ro
 
 **Paths:** `<repo-root>` means the directory where you cloned this monorepo (any OS, any folder name). All `cd` examples assume you start at `<repo-root>`.
 
-**Related:** [GAME_MECHANICS.md](GAME_MECHANICS.md), [HOWTO.md](HOWTO.md), [DEPLOYMENT_ADDRESSES.md](DEPLOYMENT_ADDRESSES.md), [POST_DEPLOY_VERIFICATION.md](POST_DEPLOY_VERIFICATION.md), [LP_AERODROME_AND_AUTOMATION.md](LP_AERODROME_AND_AUTOMATION.md), [WHERE_WE_ARE_AND_NEXT_STEPS.md](WHERE_WE_ARE_AND_NEXT_STEPS.md).
+**Related:** [GAME_MECHANICS.md](GAME_MECHANICS.md), [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md), [HOWTO.md](HOWTO.md), [DEPLOYMENT_ADDRESSES.md](DEPLOYMENT_ADDRESSES.md), [POST_DEPLOY_VERIFICATION.md](POST_DEPLOY_VERIFICATION.md), [LP_AERODROME_AND_AUTOMATION.md](LP_AERODROME_AND_AUTOMATION.md), [WHERE_WE_ARE_AND_NEXT_STEPS.md](WHERE_WE_ARE_AND_NEXT_STEPS.md).
 
 ---
 
-## Phase 0 — Right now (one-time setup)
+## Phase 0 — Right now (one-time setup + testnet restart)
 
-1. **Confirm tooling** — Node/npm installed; open a terminal at `<repo-root>` (clone directory).
-2. **Clone / pull** — Repo matches the branch you intend to deploy from (e.g. `main`).
-3. **Never commit secrets** — Private keys and RPC URLs with secrets stay in local `.env` files or the Vercel env UI only.
+1. **Confirm tooling** — Node **20+**, npm; terminal at `<repo-root>`.
+2. **Clone / pull** — Branch you intend to deploy from (e.g. `main`).
+3. **Never commit secrets** — Keys and private RPC URLs only in **`contracts/.env`**, **`frontend/.env.local`**, or **Vercel** (never git).
+4. **Read env reference** — [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md) (Hardhat + all `NEXT_PUBLIC_*` + cron).
+5. **Preflight contracts** — `cd contracts && npm install && npx hardhat compile` must succeed.
+6. **Preflight frontend** — `cd frontend && npm install && npm run build` with current env (optional before Phase 3).
+7. **Plan ledger updates** — After the next `deploy.ts`, you will paste addresses into [DEPLOYMENT_ADDRESSES.md](DEPLOYMENT_ADDRESSES.md), Vercel, and optionally [frontend/lib/addresses.ts](../frontend/lib/addresses.ts) Sepolia fallbacks.
 
 ---
 

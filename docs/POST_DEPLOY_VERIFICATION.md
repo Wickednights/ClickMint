@@ -6,9 +6,9 @@ Run this **immediately after** `deploy.ts` (or any redeploy) before refreshing f
 
 | | **testnet** (default) | **mainnet** |
 |--|----------------------|-------------|
-| **CLICK `maxSupply` (wei)** | `1_000_000 * 1e18` | `100_000_000_000 * 1e18` |
+| **CLICK `maxSupply` (wei)** | `1_000_000 * 1e18` (**1M**) | `10_000_000_000 * 1e18` (**10B**) |
 | **Trophy max supply** | `10` | `10_000` |
-| **Vesting** | `600` s | `604_800` s |
+| **Vesting** | `600` s (~10 min) | `2_592_000` s (**30 days**) |
 
 Use **`EXPECTED_MAX_SUPPLY_WEI`** below to assert the CLICK cap matches the mode you deployed.
 
@@ -23,14 +23,14 @@ $env:GAME_ADDRESS="0xYourGame"
 $env:TROPHY_ADDRESS="0xYourTrophy"
 # Testnet (1M tokens):
 $env:EXPECTED_MAX_SUPPLY_WEI="1000000000000000000000000"
-# Mainnet-style (100B tokens):
-# $env:EXPECTED_MAX_SUPPLY_WEI="100000000000000000000000000000"
+# Mainnet-style (10B tokens):
+# $env:EXPECTED_MAX_SUPPLY_WEI="10000000000000000000000000000"
 npx hardhat run scripts/verify-deployment.ts --network baseSepolia
 ```
 
 **Base mainnet** (chain id **8453**): same env vars; use **`--network base`** or **`npm run verify:base`**. On **[Basescan](https://basescan.org)** (not Sepolia), confirm reads.
 
-Also read **`CLICK.vestingDuration()`** on the explorer if you need to confirm 600 vs 604800. On testnet, confirm **`name()`** / **`symbol()`** show **ClickMint Test** / **tCLICK** when **`DEPLOY_ECONOMY=testnet`**.
+Also read **`CLICK.vestingDuration()`** on the explorer if you need to confirm **600** (testnet) vs **2_592_000** (mainnet). On testnet, confirm **`name()`** / **`symbol()`** show **ClickMint Test** / **tCLICK** when **`DEPLOY_ECONOMY=testnet`**.
 
 npm shorthand:
 
@@ -54,7 +54,7 @@ CLICK_ADDRESS=0x... GAME_ADDRESS=0x... TROPHY_ADDRESS=0x... npm run verify:base
 |------|--------|
 | `CLICK.game` | Deployed `ClickMintGame` |
 | `CLICK.maxSupply` | Matches **`DEPLOY_ECONOMY`** (see table above) |
-| `CLICK.vestingDuration` | `600` (testnet) or `604800` (mainnet) |
+| `CLICK.vestingDuration` | `600` (testnet) or `2592000` (mainnet — 30d) |
 | Game `paused` / `isPaused` | `false` unless you intentionally paused |
 | Game `trophyNft` | Trophy address if trophies are live |
 | Trophy `maxSupply` / `clickMintGame` | Match preset and game link |
@@ -63,7 +63,7 @@ CLICK_ADDRESS=0x... GAME_ADDRESS=0x... TROPHY_ADDRESS=0x... npm run verify:base
 
 Set **`NEXT_PUBLIC_DEPLOY_ECONOMY=testnet`** or **`mainnet`** to match **`DEPLOY_ECONOMY`** used at deploy (header hint only).
 
-Set **`NEXT_PUBLIC_CHAIN_ID`** to **`84532`** (Sepolia) or **`8453`** (Base mainnet) so wagmi, address fallbacks, Pimlico URLs, and **`/api/cron/finalize-hour`** target the correct chain.
+Set **`NEXT_PUBLIC_CHAIN_ID`** to **`84532`** (Sepolia) or **`8453`** (Base mainnet) so wagmi, address fallbacks, Pimlico URLs, and **`/api/cron/finalize-round`** target the correct chain.
 
 For **gasless** QA, set **`NEXT_PUBLIC_PIMLICO_API_KEY`** and (if required) **`NEXT_PUBLIC_PIMLICO_SPONSORSHIP_POLICY_ID`** — enable **84532** and/or **8453** in the Pimlico dashboard to match **`NEXT_PUBLIC_CHAIN_ID`**. See **`docs/TESTNET_E2E_CHECKLIST.md`** Part B.
 
