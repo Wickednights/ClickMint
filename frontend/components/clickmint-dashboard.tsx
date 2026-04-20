@@ -1020,7 +1020,7 @@ export function ClickMintDashboard() {
 
   const resetTimerStrip =
     potClock !== null ? (
-      <div className="w-full max-w-lg rounded border border-outline-variant/20 bg-surface-container-low/30 px-3 py-2 text-center font-body text-[11px] text-secondary md:text-xs">
+      <div className="w-full max-w-[17rem] rounded border border-outline-variant/20 bg-surface-container-low/30 px-3 py-2 text-center font-body text-[11px] text-secondary md:text-xs">
         <p className="font-headline text-sm font-bold tabular-nums text-white">
           Next round <span className="text-primary-fixed">{formatCountdown(potClock.secToRoundEnd)}</span>
         </p>
@@ -1119,8 +1119,6 @@ export function ClickMintDashboard() {
       {/* CLICK hero inside 46-tile block-bet ring (4×15s sides). */}
       <div className="mx-auto w-full max-w-3xl px-2 py-1 md:py-2">
         <BlockBetPanel
-          gameAddr={gameAddr}
-          tickSec={tickSec}
           wrongChain={wrongChain}
           canAct={canAct}
           blockBet={blockBet}
@@ -1351,7 +1349,7 @@ export function ClickMintDashboard() {
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-primary-container/[0.04]" />
       </div>
 
-      {/* Header — center cluster: mobile = viewport center; md = center of main column (sidebar 18rem + max-w-4xl strip). */}
+      {/* Header — center cluster: viewport center (symmetric with dual sidebars). */}
       <header className="fixed left-0 top-0 z-50 w-full overflow-hidden border-b border-outline-variant/20 bg-surface/90 font-headline uppercase tracking-tighter backdrop-blur-sm">
         <div className="relative mx-auto flex min-h-[4rem] max-w-[100vw] items-center justify-between gap-x-2 px-3 py-2 sm:px-4 md:min-h-[4.25rem] md:px-4 md:py-2 lg:px-6">
           <div className="relative z-20 flex min-w-0 max-w-[min(100%,14rem)] flex-col gap-0.5 sm:max-w-[min(100%,11rem)] md:max-w-none">
@@ -1381,7 +1379,7 @@ export function ClickMintDashboard() {
           </div>
 
           {gameRoundNow !== undefined ? (
-            <div className="pointer-events-none absolute inset-y-0 left-1/2 z-10 flex -translate-x-1/2 items-center md:left-[calc(18rem+(100vw-36rem)/2)]">
+            <div className="pointer-events-none absolute inset-y-0 left-1/2 z-10 flex -translate-x-1/2 items-center">
               <div className="pointer-events-auto flex max-h-full flex-col items-center justify-center gap-1 py-1 md:gap-1.5 md:py-0">
                 <div className="flex flex-col items-center gap-0.5 text-center md:hidden">
                   <p
@@ -1588,7 +1586,7 @@ export function ClickMintDashboard() {
           className="hidden border-t border-outline-variant/25 bg-surface-container-lowest/95 md:block md:px-72"
           aria-label="Sections"
         >
-          <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-center gap-1 px-4 py-2 font-label text-[10px] uppercase tracking-[0.12em] lg:justify-start">
+          <div className="mx-auto flex w-full max-w-4xl flex-wrap items-center justify-center gap-1 px-4 py-2 font-label text-[10px] uppercase tracking-[0.12em]">
             <button
               type="button"
               onClick={() => setMobileTab("terminal")}
@@ -1829,30 +1827,28 @@ export function ClickMintDashboard() {
         </Dialog>
       </header>
 
-      {/* Desktop sidebar — live feed + POT widgets (nav is in header) */}
+      {/* Desktop sidebar — activity feed (minute POT / block bet live on right rail) */}
       <aside className="fixed left-0 top-0 z-40 hidden h-full w-72 flex-col overflow-y-auto border-r border-outline-variant/30 bg-surface-container-lowest md:flex md:pt-36">
         <div className="space-y-4 px-4 pb-36 pt-5 md:pb-44">
-          <div className="mx-auto w-full max-w-[17rem]">{resetTimerStrip}</div>
-          <div className="mx-auto flex w-full max-w-[17rem] justify-center">{minutePotCard}</div>
-          <div className="mx-auto flex w-full max-w-[17rem] justify-center">
-            <BlockBetSidebarCard blockBet={blockBet} wrongChain={wrongChain} canAct={canAct} />
-          </div>
-          <div className="border-t border-outline-variant/20 pt-4">
-            <ClickHistoryPanel
-              gameAddr={gameAddr}
-              compact
-              genesisGameHour={genesisGameHour}
-              liveFeedMax={5}
-            />
-          </div>
+          <ClickHistoryPanel
+            gameAddr={gameAddr}
+            compact
+            genesisGameHour={genesisGameHour}
+            liveFeedMax={5}
+          />
           <SidebarPotWinners rows={potRows} genesisGameHour={genesisGameHour} />
           <SidebarRecentTrophies trophyAddr={trophyAddr} rows={trophyMintHistory} max={5} />
         </div>
       </aside>
 
-      {/* Desktop right rail — credits, vesting, early claim (symmetric with left sidebar) */}
-      <aside className="fixed right-0 top-0 z-40 hidden h-full w-72 flex-col overflow-y-auto border-l border-outline-variant/30 bg-surface-container-lowest md:flex md:pt-36">
-        <div className="space-y-4 px-4 pb-36 pt-5 md:pb-44">
+      {/* Desktop right rail — round clock, minute POT, block bet stakes, then wallet balances */}
+      <aside className="fixed right-0 top-0 z-40 hidden h-full w-72 flex-col overflow-y-auto overscroll-y-contain border-l border-outline-variant/30 bg-surface-container-lowest md:flex md:pt-36">
+        <div className="flex flex-col gap-3 px-4 pb-36 pt-5 md:pb-44">
+          <div className="mx-auto w-full max-w-[17rem] shrink-0">{resetTimerStrip}</div>
+          <div className="mx-auto flex w-full max-w-[17rem] shrink-0 justify-center">{minutePotCard}</div>
+          <div className="mx-auto flex w-full max-w-[17rem] shrink-0 justify-center">
+            <BlockBetSidebarCard blockBet={blockBet} wrongChain={wrongChain} canAct={canAct} />
+          </div>
           {isConnected ? (
             walletBalancesPanel
           ) : (
@@ -1863,41 +1859,47 @@ export function ClickMintDashboard() {
         </div>
       </aside>
 
-      {/* Main */}
-      <main
-        className={cn(
-          "relative z-10 mx-auto flex max-w-4xl flex-col items-center px-4 pb-24 pt-28 md:ml-72 md:mr-72 md:pb-16 md:pt-36",
-          mobileTab === "terminal" ? "space-y-4 md:space-y-5" : "space-y-8 md:space-y-6"
-        )}
-      >
-        {isConnected ? <div className="w-full max-w-md md:hidden">{walletBalancesPanel}</div> : null}
-        {mobileTab === "terminal" && terminalBody}
+      {/* Main — full width between rails; inner column caps copy width on ultra-wide screens */}
+      <main className="relative z-10 mx-auto flex w-full max-w-none flex-col items-center px-4 pb-24 pt-28 md:ml-72 md:mr-72 md:pb-16 md:pt-36">
+        <div
+          className={cn(
+            "flex w-full max-w-4xl flex-col items-center",
+            mobileTab === "terminal" ? "space-y-4 md:space-y-5" : "space-y-8 md:space-y-6"
+          )}
+        >
+          {isConnected ? <div className="w-full max-w-md md:hidden">{walletBalancesPanel}</div> : null}
+          <div className="flex w-full max-w-md flex-col items-stretch gap-3 md:hidden">
+            <div className="w-full">{resetTimerStrip}</div>
+            <div className="w-full">{minutePotCard}</div>
+          </div>
+          {mobileTab === "terminal" && terminalBody}
 
-        {mobileTab === "history" && (
-          <section className="mx-auto w-full max-w-2xl px-1 pt-4">
-            <h2 className="mb-5 text-center font-headline text-xl font-bold uppercase tracking-[0.18em] text-primary-fixed sm:text-2xl">
-              POT history
-            </h2>
-            <WinnerTable rows={potRows} genesisGameHour={genesisGameHour} />
-          </section>
-        )}
+          {mobileTab === "history" && (
+            <section className="mx-auto w-full max-w-2xl px-1 pt-4">
+              <h2 className="mb-5 text-center font-headline text-xl font-bold uppercase tracking-[0.18em] text-primary-fixed sm:text-2xl">
+                POT history
+              </h2>
+              <WinnerTable rows={potRows} genesisGameHour={genesisGameHour} />
+            </section>
+          )}
 
-        {mobileTab === "trophies" && (
-          <section className="w-full max-w-lg pt-4">
-            <h2 className="mb-4 font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary-fixed">
-              Trophy room
-            </h2>
-            <p className="mb-3 font-body text-[10px] text-secondary opacity-80">
-              Lucky-click NFTs.{" "}
-              <Link href="/documentation#trophies" className="text-primary-fixed underline-offset-2 hover:underline">
-                Docs
-              </Link>
-            </p>
-            <TrophyRoomGrid trophyAddr={trophyAddr} rows={trophyMintHistory} />
-          </section>
-        )}
+          {mobileTab === "trophies" && (
+            <section className="w-full max-w-lg pt-4">
+              <h2 className="mb-4 font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary-fixed">
+                Trophy room
+              </h2>
+              <p className="mb-3 font-body text-[10px] text-secondary opacity-80">
+                Lucky-click NFTs.{" "}
+                <Link href="/documentation#trophies" className="text-primary-fixed underline-offset-2 hover:underline">
+                  Docs
+                </Link>
+              </p>
+              <TrophyRoomGrid trophyAddr={trophyAddr} rows={trophyMintHistory} />
+            </section>
+          )}
 
-        {mobileTab === "clicks" && <ClickHistoryPanel gameAddr={gameAddr} genesisGameHour={genesisGameHour} />}
+          {mobileTab === "clicks" && <ClickHistoryPanel gameAddr={gameAddr} genesisGameHour={genesisGameHour} />}
+        </div>
       </main>
 
       {/* Desktop footer */}
