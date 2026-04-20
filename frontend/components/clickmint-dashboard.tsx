@@ -1080,17 +1080,24 @@ export function ClickMintDashboard() {
 
   const blockBetPotEthDisplay = formatCompactHudPotEthDisplay(blockBet.totalPotWei);
 
-  const hudTileMax = "w-full max-w-[6.25rem]";
+  /** Fixed cell height so every HUD window + early tile matches (symmetric grid). */
+  const hudCellH = "min-h-[2.75rem]";
+  const hudCol = "flex min-h-0 min-w-0 flex-col gap-0.5";
+  const hudCardPrimary = cn(
+    hudCellH,
+    "flex w-full flex-col justify-center rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1 shadow-[0_0_20px_rgba(0,251,251,0.15)]"
+  );
+  const hudCardCyan = cn(
+    hudCellH,
+    "flex w-full flex-col justify-center rounded-md border border-cyan-400/55 bg-black/55 px-1.5 py-1 shadow-[0_0_20px_rgba(34,211,238,0.18)]"
+  );
 
-  /** Mobile-only: 3-column top/bottom bands in the gutter; default bet under block pot, same state as menu card. */
+  /** Mobile-only: equal 3×3-style bands; ring gutter pb mirrors pt + cell stack height. */
   const mobileGameCornerHud = (
     <div className="pointer-events-none absolute inset-0 z-[25] md:hidden" role="region" aria-label="Game quick stats">
-      <div className="pointer-events-none absolute left-0 right-0 top-0 grid grid-cols-3 items-start gap-x-1">
-        <div className="flex justify-start">
-          <div
-            className={cn(hudTileMax, "rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1 text-left shadow-[0_0_20px_rgba(0,251,251,0.15)]")}
-            title="Credits — remaining full clicks at current click cost"
-          >
+      <div className="pointer-events-none absolute inset-x-0 top-0 grid grid-cols-3 gap-x-1.5">
+        <div className={hudCol}>
+          <div className={cn(hudCardPrimary, "text-left")} title="Credits — remaining full clicks at current click cost">
             <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
               Credits
             </span>
@@ -1099,11 +1106,8 @@ export function ClickMintDashboard() {
             </span>
           </div>
         </div>
-        <div className="flex justify-center">
-          <div
-            className={cn(hudTileMax, "rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1 text-center shadow-[0_0_20px_rgba(0,251,251,0.15)]")}
-            title={vestingDisplay.unvested.caption}
-          >
+        <div className={hudCol}>
+          <div className={cn(hudCardPrimary, "text-center")} title={vestingDisplay.unvested.caption}>
             <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
               Unvested $CLICK
             </span>
@@ -1112,11 +1116,8 @@ export function ClickMintDashboard() {
             </span>
           </div>
         </div>
-        <div className="flex justify-end">
-          <div
-            className={cn(hudTileMax, "rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1 text-right shadow-[0_0_20px_rgba(0,251,251,0.15)]")}
-            title="Minute Click Pot (ETH)"
-          >
+        <div className={hudCol}>
+          <div className={cn(hudCardPrimary, "text-right")} title="Minute Click Pot (ETH)">
             <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
               Click Pot
             </span>
@@ -1126,42 +1127,52 @@ export function ClickMintDashboard() {
           </div>
         </div>
       </div>
-      <div className="absolute bottom-0 left-0 right-0 grid grid-cols-3 items-end gap-x-1">
-        <div className="flex justify-start">
-          <div className={cn("flex flex-col gap-1", hudTileMax)}>
-            <div
-              className="pointer-events-none rounded-md border border-cyan-400/55 bg-black/55 px-1.5 py-1 text-left shadow-[0_0_20px_rgba(34,211,238,0.18)]"
-              title="Block Bet pot (ETH)"
-            >
-              <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-cyan-300/95">
-                Block Bet Pot
-              </span>
-              <span className="mt-0.5 block font-mono text-[11px] font-bold tabular-nums leading-none text-cyan-100">
-                {blockBetPotEthDisplay} ETH
-              </span>
-            </div>
-            <label
-              className="pointer-events-auto flex items-center justify-between gap-0.5 rounded-md border border-cyan-500/40 bg-black/60 px-1.5 py-1 text-[8px] shadow-[0_0_16px_rgba(34,211,238,0.12)]"
-              title="ETH per tap on a block-bet window (same as Block bet card in the menu)"
-            >
-              <span className="shrink-0 font-label text-[6px] font-bold uppercase tracking-wide text-cyan-300/90">Default Bet</span>
-              <input
-                value={blockBet.betEth}
-                onChange={(e) => blockBet.setBetEth(e.target.value)}
-                inputMode="decimal"
-                autoComplete="off"
-                aria-label="Default block bet in ETH"
-                className="min-w-0 flex-1 border-0 bg-transparent text-right font-mono text-[10px] tabular-nums text-cyan-50 outline-none"
-              />
-              <span className="shrink-0 font-mono text-[8px] text-cyan-400/90">ETH</span>
-            </label>
+      <div className="absolute inset-x-0 bottom-0 grid grid-cols-3 items-stretch gap-x-1.5">
+        <div className={hudCol}>
+          <div className={cn(hudCardCyan, "pointer-events-none text-left")} title="Block Bet pot (ETH)">
+            <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-cyan-300/95">
+              Block Bet Pot
+            </span>
+            <span className="mt-0.5 block font-mono text-[11px] font-bold tabular-nums leading-none text-cyan-100">
+              {blockBetPotEthDisplay} ETH
+            </span>
           </div>
+          <label
+            className={cn(
+              hudCellH,
+              "pointer-events-auto flex w-full items-center justify-between gap-0.5 rounded-md border border-cyan-500/40 bg-black/60 px-1.5 py-0.5 text-[8px] shadow-[0_0_16px_rgba(34,211,238,0.12)]"
+            )}
+            title="ETH per tap on a block-bet window (same as Block bet card in the menu)"
+          >
+            <span className="shrink-0 font-label text-[6px] font-bold uppercase tracking-wide text-cyan-300/90">Default Bet</span>
+            <input
+              value={blockBet.betEth}
+              onChange={(e) => blockBet.setBetEth(e.target.value)}
+              inputMode="decimal"
+              autoComplete="off"
+              aria-label="Default block bet in ETH"
+              className="min-w-0 flex-1 border-0 bg-transparent text-right font-mono text-[10px] tabular-nums text-cyan-50 outline-none"
+            />
+            <span className="shrink-0 font-mono text-[8px] text-cyan-400/90">ETH</span>
+          </label>
         </div>
-        <div className="flex justify-center">
-          <div className={cn("flex flex-col items-stretch gap-1", hudTileMax)}>
+        <div className={hudCol}>
+          <div
+            className={cn(
+              hudCellH,
+              "pointer-events-auto flex w-full flex-col justify-between gap-0.5 rounded-md border border-amber-400/55 bg-amber-500/15 px-1 py-1 shadow-[0_0_12px_rgba(251,191,36,0.12)]"
+            )}
+          >
             <button
               type="button"
-              className="pointer-events-auto rounded-md border border-amber-400/55 bg-amber-500/15 px-1 py-1 font-label text-[7px] font-bold uppercase leading-tight tracking-[0.06em] text-amber-100 shadow-[0_0_12px_rgba(251,191,36,0.12)] transition-colors hover:bg-amber-500/25 disabled:opacity-35"
+              className="w-full shrink-0 text-center font-body text-[6px] leading-tight text-amber-100/90 underline-offset-2 hover:underline"
+              onClick={() => setEarlyClaimInfoOpen(true)}
+            >
+              Early vs vested
+            </button>
+            <button
+              type="button"
+              className="flex min-h-0 flex-1 items-center justify-center rounded border border-amber-300/35 bg-amber-500/20 px-0.5 font-label text-[7px] font-bold uppercase leading-tight tracking-[0.04em] text-amber-100 transition-colors hover:bg-amber-500/30 disabled:opacity-35"
               disabled={!isConnected || !canAct || unvestedCap === 0n}
               title={earlyClaimHoverSummary}
               onClick={() => {
@@ -1171,54 +1182,39 @@ export function ClickMintDashboard() {
             >
               Early claim
             </button>
-            <button
-              type="button"
-              className="pointer-events-auto -mt-0.5 text-center font-body text-[7px] text-primary-fixed/85 underline-offset-2 hover:underline"
-              onClick={() => setEarlyClaimInfoOpen(true)}
-            >
-              Early vs vested
-            </button>
-            <div
-              className="pointer-events-none rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1 text-center shadow-[0_0_20px_rgba(0,251,251,0.15)]"
-              title={vestingDisplay.claimable.caption}
-            >
-              <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
-                Vested $CLICK
-              </span>
-              <span className="mt-0.5 block font-mono text-[11px] font-bold tabular-nums leading-none text-primary-fixed">
-                {!isConnected ? "—" : vestingDisplay.claimable.headline}
-              </span>
-            </div>
+          </div>
+          <div className={cn(hudCardPrimary, "pointer-events-none text-center")} title={vestingDisplay.claimable.caption}>
+            <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
+              Vested $CLICK
+            </span>
+            <span className="mt-0.5 block font-mono text-[11px] font-bold tabular-nums leading-none text-primary-fixed">
+              {!isConnected ? "—" : vestingDisplay.claimable.headline}
+            </span>
           </div>
         </div>
-        <div className="flex justify-end">
-          <div className={cn("flex flex-col items-stretch gap-1", hudTileMax)}>
-            <div
-              className="pointer-events-none rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1 text-right shadow-[0_0_20px_rgba(0,251,251,0.15)]"
-              title="ERC-20 $CLICK balance in your wallet (liquid)."
-            >
-              <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
-                $CLICK balance
-              </span>
-              <span className="mt-0.5 block font-mono text-[11px] font-bold tabular-nums leading-none text-primary-fixed">
-                {!isConnected ? "—" : clickWalletBalWei === undefined ? "…" : formatClickDisplayWei(clickWalletBalWei, 2)}
-              </span>
-            </div>
-            <div
-              className="pointer-events-none rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1 text-right shadow-[0_0_20px_rgba(0,251,251,0.15)]"
-              title={
-                roundsSinceLaunch !== undefined
-                  ? "Minute rounds since this game was deployed."
-                  : "On-chain minute round id (all players share the same round)."
-              }
-            >
-              <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
-                Round
-              </span>
-              <span className="mt-0.5 block font-mono text-[11px] font-bold tabular-nums leading-none text-primary-fixed/95">
-                {gameRoundNow === undefined ? "—" : roundsSinceLaunch !== undefined ? roundsSinceLaunch.toString() : `#${gameRoundNow.toString()}`}
-              </span>
-            </div>
+        <div className={hudCol}>
+          <div className={cn(hudCardPrimary, "pointer-events-none text-right")} title="ERC-20 $CLICK balance in your wallet (liquid).">
+            <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
+              $CLICK balance
+            </span>
+            <span className="mt-0.5 block break-all font-mono text-[11px] font-bold tabular-nums leading-none text-primary-fixed">
+              {!isConnected ? "—" : clickWalletBalWei === undefined ? "…" : formatClickDisplayWei(clickWalletBalWei, 2)}
+            </span>
+          </div>
+          <div
+            className={cn(hudCardPrimary, "pointer-events-none text-right")}
+            title={
+              roundsSinceLaunch !== undefined
+                ? "Minute rounds since this game was deployed."
+                : "On-chain minute round id (all players share the same round)."
+            }
+          >
+            <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
+              Round
+            </span>
+            <span className="mt-0.5 block font-mono text-[11px] font-bold tabular-nums leading-none text-primary-fixed/95">
+              {gameRoundNow === undefined ? "—" : roundsSinceLaunch !== undefined ? roundsSinceLaunch.toString() : `#${gameRoundNow.toString()}`}
+            </span>
           </div>
         </div>
       </div>
@@ -1339,25 +1335,53 @@ export function ClickMintDashboard() {
             </div>
           }
           belowRing={
-            <div className="flex w-full flex-col items-center gap-2">
-              <div className="border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 font-label text-[10px] uppercase tracking-widest text-primary-fixed">
-                <span className="inline-flex items-center gap-2">
-                  <span
-                    className="material-symbols-outlined text-xs"
-                    style={{ fontVariationSettings: `"FILL" 1, "wght" 400` } as CSSProperties}
-                  >
-                    bolt
+            <div className="flex w-full flex-col items-center gap-1.5 md:gap-2">
+              <div className="flex w-full max-w-md flex-row items-stretch justify-center gap-2 md:max-w-none md:flex-col md:items-center">
+                <div className="min-h-[2.5rem] min-w-0 flex-1 border border-outline-variant/30 bg-surface-container-low px-2 py-1.5 font-label text-[10px] uppercase tracking-widest text-primary-fixed md:min-h-0 md:flex-none md:px-3">
+                  <span className="flex h-full items-center justify-center gap-1.5 md:inline-flex">
+                    <span
+                      className="material-symbols-outlined shrink-0 text-xs"
+                      style={{ fontVariationSettings: `"FILL" 1, "wght" 400` } as CSSProperties}
+                    >
+                      bolt
+                    </span>
+                    <span className="text-center leading-tight">
+                      {cooldownLabel !== null ? (
+                        <>RATE LIMIT: {cooldownLabel}s</>
+                      ) : !isConnected ? (
+                        <>Connect wallet</>
+                      ) : needsBuyCredits ? (
+                        <>Buy credits</>
+                      ) : (
+                        <>READY</>
+                      )}
+                    </span>
                   </span>
-                  {cooldownLabel !== null ? (
-                    <>RATE LIMIT: {cooldownLabel}s</>
-                  ) : !isConnected ? (
-                    <>Connect wallet</>
-                  ) : needsBuyCredits ? (
-                    <>Buy credits</>
-                  ) : (
-                    <>READY</>
+                </div>
+                <button
+                  type="button"
+                  id="hero-add-credits"
+                  aria-haspopup="dialog"
+                  aria-expanded={isConnected ? depositOpen : walletOpen}
+                  onClick={() => {
+                    if (!isConnected) {
+                      setWalletOpen(true);
+                      return;
+                    }
+                    setDepositOpen(true);
+                  }}
+                  className={cn(
+                    "inline-flex min-h-[2.5rem] min-w-0 flex-1 items-center justify-center gap-1 px-2 py-1.5 font-label text-[10px] font-bold uppercase tracking-[0.12em] transition-colors md:min-h-0 md:flex-none md:gap-1.5 md:px-3 md:tracking-[0.15em]",
+                    !isConnected
+                      ? cn(NEON_MAGENTA_BTN, "opacity-95")
+                      : depositOpen
+                        ? cn(NEON_MAGENTA_BTN, "bg-[#ff2ee8]/20")
+                        : cn(NEON_MAGENTA_BTN)
                   )}
-                </span>
+                >
+                  <Icon name="add_circle" className="shrink-0 text-sm opacity-90" />
+                  <span className="truncate">Add credits</span>
+                </button>
               </div>
               {totalClicksThisRound !== undefined ? (
                 <p
@@ -1368,30 +1392,6 @@ export function ClickMintDashboard() {
                   <span className="font-semibold text-on-surface/95">{totalClicksThisRound.toString()}</span>
                 </p>
               ) : null}
-              <button
-                type="button"
-                id="hero-add-credits"
-                aria-haspopup="dialog"
-                aria-expanded={isConnected ? depositOpen : walletOpen}
-                onClick={() => {
-                  if (!isConnected) {
-                    setWalletOpen(true);
-                    return;
-                  }
-                  setDepositOpen(true);
-                }}
-                className={cn(
-                  "inline-flex items-center gap-1.5 px-3 py-1.5 font-label text-[10px] font-bold uppercase tracking-[0.15em] transition-colors",
-                  !isConnected
-                    ? cn(NEON_MAGENTA_BTN, "opacity-95")
-                    : depositOpen
-                      ? cn(NEON_MAGENTA_BTN, "bg-[#ff2ee8]/20")
-                      : cn(NEON_MAGENTA_BTN)
-                )}
-              >
-                <Icon name="add_circle" className="text-sm opacity-90" />
-                Add credits
-              </button>
               {gasless.status === "ready" ? (
                 <p className="max-w-sm px-2 text-center font-mono text-[10px] text-secondary md:text-[11px]">
                   Gasless ·{" "}

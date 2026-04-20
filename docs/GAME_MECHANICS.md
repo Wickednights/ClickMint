@@ -61,8 +61,8 @@ Exact BPS constants live on-chain (`ClickMintGame`) and may be tuned only by a *
 
 ## Block Bet (ETH, v1)
 
-- **46 on-chain slots per minute:** Slot **`k`** (where **`k ∈ {0,…,45}`**) is the **15-second window** covering **seconds `k` through `k+14`** of the wall-clock minute (only **`k ≤ 45`** fits fully in a 60s minute — that yields **46** windows). Each slot has its own stake totals: **`placeBet(k)`** adds ETH to pool **`k`** only.
-- **Parimutuel pool per round:** **10%** deposit slice for that round **plus** all ETH staked via **`placeBet`** across **all 46** slots.
+- **46 on-chain slots per minute:** Slot **`k`** (where **`k ∈ {0,…,45}`**) is the **15-second window** covering **seconds `k` through `k+14`** of the wall-clock minute (only **`k ≤ 45`** fits fully in a 60s minute — that yields **46** windows). Each slot has its own stake totals: **`placeBet(k)`** credits **90%** of the ETH sent to pool **`k`** only (**10%** goes to **`treasury`** as **`BLOCK_BET_STAKE_TREASURY_BPS`**).
+- **Parimutuel pool per round:** **10%** of each **`deposit`** (that minute’s round) **plus** the **90%** net of every **`placeBet`** stake (summed across **all 46** slots), **plus** carry. The treasury also receives the **10%** cut from each **`placeBet`** separately from the deposit split.
 - **Settlement:** On `finalizeRound`, the **ETH POT** still draws a **winning quadrant `0..3`** (same as click **`slotInRound`** buckets) for click/POT eligibility. **Block bet** draws a **separate** winning index **`0..45`** from mixed entropy (`BLOCKBET46`). Only stakers on **that** window split the Block Bet pot **pro-rata**; other slots’ stakes do not win this round.
 - **Failed winner transfer:** If a winner’s address cannot accept ETH during settlement, that share is credited to **`blockBetClaimableEth[winner]`** and the winner calls **`claimBlockBetEth()`** to pull it (so one bad recipient cannot block `finalizeRound` for everyone).
 - **No bets on the winning slot:** The pot **carries** forward (`blockBetCarry`) until a future round pays out.

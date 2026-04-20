@@ -11,6 +11,7 @@ import {BinaryTrophyNFT} from "./BinaryTrophyNFT.sol";
 /// @title ClickMintGame — ETH credits, deposit splits, rate-limited clicks, minute-round ETH POT + Block Bet.
 /// @dev Randomness: pseudo-random — upgrade to Chainlink VRF for high-stakes mainnet fairness.
 ///      Deposits: 50% Click Pot accrual, 30% treasury, 10% Block Bet pool, 10% trophy NFT revshare (or treasury if trophy unset).
+///      Block bet stakes (`placeBet`): 10% treasury, 90% credited to the selected 15s window (that slice joins the round block-bet pool).
 ///      Credits granted: full `msg.value` wei + bonus (same UX as legacy; ETH is routed per BPS).
 contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     CLICK public immutable clickToken;
@@ -25,6 +26,8 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     uint256 public constant TREASURY_BPS = 3000;
     uint256 public constant BLOCK_BET_DEPOSIT_BPS = 1000;
     uint256 public constant TROPHY_REV_BPS = 1000;
+    /// @dev From each `placeBet` payment: sent to `treasury` (remainder credits the chosen slot). Independent of deposit BPS.
+    uint256 public constant BLOCK_BET_STAKE_TREASURY_BPS = 1000;
 
     uint256 public constant MAX_CLICKS_PER_BLOCK = 20;
     /// @dev Trophy mint probability per successful click = `trophyDropWeight / TROPHY_ROLL_DENOM` (finer than BPS).
@@ -262,12 +265,19 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     }
 
     /// @notice Stake ETH on block-bet window `slot` (0..45) for the current round; window covers seconds `slot..slot+14` of the wall-clock minute.
+    /// @dev `BLOCK_BET_STAKE_TREASURY_BPS` of msg.value goes to `treasury`; the rest is credited to this slot for settlement.
     function placeBet(uint8 slot) external payable nonReentrant whenNotPaused {
         if (uint256(slot) >= BLOCK_BET_SLOT_COUNT) revert GameBadSlot();
         uint256 v = msg.value;
         if (v == 0) revert GameBadParam();
         uint256 rid = gameRound(block.timestamp);
-        _recordBet(rid, msg.sender, slot, v);
+        uint256 toTreasury = (v * BLOCK_BET_STAKE_TREASURY_BPS) / BPS;
+        uint256 toPool = v - toTreasury;
+        if (toTreasury > 0) {
+            (bool okT,) = treasury.call{value: toTreasury}("");
+            require(okT, "game: treasury");
+        }
+        _recordBet(rid, msg.sender, slot, toPool);
     }
 
     function _recordBet(uint256 rid, address bettor, uint8 slot, uint256 v) internal {
