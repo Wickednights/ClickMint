@@ -317,8 +317,6 @@ export function BlockBetSidebarCard({
 }
 
 export type BlockBetPanelProps = {
-  gameAddr: `0x${string}`;
-  tickSec: number;
   wrongChain: boolean;
   canAct: boolean;
   blockBet: BlockBetGameApi;
@@ -407,7 +405,7 @@ export function BlockBetPanel({
         "w-full max-w-3xl rounded-xl border border-cyan-500/20 bg-black/60 px-3 py-2 shadow-[0_0_32px_rgba(34,211,238,0.06)] md:px-4 md:py-3"
       )}
     >
-      {/* Mobile: full header. Desktop: header lives in sidebar (`BlockBetSidebarCard`). */}
+      {/* Mobile: full header. Desktop: compact controls on right rail (`BlockBetSidebarCard`). */}
       <div className="flex flex-col gap-3 border-b border-white/10 pb-3 md:hidden">
         <div>
           <h3 className="font-label text-[10px] uppercase tracking-[0.28em] text-cyan-200/95">Block bet</h3>
