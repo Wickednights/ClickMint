@@ -494,6 +494,19 @@ export function ClickMintDashboard() {
     },
   });
 
+  /** ERC-20 $CLICK in the connected wallet (excludes vault / unvested until claimed). */
+  const { data: clickWalletBalWei } = useReadContract({
+    address: clickAddr,
+    abi: clickTokenAbi,
+    functionName: "balanceOf",
+    args: playerAddress ? [playerAddress] : undefined,
+    query: {
+      enabled: !!clickAddr && !!playerAddress,
+      refetchInterval: 12_000,
+      placeholderData: keepPreviousData,
+    },
+  });
+
   const [earlyAmt, setEarlyAmt] = useState("");
   const [mobileTab, setMobileTab] = useState<MobileTab>("terminal");
   const [earlyClaimInfoOpen, setEarlyClaimInfoOpen] = useState(false);
@@ -1145,33 +1158,67 @@ export function ClickMintDashboard() {
           </div>
         </div>
         <div className="flex justify-center">
-          <div
-            className={cn(hudTileMax, "pointer-events-none rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1 text-center shadow-[0_0_20px_rgba(0,251,251,0.15)]")}
-            title={vestingDisplay.claimable.caption}
-          >
-            <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
-              Vested $CLICK
-            </span>
-            <span className="mt-0.5 block font-mono text-[11px] font-bold tabular-nums leading-none text-primary-fixed">
-              {!isConnected ? "—" : vestingDisplay.claimable.headline}
-            </span>
+          <div className={cn("flex flex-col items-stretch gap-1", hudTileMax)}>
+            <button
+              type="button"
+              className="pointer-events-auto rounded-md border border-amber-400/55 bg-amber-500/15 px-1 py-1 font-label text-[7px] font-bold uppercase leading-tight tracking-[0.06em] text-amber-100 shadow-[0_0_12px_rgba(251,191,36,0.12)] transition-colors hover:bg-amber-500/25 disabled:opacity-35"
+              disabled={!isConnected || !canAct || unvestedCap === 0n}
+              title={earlyClaimHoverSummary}
+              onClick={() => {
+                setEarlyAmt(formatEther(unvestedCap));
+                void onEarlySpend(unvestedCap);
+              }}
+            >
+              Early claim
+            </button>
+            <button
+              type="button"
+              className="pointer-events-auto -mt-0.5 text-center font-body text-[7px] text-primary-fixed/85 underline-offset-2 hover:underline"
+              onClick={() => setEarlyClaimInfoOpen(true)}
+            >
+              Early vs vested
+            </button>
+            <div
+              className="pointer-events-none rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1 text-center shadow-[0_0_20px_rgba(0,251,251,0.15)]"
+              title={vestingDisplay.claimable.caption}
+            >
+              <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
+                Vested $CLICK
+              </span>
+              <span className="mt-0.5 block font-mono text-[11px] font-bold tabular-nums leading-none text-primary-fixed">
+                {!isConnected ? "—" : vestingDisplay.claimable.headline}
+              </span>
+            </div>
           </div>
         </div>
         <div className="flex justify-end">
-          <div
-            className={cn(hudTileMax, "pointer-events-none rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1 text-right shadow-[0_0_20px_rgba(0,251,251,0.15)]")}
-            title={
-              roundsSinceLaunch !== undefined
-                ? "Minute rounds since this game was deployed."
-                : "On-chain minute round id (all players share the same round)."
-            }
-          >
-            <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
-              Round
-            </span>
-            <span className="mt-0.5 block font-mono text-[11px] font-bold tabular-nums leading-none text-primary-fixed/95">
-              {gameRoundNow === undefined ? "—" : roundsSinceLaunch !== undefined ? roundsSinceLaunch.toString() : `#${gameRoundNow.toString()}`}
-            </span>
+          <div className={cn("flex flex-col items-stretch gap-1", hudTileMax)}>
+            <div
+              className="pointer-events-none rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1 text-right shadow-[0_0_20px_rgba(0,251,251,0.15)]"
+              title="ERC-20 $CLICK balance in your wallet (liquid)."
+            >
+              <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
+                $CLICK balance
+              </span>
+              <span className="mt-0.5 block font-mono text-[11px] font-bold tabular-nums leading-none text-primary-fixed">
+                {!isConnected ? "—" : clickWalletBalWei === undefined ? "…" : formatClickDisplayWei(clickWalletBalWei, 2)}
+              </span>
+            </div>
+            <div
+              className="pointer-events-none rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1 text-right shadow-[0_0_20px_rgba(0,251,251,0.15)]"
+              title={
+                roundsSinceLaunch !== undefined
+                  ? "Minute rounds since this game was deployed."
+                  : "On-chain minute round id (all players share the same round)."
+              }
+            >
+              <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
+                Round
+              </span>
+              <span className="mt-0.5 block font-mono text-[11px] font-bold tabular-nums leading-none text-primary-fixed/95">
+                {gameRoundNow === undefined ? "—" : roundsSinceLaunch !== undefined ? roundsSinceLaunch.toString() : `#${gameRoundNow.toString()}`}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -1345,35 +1392,6 @@ export function ClickMintDashboard() {
                 <Icon name="add_circle" className="text-sm opacity-90" />
                 Add credits
               </button>
-              <div className="flex w-full max-w-sm flex-col items-stretch gap-1 px-1 md:hidden">
-                <button
-                  type="button"
-                  disabled={!isConnected || !canAct || unvestedCap === 0n}
-                  title={earlyClaimHoverSummary}
-                  onClick={() => {
-                    setEarlyAmt(formatEther(unvestedCap));
-                    void onEarlySpend(unvestedCap);
-                  }}
-                  className={cn(
-                    "w-full rounded-md border px-3 py-2 font-label text-[10px] font-bold uppercase tracking-[0.12em] transition-colors",
-                    "border-amber-400/55 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25 disabled:opacity-35"
-                  )}
-                >
-                  Early claim (unvested)
-                </button>
-                <div className="flex items-center justify-center gap-2">
-                  <button
-                    type="button"
-                    className="font-body text-[10px] text-primary-fixed/90 underline-offset-2 hover:underline"
-                    onClick={() => setEarlyClaimInfoOpen(true)}
-                  >
-                    Early vs vested
-                  </button>
-                </div>
-                {isConnected && canAct && unvestedCap === 0n ? (
-                  <p className="text-center font-body text-[9px] text-secondary/85">No unvested $CLICK to exit early.</p>
-                ) : null}
-              </div>
               {gasless.status === "ready" ? (
                 <p className="max-w-sm px-2 text-center font-mono text-[10px] text-secondary md:text-[11px]">
                   Gasless ·{" "}

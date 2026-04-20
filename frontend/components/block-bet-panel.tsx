@@ -421,7 +421,7 @@ export function BlockBetPanel({
             "relative mx-auto w-fit max-w-full",
             /* Mobile: gutter outside the tile grid so corner HUD clears perimeter buttons (overlay is md:hidden inside). */
             mobileRingOverlay
-              ? "max-md:px-3 max-md:pb-[6.75rem] max-md:pt-14 sm:max-md:px-4 sm:max-md:pb-[7.25rem] sm:max-md:pt-16"
+              ? "max-md:px-3 max-md:pb-[8.75rem] max-md:pt-14 sm:max-md:px-4 sm:max-md:pb-[9.25rem] sm:max-md:pt-16"
               : null
           )}
         >

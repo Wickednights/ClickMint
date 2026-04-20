@@ -117,7 +117,13 @@ export function formatCompactHudPotEthDisplay(wei: bigint): string {
     wei >= parseEther("1000") ? 2 : wei >= parseEther("1") ? 4 : wei >= parseEther("0.01") ? 6 : 8;
   const fracTrim = fracRaw.slice(0, maxFrac).replace(/0+$/, "");
   const wholeWithSep = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  if (!fracTrim) return wholeWithSep;
+  if (!fracTrim) {
+    if (wei > 0n && whole === "0") {
+      const tail = maxFrac <= 0 ? "1" : `0.${"0".repeat(Math.max(0, maxFrac - 1))}1`;
+      return `<${tail}`;
+    }
+    return wholeWithSep;
+  }
   return `${wholeWithSep}.${fracTrim}`;
 }
 
