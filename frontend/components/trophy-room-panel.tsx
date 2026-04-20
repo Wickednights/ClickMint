@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import type { Address } from "viem";
 import { usePublicClient } from "wagmi";
@@ -78,10 +79,11 @@ export function TrophyThumbnail({
 export function TrophyRoomGrid({ trophyAddr, rows }: { trophyAddr: Address; rows: TrophyMintLogRow[] }) {
   if (rows.length === 0) {
     return (
-      <p className="font-body text-[11px] leading-relaxed text-secondary opacity-80">
-        No Binary Trophy mints found in the indexed block range. If your RPC limits logs, set{" "}
-        <code className="text-primary-fixed/90">NEXT_PUBLIC_TROPHY_DEPLOY_BLOCK</code> in env to the contract creation
-        block on Base Sepolia.
+      <p className="font-body text-[11px] leading-relaxed text-secondary opacity-90 md:text-sm">
+        No trophies to show here yet — lucky mints appear when you hit the odds on a click.{" "}
+        <Link href="/documentation#trophies" className="text-primary-fixed underline-offset-2 hover:underline">
+          How trophies work
+        </Link>
       </p>
     );
   }

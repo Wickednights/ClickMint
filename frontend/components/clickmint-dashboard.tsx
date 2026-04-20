@@ -1065,36 +1065,52 @@ export function ClickMintDashboard() {
     minimumFractionDigits: 0,
   });
 
-  /** Mobile-only: four corner readouts on the tile ring (full controls live in the header menu). */
+  /** Mobile-only: four corner readouts in the gutter outside the tile ring (full controls live in the header menu). */
   const mobileGameCornerHud = (
     <div className="pointer-events-none absolute inset-0 z-[25] md:hidden" aria-hidden>
       <div
-        className="absolute left-0 top-0 max-w-[44%] rounded border border-primary-fixed/25 bg-black/70 px-1 py-0.5 text-left font-mono text-[9px] leading-tight text-primary-fixed tabular-nums shadow-[0_0_10px_rgba(0,0,0,0.65)]"
+        className="absolute left-0 top-0 max-w-[min(92%,11.5rem)] rounded-md border border-primary-fixed/35 bg-black/80 px-2 py-1 text-left shadow-[0_0_16px_rgba(0,0,0,0.75)] backdrop-blur-[2px]"
         title="Credits — remaining full clicks at current click cost"
       >
-        <span className="block font-label text-[6px] uppercase leading-none tracking-wider text-secondary">Cr</span>
-        {!isConnected ? "—" : clickCostCredits === undefined ? "…" : unlimitedClicks ? "∞" : formatWholeCredits(playsRemainingBig)}
+        <span className="block font-label text-[10px] font-bold uppercase leading-none tracking-widest text-secondary">
+          Cr
+        </span>
+        <span className="mt-0.5 block font-mono text-sm font-bold tabular-nums leading-none text-primary-fixed">
+          {!isConnected ? "—" : clickCostCredits === undefined ? "…" : unlimitedClicks ? "∞" : formatWholeCredits(playsRemainingBig)}
+        </span>
       </div>
       <div
-        className="absolute right-0 top-0 max-w-[44%] rounded border border-primary-fixed/25 bg-black/70 px-1 py-0.5 text-right font-mono text-[9px] leading-tight text-primary-fixed tabular-nums shadow-[0_0_10px_rgba(0,0,0,0.65)]"
+        className="absolute right-0 top-0 max-w-[min(92%,11.5rem)] rounded-md border border-primary-fixed/35 bg-black/80 px-2 py-1 text-right shadow-[0_0_16px_rgba(0,0,0,0.75)] backdrop-blur-[2px]"
         title="Minute POT (ETH)"
       >
-        <span className="block font-label text-[6px] uppercase leading-none tracking-wider text-secondary">Pot</span>
-        {potEthStr} Ξ
+        <span className="block font-label text-[10px] font-bold uppercase leading-none tracking-widest text-secondary">
+          Pot
+        </span>
+        <span className="mt-0.5 block font-mono text-sm font-bold tabular-nums leading-none text-primary-fixed">
+          {potEthStr} Ξ
+        </span>
       </div>
       <div
-        className="absolute bottom-0 left-0 max-w-[44%] rounded border border-cyan-500/35 bg-black/70 px-1 py-0.5 text-left font-mono text-[9px] leading-tight text-cyan-200 tabular-nums shadow-[0_0_10px_rgba(0,0,0,0.65)]"
+        className="absolute bottom-0 left-0 max-w-[min(92%,11.5rem)] rounded-md border border-cyan-400/40 bg-black/80 px-2 py-1 text-left shadow-[0_0_16px_rgba(0,0,0,0.75)] backdrop-blur-[2px]"
         title="Block bet pot (ETH)"
       >
-        <span className="block font-label text-[6px] uppercase leading-none tracking-wider text-cyan-500/80">BB</span>
-        {blockBetPotEthDisplay} Ξ
+        <span className="block font-label text-[10px] font-bold uppercase leading-none tracking-widest text-cyan-500/90">
+          BB
+        </span>
+        <span className="mt-0.5 block font-mono text-sm font-bold tabular-nums leading-none text-cyan-100">
+          {blockBetPotEthDisplay} Ξ
+        </span>
       </div>
       <div
-        className="absolute bottom-0 right-0 max-w-[44%] rounded border border-primary-fixed/25 bg-black/70 px-1 py-0.5 text-right font-mono text-[9px] leading-tight text-primary-fixed/90 tabular-nums shadow-[0_0_10px_rgba(0,0,0,0.65)]"
+        className="absolute bottom-0 right-0 max-w-[min(92%,11.5rem)] rounded-md border border-primary-fixed/35 bg-black/80 px-2 py-1 text-right shadow-[0_0_16px_rgba(0,0,0,0.75)] backdrop-blur-[2px]"
         title="Total on-chain clicks this minute round (all players)"
       >
-        <span className="block font-label text-[6px] uppercase leading-none tracking-wider text-secondary">Rnd</span>
-        {totalClicksThisRound !== undefined ? totalClicksThisRound.toString() : "—"}
+        <span className="block font-label text-[10px] font-bold uppercase leading-none tracking-widest text-secondary">
+          Rnd
+        </span>
+        <span className="mt-0.5 block font-mono text-sm font-bold tabular-nums leading-none text-primary-fixed/95">
+          {totalClicksThisRound !== undefined ? totalClicksThisRound.toString() : "—"}
+        </span>
       </div>
     </div>
   );

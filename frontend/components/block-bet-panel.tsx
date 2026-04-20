@@ -414,7 +414,13 @@ export function BlockBetPanel({
         {aboveRing ? (
           <div className="flex w-full flex-col items-center justify-center px-1">{aboveRing}</div>
         ) : null}
-        <div className="relative mx-auto w-fit max-w-full">
+        <div
+          className={cn(
+            "relative mx-auto w-fit max-w-full",
+            /* Mobile: gutter outside the tile grid so corner HUD clears perimeter buttons (overlay is md:hidden inside). */
+            mobileRingOverlay ? "max-md:px-3 max-md:pb-[4.75rem] max-md:pt-14 sm:max-md:px-4 sm:max-md:pb-[5.25rem] sm:max-md:pt-16" : null
+          )}
+        >
           {mobileRingOverlay}
           {ring}
         </div>
