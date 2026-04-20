@@ -16,7 +16,7 @@ function reqAddr(env: string): string {
 
 /**
  * Deploy a **new** `ClickMintGame` (e.g. after bytecode changes) and wire it to existing
- * **CLICK**, **BinaryTrophyNFT**, treasury, and secret wallet.
+ * **CLICK**, **BinaryTrophyNFT**, and treasury.
  *
  * **Important:** Credits, per-hour POT bookkeeping, and pot state live **on the game contract**.
  * A new game starts with **empty** `credits` / hour maps — testnet QA usually accepts this;
@@ -27,7 +27,6 @@ function reqAddr(env: string): string {
  *   $env:CLICK_ADDRESS="0x..."
  *   $env:TROPHY_ADDRESS="0x..."
  *   $env:TREASURY_ADDRESS="0x..."
- *   $env:SECRET_WALLET_ADDRESS="0x..."
  *   $env:DEPLOY_ECONOMY="testnet"   # optional; default from deploy preset
  *   npx hardhat run scripts/deploy-game-and-relink.ts --network baseSepolia
  *
@@ -37,7 +36,6 @@ async function main() {
   const clickAddr = reqAddr("CLICK_ADDRESS");
   const trophyAddr = reqAddr("TROPHY_ADDRESS");
   const treasuryAddr = reqAddr("TREASURY_ADDRESS");
-  const secretAddr = reqAddr("SECRET_WALLET_ADDRESS");
 
   const [deployer] = await ethers.getSigners();
   const owner = deployer.address;
@@ -51,7 +49,7 @@ async function main() {
     clickCostCredits: clickCostCredits.toString(),
     baseClickReward: baseClickReward.toString(),
     clicksPerHashTier: caps.clicksPerHashTier.toString(),
-    trophyDropBps: caps.trophyDropBps.toString(),
+    trophyDropWeight: caps.trophyDropWeight.toString(),
     minPotClicks: caps.minPotClicks.toString(),
   });
 
@@ -60,12 +58,11 @@ async function main() {
     owner,
     clickAddr,
     treasuryAddr,
-    secretAddr,
     clickPerEthWei,
     clickCostCredits,
     baseClickReward,
     caps.clicksPerHashTier,
-    caps.trophyDropBps,
+    caps.trophyDropWeight,
     caps.minPotClicks
   );
   await game.waitForDeployment();

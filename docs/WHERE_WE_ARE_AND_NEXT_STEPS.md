@@ -8,20 +8,20 @@ Living snapshot for founders and reviewers. Update this when milestones shift.
 
 ### Product
 
-- **Core loop:** deposit ETH → credits → click → **CLICK** vesting, hourly **ETH POT** (native payout to winner), dynamic clickhash difficulty. **Base Sepolia** = cheap smoke + **`tCLICK` / `tBTROPHY`** branding; **Base mainnet** = production economics + primary QA for LP/DEX/real fees.
-- **Economy presets:** `DEPLOY_ECONOMY=testnet|mainnet` in **`economy.ts`** — testnet uses ultra-low **`clickCostCredits`**, low **`minPotClicks`**, and explicit test names; mainnet uses ~1¢/click credits, 100B cap, 7d vesting, 10k trophies.
+- **Core loop:** deposit ETH → credits → click → **CLICK** vesting, **minute** **ETH POT** + **Block Bet**, dynamic clickhash difficulty. **Base Sepolia** = cheap smoke + **`tCLICK` / `tBTROPHY`** branding; **Base mainnet** = production economics + primary QA for **Uniswap v2–style LP** / real fees (use **Preview** envs / **preview.clickmint.app** for staged tests).
+- **Economy presets:** `DEPLOY_ECONOMY=testnet|mainnet` in **`economy.ts`** — testnet uses ultra-low **`clickCostCredits`**, low **`minPotClicks`**, and explicit test names; mainnet targets ~$0.10/click (via ETH/USD), **10B** cap, **30d** vesting, 10k trophies (see **`docs/GAME_MECHANICS.md`**).
 - **Gasless clicks (optional):** ZeroDev Kernel + Pimlico; **EOA** remains player; smart account only executes **`clickFor(eoa)`** after **setClickExecutor** linking. **Pimlico policy must allow chain `8453`** for mainnet QA, not only Sepolia.
 
 ### Technical
 
 | Layer | Status |
 |-------|--------|
-| Solidity | Core contracts implemented; parameterized **CLICK** / **BinaryTrophyNFT** names for test vs prod; **`potKeeper`** + owner may **`finalizeHour`**. **Not** a substitute for professional audit. |
+| Solidity | Core contracts implemented; parameterized **CLICK** / **BinaryTrophyNFT** names for test vs prod; **`potKeeper`** + owner may **`finalizeRound`**. **Not** a substitute for professional audit. |
 | POT randomness | Pseudorandom — **needs upgrade** (e.g. VRF) for high-stakes mainnet. |
 | Trophy ↔ game | Trophy **not** auto-minted from `click()` in MVP — manual/ops path; on-chain SVG metadata. |
 | Escrow | Deployed; integration optional. |
 | Frontend | Next.js 15, wagmi, **`NEXT_PUBLIC_CHAIN_ID`** (8453 vs 84532), dashboard, POT history (ETH), audio, in-flight click guards, AA hook. |
-| Automation | **`potKeeper`** on game + optional **Vercel cron** → `/api/cron/finalize-hour` (keeper key pays gas). |
+| Automation | **`potKeeper`** on game + optional **Vercel cron** → `/api/cron/finalize-round` (keeper key pays gas). |
 | Sponsorship funding | **Developer-billed via Pimlico** — **no** automatic skim from user deposits into Pimlico. |
 
 ### Docs & ops
@@ -37,7 +37,7 @@ Living snapshot for founders and reviewers. Update this when milestones shift.
 2. **Solidity review / audit scope** — PRI: `ClickMintGame` (fees, reentrancy, POT finalization), `CLICK` (cap, vesting, early spend), `clickFor` / executor abuse model, `BinaryTrophyNFT` revenue math.
 3. **Production POT fairness** — Replace prevrandao-only draw with **Chainlink VRF** (or agreed alternative) before mainnet marketing.
 4. **Deploy discipline** — Constructor/name changes require **full redeploy** of CLICK + trophy + game wiring; refresh **`frontend/lib/addresses.ts`**, **`.env`**, and **`docs/DEPLOYMENT_ADDRESSES.md`** after every deploy.
-5. **POT finalization UX** — **`finalizeHour`**: **`owner`** or **`potKeeper`**; document/hide manual “Finalize” for EOAs if desired.
+5. **POT finalization UX** — **`finalizeRound`**: **`owner`** or **`potKeeper`**; document/hide manual “Finalize” for EOAs if desired.
 6. **Pimlico / scale** — Confirm **sponsorship policy** on **8453** and **84532**, **rate limits**, and **billing tier**; monitor UserOp failures.
 7. **Optional: protocol-funded gas** — If product should self-fund sponsorship from volume, spec **BPS → vault → paymaster top-up** (see ARCHITECTURE_FOR_GROK_REVIEW) before coding.
 8. **Trophy integration** — On-click probability → `trophyNft.mintTrophyForPlayer` from `_click`, or keep **owner `mintTrophyForPlayer`** on game for ops drops.

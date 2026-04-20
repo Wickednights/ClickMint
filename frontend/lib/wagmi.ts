@@ -19,6 +19,9 @@ const wcDescription = isClickmintBaseMainnet()
   ? "Base — credits, CLICK, hourly POT"
   : "Base Sepolia — credits, tCLICK, hourly POT (test)";
 
+/** WalletConnect metadata requires absolute icon URLs when possible. */
+const walletConnectIcons = [`${getSiteUrl().replace(/\/$/, "")}/ClickMint_logo_solid.jpg`];
+
 const connectors = [
   metaMask(),
   coinbaseWallet({
@@ -32,7 +35,7 @@ const connectors = [
             name: "ClickMint",
             description: wcDescription,
             url: typeof window !== "undefined" ? window.location.origin : getSiteUrl(),
-            icons: [],
+            icons: walletConnectIcons,
           },
           showQrModal: true,
         }),

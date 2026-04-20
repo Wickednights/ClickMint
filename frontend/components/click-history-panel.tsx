@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { decodeEventLog, type Address } from "viem";
+import { decodeEventLog, parseAbiItem, type Address } from "viem";
 import { useAccount, usePublicClient, useWatchContractEvent } from "wagmi";
 import { clickmintChainId } from "@/lib/clickmint-chain";
 import { clickMintGameAbi } from "@/lib/abi";
@@ -14,23 +14,26 @@ const MAX_ROWS = 200;
 /** Cap parallel `getBlock` calls so initial history hydration does not hammer RPC limits. */
 const BLOCK_TS_FETCH_CONCURRENCY = 6;
 
+const clickedEvent = parseAbiItem(
+  "event Clicked(address indexed user, uint256 roundId, uint256 totalForUserRound, uint8 slotInRound)"
+);
+
 /** Default newest-click count before “Older” archive (full page). Sidebar passes a smaller value. */
 const DEFAULT_LIVE_FEED_MAX = 25;
 /** Paginate clicks older than the live window. */
 const ARCHIVE_PAGE_SIZE = 20;
 
-/** Aggregate heatmap into 5-minute buckets (12 per hour). */
-const MINUTES_PER_BUCKET = 5;
-const BUCKETS_PER_HOUR = 60 / MINUTES_PER_BUCKET;
+const SLOTS_PER_ROUND = 4;
+const SLOT_LABELS = ["0–14s", "15–29s", "30–44s", "45–59s"] as const;
 
 export type ClickLogRow = {
   key: string;
   blockNumber: bigint;
   user: Address;
-  hourId: bigint;
-  totalForUserHour: bigint;
-  /** UTC minute 0–59 within the UTC wall-clock hour when the block was mined (same as on-chain `minuteOfUtcHour`). */
-  minute: number;
+  roundId: bigint;
+  totalForUserRound: bigint;
+  /** 0..3 — 15-second slot within the minute. */
+  slotInRound: number;
 };
 
 function pushUnique(prev: ClickLogRow[], next: ClickLogRow[]): ClickLogRow[] {
@@ -64,17 +67,17 @@ function decodeClickedLogs(
       });
       const args = ev.args as unknown as {
         user: Address;
-        hourId: bigint;
-        totalForUserHour: bigint;
-        minute: number;
+        roundId: bigint;
+        totalForUserRound: bigint;
+        slotInRound: number;
       };
       out.push({
         key: `${log.transactionHash}-${log.logIndex}`,
         blockNumber: log.blockNumber,
         user: args.user,
-        hourId: args.hourId,
-        totalForUserHour: args.totalForUserHour,
-        minute: Number(args.minute),
+        roundId: args.roundId,
+        totalForUserRound: args.totalForUserRound,
+        slotInRound: Number(args.slotInRound),
       });
     } catch {
       /* skip malformed */
@@ -83,10 +86,9 @@ function decodeClickedLogs(
   return out;
 }
 
-/** On-chain field: minute 0–59 of the UTC hour at block time (not your local timezone). */
-function formatClickMinuteUtc(m: number): string {
-  const mm = Math.min(59, Math.max(0, m));
-  return `:${String(mm).padStart(2, "0")} UTC`;
+function slotLabel(slot: number): string {
+  const s = Math.min(3, Math.max(0, slot));
+  return SLOT_LABELS[s];
 }
 
 /** Local wall-clock minute when the block was mined (viewer timezone). */
@@ -102,8 +104,8 @@ function localWallMinuteOnly(blockTimestampSec: number | undefined): string {
   return `Min ${new Date(blockTimestampSec * 1000).getMinutes()}`;
 }
 
-const MINUTE_UTC_HELP =
-  "On-chain minute is UTC at block time. “Clicked at” uses your device clock from the block timestamp.";
+const SLOT_HELP =
+  "On-chain slot is 0–3 within the UTC minute (15s each). “Clicked at” uses your device clock from the block timestamp.";
 
 function ClickCard({
   r,
@@ -119,8 +121,8 @@ function ClickCard({
   const ts = blockTs[r.blockNumber.toString()];
   const roundLine =
     genesisGameHour !== null
-      ? `Round ${hourIdForDisplay(r.hourId, genesisGameHour)}`
-      : `Hour #${hourIdForDisplay(r.hourId, null)}`;
+      ? `Round ${hourIdForDisplay(r.roundId, genesisGameHour)}`
+      : `Round #${hourIdForDisplay(r.roundId, null)}`;
   return (
     <div
       className={cn(
@@ -132,7 +134,7 @@ function ClickCard({
         <span className="truncate">#{r.blockNumber.toString()}</span>
         <span
           className="shrink-0 text-right text-[10px] text-primary-fixed/90 md:text-[11px]"
-          title={`${formatClickedAtLocalMin(ts)} · chain ${formatClickMinuteUtc(r.minute)}`}
+          title={`${formatClickedAtLocalMin(ts)} · slot ${slotLabel(r.slotInRound)}`}
         >
           {formatClickedAtLocalMin(ts)}
         </span>
@@ -142,10 +144,11 @@ function ClickCard({
       </div>
       <div
         className="mt-1 font-headline text-base font-bold tracking-tight text-[#ff2ee8] drop-shadow-[0_0_10px_rgba(255,46,232,0.45)]"
-        title={genesisGameHour !== null ? "Round index since contract deployment" : "On-chain game hour bucket"}
+        title={genesisGameHour !== null ? "Round index since contract deployment" : "On-chain game round bucket"}
       >
         {roundLine}
       </div>
+      <div className="mt-0.5 text-[10px] text-secondary">Slot {slotLabel(r.slotInRound)}</div>
     </div>
   );
 }
@@ -154,7 +157,7 @@ type ClickHistoryPanelProps = {
   gameAddr: Address;
   /** Narrow sidebar: hide heatmap, tighter spacing (desktop sidebar). */
   compact?: boolean;
-  /** When set, hour cards show “Round N” as N = hourId − genesis + 1 (since deploy). */
+  /** When set, round cards show “Round N” as N = roundId − genesis + 1 (since deploy). */
   genesisGameHour?: bigint | null;
   /** Max rows in the live feed (default 25; sidebar uses 5). */
   liveFeedMax?: number;
@@ -199,16 +202,7 @@ export function ClickHistoryPanel({
         const fromBlock = latest > LOOKBACK_BLOCKS ? latest - LOOKBACK_BLOCKS : 0n;
         const logs = await publicClient.getLogs({
           address: gameAddr,
-          event: {
-            type: "event",
-            name: "Clicked",
-            inputs: [
-              { type: "address", name: "user", indexed: true },
-              { type: "uint256", name: "hourId", indexed: false },
-              { type: "uint256", name: "totalForUserHour", indexed: false },
-              { type: "uint8", name: "minute", indexed: false },
-            ],
-          },
+          event: clickedEvent,
           fromBlock,
           toBlock: latest,
         });
@@ -308,28 +302,26 @@ export function ClickHistoryPanel({
   }, [archiveTail, archivePage]);
 
   const heatmap = useMemo(() => {
-    const byHour = new Map<string, number[]>();
+    const byRound = new Map<string, number[]>();
     for (const r of rows) {
-      const k = r.hourId.toString();
-      const b = byHour.get(k) ?? Array.from({ length: BUCKETS_PER_HOUR }, () => 0);
-      const bucket = Math.min(BUCKETS_PER_HOUR - 1, Math.floor(r.minute / MINUTES_PER_BUCKET));
-      b[bucket] += 1;
-      byHour.set(k, b);
+      const k = r.roundId.toString();
+      const b = byRound.get(k) ?? Array.from({ length: SLOTS_PER_ROUND }, () => 0);
+      const slot = Math.min(SLOTS_PER_ROUND - 1, Math.max(0, r.slotInRound));
+      b[slot] += 1;
+      byRound.set(k, b);
     }
-    const hourKeys = [...byHour.keys()].sort((a, b) => (BigInt(b) > BigInt(a) ? 1 : BigInt(b) < BigInt(a) ? -1 : 0)).slice(0, 6);
+    const roundKeys = [...byRound.keys()]
+      .sort((a, b) => (BigInt(b) > BigInt(a) ? 1 : BigInt(b) < BigInt(a) ? -1 : 0))
+      .slice(0, 6);
     let maxC = 1;
-    for (const h of hourKeys) {
-      const b = byHour.get(h)!;
+    for (const h of roundKeys) {
+      const b = byRound.get(h)!;
       maxC = Math.max(maxC, ...b);
     }
-    return { byHour, hourKeys, maxC };
+    return { byRound, roundKeys, maxC };
   }, [rows]);
 
-  const bucketLabels = Array.from({ length: BUCKETS_PER_HOUR }, (_, i) => {
-    const a = i * MINUTES_PER_BUCKET;
-    const b = a + MINUTES_PER_BUCKET - 1;
-    return `:${String(a).padStart(2, "0")}–:${String(b).padStart(2, "0")}`;
-  });
+  const bucketLabels = [...SLOT_LABELS];
 
   /** Page buttons: current + up to 3 forward, with prev/next arrows. */
   const pageWindow = useMemo(() => {
@@ -358,7 +350,7 @@ export function ClickHistoryPanel({
         </h2>
         {!compact ? (
           <p className="font-body text-[12px] leading-snug text-secondary md:text-sm">
-            Live feed (newest first). Heatmap: 5-minute UTC buckets. Settlement uses exact minutes for POT overlap.
+            Live feed (newest first). Heatmap: 15-second slots within each minute round. POT overlap uses the same slots.
           </p>
         ) : null}
       </div>
@@ -394,22 +386,22 @@ export function ClickHistoryPanel({
         </p>
       ) : null}
 
-      {!compact && heatmap.hourKeys.length > 0 ? (
+      {!compact && heatmap.roundKeys.length > 0 ? (
         <div className="space-y-2">
-          <p className="font-label text-[9px] uppercase tracking-widest text-secondary">5-min UTC buckets</p>
+          <p className="font-label text-[9px] uppercase tracking-widest text-secondary">Slots per round</p>
           <div className="space-y-2">
-            {heatmap.hourKeys.map((hid) => {
-              const counts = heatmap.byHour.get(hid)!;
+            {heatmap.roundKeys.map((rid) => {
+              const counts = heatmap.byRound.get(rid)!;
               return (
-                <div key={hid} className="flex flex-wrap items-center gap-2">
+                <div key={rid} className="flex flex-wrap items-center gap-2">
                   <span className="w-16 shrink-0 font-mono text-[10px] text-primary-fixed/90 md:w-20">
-                    {genesisGameHour !== null ? `${hourIdForDisplay(BigInt(hid), genesisGameHour)}` : `#${hid}`}
+                    {genesisGameHour !== null ? `${hourIdForDisplay(BigInt(rid), genesisGameHour)}` : `#${rid}`}
                   </span>
                   <div className="flex min-w-0 flex-1 flex-wrap gap-0.5">
                     {counts.map((c, wi) => (
                       <div
                         key={wi}
-                        title={`${bucketLabels[wi]} UTC — ${c} click(s)`}
+                        title={`${bucketLabels[wi]} — ${c} click(s)`}
                         className={cn(
                           "flex h-8 w-7 shrink-0 items-center justify-center rounded-sm border border-outline-variant/30 font-mono text-[8px] text-on-surface md:w-8 md:text-[9px]",
                           c === 0 && "bg-surface-container/40 opacity-50"
@@ -462,9 +454,10 @@ export function ClickHistoryPanel({
                   <th className="px-2 py-2">Block</th>
                   <th className="px-2 py-2">Player</th>
                   <th className="px-2 py-2">Round</th>
-                  <th className="px-2 py-2" title={MINUTE_UTC_HELP}>
-                    Clicked at
+                  <th className="px-2 py-2" title={SLOT_HELP}>
+                    Slot
                   </th>
+                  <th className="px-2 py-2">Clicked at</th>
                 </tr>
               </thead>
               <tbody>
@@ -476,10 +469,11 @@ export function ClickHistoryPanel({
                     </td>
                     <td className="px-2 py-1.5 text-[#ff2ee8]">
                       {genesisGameHour !== null
-                        ? hourIdForDisplay(r.hourId, genesisGameHour)
-                        : `#${hourIdForDisplay(r.hourId, null)}`}
+                        ? hourIdForDisplay(r.roundId, genesisGameHour)
+                        : `#${hourIdForDisplay(r.roundId, null)}`}
                     </td>
-                    <td className="px-2 py-1.5" title={`${formatClickedAtLocalMin(blockTs[r.blockNumber.toString()])} · ${formatClickMinuteUtc(r.minute)}`}>
+                    <td className="px-2 py-1.5 text-secondary">{slotLabel(r.slotInRound)}</td>
+                    <td className="px-2 py-1.5" title={formatClickedAtLocalMin(blockTs[r.blockNumber.toString()])}>
                       {formatClickedAtLocalMin(blockTs[r.blockNumber.toString()])}
                     </td>
                   </tr>

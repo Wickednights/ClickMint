@@ -4,65 +4,58 @@ import { ethers } from "hardhat";
  * Single source of truth for **testnet** vs **mainnet** deploy presets.
  *
  * `deploy.ts` uses `DEPLOY_ECONOMY=testnet` (default) or `mainnet`.
- * `set-economy-round.ts` uses `ECONOMY=testnet|mainnet` for live `setEconomy` only (does not change caps or vesting — those are immutable from deploy).
- *
- * On-chain economy (ClickMintGame constructor / `setEconomy`):
- * - `credits` are wei-sized; each `click()` burns `clickCostCredits` wei.
- * - Mainnet target (~1 cent per click): when 1 ETH is ~ $3,500, one cent = 1/350,000 ETH in credit wei.
- * - Testnet uses a larger `clickCostCredits` so the UI shows human-scale Click Credits.
+ * `set-economy-round.ts` uses `ECONOMY=testnet|mainnet` for live `setEconomy` only (does not change caps or vesting).
  */
 
-/** 1 ETH ~ this USD for mainnet cent pricing (edit before mainnet if market differs). */
+/** 1 ETH ~ this USD for mainnet pricing (edit before mainnet if market differs). */
 export const MAINNET_ETH_USD = 3500n;
 
-/** Mainnet: ~1 US cent worth of credit wei per click at MAINNET_ETH_USD. */
+/** Must match `ClickMintGame.TROPHY_ROLL_DENOM` — probability per click = `weight / TROPHY_ROLL_DENOM`. */
+export const TROPHY_ROLL_DENOM = 1_000_000_000n;
+
+/** Mainnet: ~$0.10 per click in credit wei (10× one-cent at MAINNET_ETH_USD). */
 export function mainnetClickCostCredits(): bigint {
   const weiPerCent = ethers.parseEther("1") / (MAINNET_ETH_USD * 100n);
-  return weiPerCent > 0n ? weiPerCent : 1n;
+  return weiPerCent * 10n;
 }
 
-/** CLICK minted into vesting per successful click (wei, 18 decimals). */
-export const DEFAULT_BASE_CLICK_REWARD = ethers.parseEther("10");
+/** CLICK minted per successful click: **1 CLICK** (1e18 wei). */
+export const DEFAULT_BASE_CLICK_REWARD = ethers.parseEther("1");
 
-/** Pot: CLICK wei minted per 1 ETH of pot (shared; tune per product if needed). */
 export const DEFAULT_CLICK_PER_ETH_WEI = ethers.parseEther("1000");
 
 /**
- * Per successful `click` / `clickFor`: probability of a Binary Trophy mint (basis points of 10_000).
- * Mainnet default is conservative; **testnet** uses a higher preset so trophies appear in QA.
- * Owner may tune live via `ClickMintGame.setTrophyDropBps`.
+ * Trophy mint weight such that **expected** on-chain trophy mints reach **`trophyMaxSupply`**
+ * when **`baseClickReward` wei of CLICK** has been minted **`75%` of `maxSupplyWei`** (i.e. at ~75% of max supply).
+ * Uses ceiling division so the collection is expected to complete by that point (not after max CLICK).
  */
-export const DEFAULT_TROPHY_DROP_BPS = 100n; // 1% (mainnet-style)
+export function trophyDropWeightFor75PercentPacing(params: {
+  trophyMaxSupply: bigint;
+  maxSupplyWei: bigint;
+  baseClickReward: bigint;
+}): bigint {
+  const { trophyMaxSupply, maxSupplyWei, baseClickReward } = params;
+  if (trophyMaxSupply === 0n || baseClickReward === 0n) return 0n;
+  const clicksAt75 = (75n * maxSupplyWei) / (100n * baseClickReward);
+  if (clicksAt75 === 0n) return 0n;
+  const num = trophyMaxSupply * TROPHY_ROLL_DENOM;
+  return (num + clicksAt75 - 1n) / clicksAt75;
+}
 
-/** Testnet: ~1 in 4 clicks mints a trophy (still capped by `trophyMaxSupply`). */
-export const TESTNET_TROPHY_DROP_BPS = 2500n;
-
-/** Minimum clicks in the game hour to qualify for POT settlement (immutable per game deploy). */
-export const MAINNET_MIN_POT_CLICKS = 100n;
-/** Low bar for cheap testnet POT rounds (Base Sepolia smoke only). */
+/** Minimum clicks per **minute round** to qualify for POT (mainnet-style). */
+export const MAINNET_MIN_POT_CLICKS = 10n;
 export const TESTNET_MIN_POT_CLICKS = 5n;
 
-/**
- * Testnet: **0.0000001 ETH** of credits per click → ~10,000 clicks from **0.001 ETH** (before bonuses).
- * Kept ultra-low for cheap Base Sepolia smoke tests; mainnet QA uses Base mainnet preset.
- */
 export const TESTNET_CLICK_COST_CREDITS = ethers.parseEther("0.0000001");
 
-// ---------------------------------------------------------------------------
-// Full deploy presets (caps, vesting, game economy, hash tier)
-// ---------------------------------------------------------------------------
-
-/** On-chain names so wallets/explorers show Base Sepolia assets are test-only. */
 export type TokenBranding = {
   erc20Name: string;
   erc20Symbol: string;
-  /** EIP-2612 domain name — match `erc20Name` in practice. */
   erc20PermitName: string;
   erc721Name: string;
   erc721Symbol: string;
 };
 
-/** Base Sepolia / QA — small cap, short vesting, ultra-cheap credits, explicit "test" ERC20/721 names. */
 export const TESTNET_PRESET = {
   name: "testnet" as const,
   branding: {
@@ -72,23 +65,17 @@ export const TESTNET_PRESET = {
     erc721Name: "ClickMint Test Binary Trophy",
     erc721Symbol: "tBTROPHY",
   } satisfies TokenBranding,
-  /** 1_000_000 * 1e18 — exercise `CLICKBadSupply` and endgame paths quickly. */
   maxSupplyWei: 1_000_000n * 10n ** 18n,
-  /** 10 trophies max on testnet. */
   trophyMaxSupply: 10n,
-  /** 600 seconds (10 minutes) — full vesting cycle in one session. */
   vestingDurationSeconds: 600n,
-  /** Looser clickhash ramp for manual E2E. */
   clicksPerHashTier: 50_000n,
   clickPerEthWei: DEFAULT_CLICK_PER_ETH_WEI,
   clickCostCredits: TESTNET_CLICK_COST_CREDITS,
-  /** Lower than mainnet to keep testnet supply growth cheap. */
-  baseClickReward: ethers.parseEther("5"),
-  trophyDropBps: TESTNET_TROPHY_DROP_BPS,
+  baseClickReward: ethers.parseEther("1"),
   minPotClicks: TESTNET_MIN_POT_CLICKS,
 } as const;
 
-/** Production-style: 100B cap, 7d vesting, ~1 cent/click, 10k trophies, tighter hash tier. */
+/** Mainnet-style: **10B** cap, **30d** vesting, **~$0.10/click**, **1 CLICK/click**, tighter hash tier. */
 export const MAINNET_PRESET = {
   name: "mainnet" as const,
   branding: {
@@ -98,16 +85,15 @@ export const MAINNET_PRESET = {
     erc721Name: "ClickMint Binary Trophy",
     erc721Symbol: "BTROPHY",
   } satisfies TokenBranding,
-  /** 100_000_000_000 * 1e18 — `deploy.ts` also mints **10%** of this to the deployer at CLICK deploy for LP seed. */
-  maxSupplyWei: 100_000_000_000n * 10n ** 18n,
+  /** 10_000_000_000 * 1e18 */
+  maxSupplyWei: 10_000_000_000n * 10n ** 18n,
   trophyMaxSupply: 10_000n,
-  /** 604_800 seconds (7 days). */
-  vestingDurationSeconds: 604_800n,
-  clicksPerHashTier: 2_500n,
+  /** 2_592_000 s = 30 days */
+  vestingDurationSeconds: 2_592_000n,
+  clicksPerHashTier: 1_000n,
   clickPerEthWei: DEFAULT_CLICK_PER_ETH_WEI,
   clickCostCredits: mainnetClickCostCredits(),
   baseClickReward: DEFAULT_BASE_CLICK_REWARD,
-  trophyDropBps: DEFAULT_TROPHY_DROP_BPS,
   minPotClicks: MAINNET_MIN_POT_CLICKS,
 } as const;
 
@@ -119,7 +105,6 @@ export type GameEconomyParams = {
   baseClickReward: bigint;
 };
 
-/** Game-only params (also used by `set-economy-round.ts`). */
 export const TESTNET_ECONOMY: GameEconomyParams = {
   clickPerEthWei: TESTNET_PRESET.clickPerEthWei,
   clickCostCredits: TESTNET_PRESET.clickCostCredits,
@@ -142,7 +127,11 @@ export function supplyCapsAndDifficulty(preset: EconomyPreset) {
     maxSupplyWei: p.maxSupplyWei,
     trophyMaxSupply: p.trophyMaxSupply,
     clicksPerHashTier: p.clicksPerHashTier,
-    trophyDropBps: p.trophyDropBps,
+    trophyDropWeight: trophyDropWeightFor75PercentPacing({
+      trophyMaxSupply: p.trophyMaxSupply,
+      maxSupplyWei: p.maxSupplyWei,
+      baseClickReward: p.baseClickReward,
+    }),
     minPotClicks: p.minPotClicks,
   };
 }
@@ -155,7 +144,6 @@ export function tokenBrandingForDeploy(preset: EconomyPreset): TokenBranding {
   return preset === "mainnet" ? MAINNET_PRESET.branding : TESTNET_PRESET.branding;
 }
 
-/** Resolve `DEPLOY_ECONOMY` env; default **testnet**. Unknown values log a warning and fall back to testnet. */
 export function deployPresetFromEnv(): EconomyPreset {
   const raw = process.env.DEPLOY_ECONOMY?.trim().toLowerCase();
   if (raw === "mainnet") return "mainnet";

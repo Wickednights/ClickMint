@@ -8,87 +8,90 @@ import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {CLICK} from "./CLICK.sol";
 import {BinaryTrophyNFT} from "./BinaryTrophyNFT.sol";
 
-/// @title ClickMintGame — ETH credits, fee split, rate-limited clicks, hourly ETH POT.
-/// @dev Randomness: block.prevrandao + salt — upgrade to Chainlink VRF for mainnet fairness.
-/// Constructor economy + `clicksPerHashTier` are set at deploy from `DEPLOY_ECONOMY` (**testnet** vs **mainnet** in `scripts/config/economy.ts`). Owner may later `setEconomy` / `setAddresses`; hash tier stays immutable.
-/// POT winners receive **accumulated POT ETH** (`potEthByHour` + `potCarry`), not minted $CLICK.
+/// @title ClickMintGame — ETH credits, deposit splits, rate-limited clicks, minute-round ETH POT + Block Bet.
+/// @dev Randomness: pseudo-random — upgrade to Chainlink VRF for high-stakes mainnet fairness.
+///      Deposits: 50% Click Pot accrual, 29.5% treasury, 20% Block Bet pool, 0.5% trophy NFT (or treasury if trophy unset).
+///      Credits granted: full `msg.value` wei + bonus (same UX as legacy; ETH is routed per BPS).
 contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     CLICK public immutable clickToken;
 
     address payable public treasury;
-    address payable public secretWallet;
 
-    /// @notice ~20s after each UTC hour boundary before the next game hour ticks (reset buffer).
-    uint256 public constant RESET_BUFFER = 20;
+    /// @notice Seconds after each UTC minute boundary before the next round id ticks (settlement buffer).
+    uint256 public constant ROUND_BUFFER = 5;
     uint256 public constant BPS = 10_000;
-    /// @dev 3% total: 1% treasury / 1% pot (ETH) / 1% secret. Credits are still granted on full `msg.value`.
-    uint256 public constant FEE_EACH_BPS = 100;
+    /// @dev Sum must equal BPS. Product split: 50% pot / 29.5% treasury / 20% block bet / 0.5% trophy revshare.
+    uint256 public constant POT_BPS = 5000;
+    uint256 public constant TREASURY_BPS = 2950;
+    uint256 public constant BLOCK_BET_DEPOSIT_BPS = 2000;
+    uint256 public constant TROPHY_REV_BPS = 50;
 
-    uint256 public constant MAX_CLICKS_PER_BLOCK = 2;
-    /// @notice Minimum clicks in a game hour to qualify for POT (deploy: testnet often lower for QA; mainnet typically 100).
+    uint256 public constant MAX_CLICKS_PER_BLOCK = 20;
+    /// @dev Trophy mint probability per successful click = `trophyDropWeight / TROPHY_ROLL_DENOM` (finer than BPS).
+    uint256 public constant TROPHY_ROLL_DENOM = 1_000_000_000;
     uint256 public immutable minPotClicks;
-    /// @notice Global clicks per game hour — every N clicks adds one required leading-zero bit (cap 4) for click hash.
     uint256 public immutable clicksPerHashTier;
 
-    mapping(uint256 hourId => uint256) public totalClicksInHour;
+    mapping(uint256 roundId => uint256) public totalClicksInRound;
 
-    /// @notice Legacy economy slot (still in `setEconomy` for ABI compat). **Not used for POT** — POT pays raw accumulated ETH.
     uint256 public clickPerEthWei;
-
     uint256 public clickCostCredits;
     uint256 public baseClickReward;
-    /// @notice Trophy mint probability per successful click (basis points of `BPS`). 0 = no auto-mints.
-    uint256 public trophyDropBps;
+    uint256 public trophyDropWeight;
 
-    /// @notice Last pot settlement (game hour id).
-    mapping(uint256 hourId => bool) public hourFinalized;
-    mapping(uint256 hourId => address) public hourWinner;
-    /// @notice ETH wei sent to the POT winner for this hour after `finalizeHour` (0 if none / no winner).
-    mapping(uint256 hourId => uint256) public hourPayout;
-    /// @notice Start UTC minute (0–44) of the winning 15-minute span for this hour after `finalizeHour`. Not valid until finalized.
-    mapping(uint256 hourId => uint8) public hourWinWindow;
+    mapping(uint256 roundId => bool) public roundFinalized;
+    mapping(uint256 roundId => address) public roundWinner;
+    mapping(uint256 roundId => uint256) public roundPayout;
+    /// @notice Winning 15s slot index 0..3 after `finalizeRound`.
+    mapping(uint256 roundId => uint8) public roundWinSlot;
 
     mapping(address => uint256) public credits;
-    mapping(uint256 hourId => mapping(address => uint256)) public clicksInHour;
-    /// @notice Bit `m` set if player clicked at least once in UTC minute `m` (0–59) of this game hour. Used for POT overlap with random span.
-    mapping(uint256 hourId => mapping(address => uint64)) public minuteMask;
-    mapping(uint256 hourId => mapping(address => bool)) internal _hourListed;
-    mapping(uint256 hourId => address[]) internal _participants;
+    mapping(uint256 roundId => mapping(address => uint256)) public clicksInRound;
+    /// @notice Bits 0..3 set if player clicked in that 15s slot during the round.
+    mapping(uint256 roundId => mapping(address => uint8)) public slotMask;
+    mapping(uint256 roundId => mapping(address => bool)) internal _roundListed;
+    mapping(uint256 roundId => address[]) internal _participants;
 
-    /// @notice ETH (wei) reserved for POT for a specific game hour (1% fee slice on deposits).
-    mapping(uint256 hourId => uint256) public potEthByHour;
-    /// @notice Rolled-forward POT ETH when an hour finalizes with no eligible winner.
+    mapping(uint256 roundId => uint256) public potEthByRound;
     uint256 public potCarry;
     uint256 internal _potNonce;
 
+    /// @notice 20% deposit slice accruing to Block Bet parimutuel for this round.
+    mapping(uint256 roundId => uint256) public blockBetDepositEthByRound;
+    /// @notice User bets: explicit ETH staked on a slot (wei).
+    mapping(uint256 roundId => mapping(address => mapping(uint8 => uint256))) public userBetOnSlot;
+    mapping(uint256 roundId => mapping(uint8 => uint256)) public totalBetOnSlot;
+    mapping(uint256 roundId => address[]) internal _roundBettors;
+    mapping(uint256 roundId => mapping(address => bool)) internal _roundBettorSeen;
+    uint256 public blockBetCarry;
+
     mapping(address => mapping(uint256 => uint8)) internal _clicksInBlock;
 
-    /// @notice EOA (player) => smart account (or other executor) allowed to call `clickFor` / `depositFor` for them.
     mapping(address => address) public clickExecutor;
 
-    /// @notice Optional trophy collection; zero disables on-chain trophy mints from the game.
     BinaryTrophyNFT public trophyNft;
 
+    address public potKeeper;
+
     event Deposited(address indexed user, uint256 ethIn, uint256 creditsOut);
-    /// @param minute UTC minute 0–59 within the game hour when this click was mined.
-    event Clicked(address indexed user, uint256 hourId, uint256 totalForUserHour, uint8 minute);
-    /// @param winStartMinute UTC minute 0–44; winning span is `[winStartMinute, winStartMinute + 14]` inclusive (15 minutes), within the same calendar hour.
-    /// @param ethPayout ETH wei sent to `winner` (0 if no eligible winner).
-    event PotWin(uint256 indexed hourId, address indexed winner, uint256 ethPayout, uint8 winStartMinute, bytes32 entropy);
-    event AddressesUpdated(address indexed treasury, address indexed secret);
+    event Clicked(address indexed user, uint256 roundId, uint256 totalForUserRound, uint8 slotInRound);
+    event PotWin(
+        uint256 indexed roundId, address indexed winner, uint256 ethPayout, uint8 winSlot, bytes32 entropy
+    );
+    event BlockBetPaid(uint256 indexed roundId, uint8 winSlot, uint256 totalPot, uint256 winnersPaid);
+    event BlockBetCarried(uint256 indexed roundId, uint256 amount);
+    event AddressesUpdated(address indexed treasury);
     event EconomyUpdated(uint256 clickPerEthWei, uint256 clickCostCredits, uint256 baseClickReward);
     event ClickExecutorSet(address indexed player, address indexed executor);
     event TrophyNftSet(address indexed trophy);
-    event TrophyDropBpsUpdated(uint256 bps);
-    event PotCarrySwept(address indexed to, uint256 amount);
-    /// @notice Emitted in addition to OpenZeppelin `Pausable` **Paused** event (same transition).
+    event TrophyDropWeightUpdated(uint256 weight);
+    event PotCarrySwept(address payable to, uint256 amount);
     event GamePaused(address indexed by);
-    /// @notice Emitted in addition to OpenZeppelin `Pausable` **Unpaused** event (same transition).
     event GameUnpaused(address indexed by);
     event TrophyMintedViaGame(address indexed to, uint64 totalClicks, uint8 fragmentSlot);
+    event PotKeeperSet(address indexed keeper);
 
     error GameZeroTrophyAddr();
-
     error GameBadAddr();
     error GameBadParam();
     error GameBadExecutor();
@@ -97,49 +100,43 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     error GameFinalizeEarly();
     error GameAlreadyFinalized();
     error GameBadBps();
+    error GameBadTrophyWeight();
     error GameUnauthorizedCaller();
-
-    /// @notice Optional address allowed to call `finalizeHour` (e.g. Gelato / Chainlink Automation forwarder). Zero = owner only.
-    address public potKeeper;
-
-    event PotKeeperSet(address indexed keeper);
+    error GameBadBetRound();
+    error GameBadSlot();
 
     constructor(
         address initialOwner,
         CLICK click_,
         address payable treasury_,
-        address payable secretWallet_,
         uint256 clickPerEthWei_,
         uint256 clickCostCredits_,
         uint256 baseClickReward_,
         uint256 clicksPerHashTier_,
-        uint256 trophyDropBps_,
+        uint256 trophyDropWeight_,
         uint256 minPotClicks_
     ) Ownable(initialOwner) {
-        if (address(click_) == address(0)) revert GameBadAddr();
+        if (address(click_) == address(0) || treasury_ == address(0)) revert GameBadAddr();
         if (clicksPerHashTier_ == 0) revert GameBadParam();
         if (minPotClicks_ == 0) revert GameBadParam();
-        if (trophyDropBps_ > BPS) revert GameBadBps();
+        if (trophyDropWeight_ > TROPHY_ROLL_DENOM) revert GameBadTrophyWeight();
+        if (POT_BPS + TREASURY_BPS + BLOCK_BET_DEPOSIT_BPS + TROPHY_REV_BPS != BPS) revert GameBadParam();
         clickToken = click_;
         treasury = treasury_;
-        secretWallet = secretWallet_;
         clickPerEthWei = clickPerEthWei_;
         clickCostCredits = clickCostCredits_;
         baseClickReward = baseClickReward_;
         clicksPerHashTier = clicksPerHashTier_;
-        trophyDropBps = trophyDropBps_;
+        trophyDropWeight = trophyDropWeight_;
         minPotClicks = minPotClicks_;
     }
 
-    function setAddresses(address payable treasury_, address payable secretWallet_) external onlyOwner whenNotPaused {
+    function setAddresses(address payable treasury_) external onlyOwner whenNotPaused {
+        if (treasury_ == address(0)) revert GameBadAddr();
         treasury = treasury_;
-        secretWallet = secretWallet_;
-        emit AddressesUpdated(treasury_, secretWallet_);
+        emit AddressesUpdated(treasury_);
     }
 
-    /// @notice Set who may call `finalizeHour` besides `owner`. Use a dedicated automation/relayer address; set to zero to disable.
-    /// @dev Intentionally **not** `whenNotPaused`: if a keeper key is compromised, owner must be able to rotate or clear it **while paused**
-    /// before unpausing (otherwise a bad keeper could race `finalizeHour` on unpause). `finalizeHour` itself stays `whenNotPaused`.
     function setPotKeeper(address k) external onlyOwner {
         potKeeper = k;
         emit PotKeeperSet(k);
@@ -155,7 +152,11 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         }
     }
 
-    function setEconomy(uint256 clickPerEthWei_, uint256 clickCostCredits_, uint256 baseClickReward_) external onlyOwner whenNotPaused {
+    function setEconomy(uint256 clickPerEthWei_, uint256 clickCostCredits_, uint256 baseClickReward_)
+        external
+        onlyOwner
+        whenNotPaused
+    {
         clickPerEthWei = clickPerEthWei_;
         clickCostCredits = clickCostCredits_;
         baseClickReward = baseClickReward_;
@@ -167,63 +168,42 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         emit TrophyNftSet(trophy_);
     }
 
-    /// @notice Tune per-click trophy drop rate (basis points of 10_000). Use 0 to disable auto-mints.
-    function setTrophyDropBps(uint256 bps) external onlyOwner whenNotPaused {
-        if (bps > BPS) revert GameBadBps();
-        trophyDropBps = bps;
-        emit TrophyDropBpsUpdated(bps);
+    function setTrophyDropWeight(uint256 weight) external onlyOwner whenNotPaused {
+        if (weight > TROPHY_ROLL_DENOM) revert GameBadTrophyWeight();
+        trophyDropWeight = weight;
+        emit TrophyDropWeightUpdated(weight);
     }
 
-    /// @notice Pause gameplay (`deposit`, clicks, `setClickExecutor`, `finalizeHour`, economy/trophy admin).
-    /// @dev Also emits OpenZeppelin **Paused(account)**; use **isPaused()** or `paused()` to read state.
     function pause() external onlyOwner {
         _pause();
         emit GamePaused(msg.sender);
     }
 
-    /// @notice Unpause; restores normal operation.
-    /// @dev Also emits OpenZeppelin **Unpaused(account)**.
     function unpause() external onlyOwner {
         _unpause();
         emit GameUnpaused(msg.sender);
     }
 
-    /// @return True if the game is emergency-paused (alias for `paused()`).
     function isPaused() public view returns (bool) {
         return paused();
     }
 
-    /// @notice Link your EOA to a smart account for sponsored `clickFor` / `depositFor` (set `address(0)` to revoke).
     function setClickExecutor(address executor) external whenNotPaused {
         clickExecutor[msg.sender] = executor;
         emit ClickExecutorSet(msg.sender, executor);
     }
 
-    function gameHour(uint256 ts) public pure returns (uint256) {
-        if (ts <= RESET_BUFFER) return 0;
-        return (ts - RESET_BUFFER) / 3600;
+    /// @notice Round id for the current UTC minute bucket.
+    function gameRound(uint256 ts) public pure returns (uint256) {
+        if (ts <= ROUND_BUFFER) return 0;
+        return (ts - ROUND_BUFFER) / 60;
     }
 
-    /// @dev Calendar minute 0..59 within the UTC hour.
-    function _minuteInUtcHour(uint256 ts) internal pure returns (uint256) {
-        return (ts % 3600) / 60;
+    /// @dev Slot 0..3 within the minute from unix timestamp.
+    function slotInRound(uint256 ts) public pure returns (uint8) {
+        return uint8((ts % 60) / 15);
     }
 
-    /// @dev UTC minute 0..59 within the calendar hour (`ts` in unix seconds).
-    function minuteOfUtcHour(uint256 ts) public pure returns (uint8) {
-        return uint8(_minuteInUtcHour(ts));
-    }
-
-    /// @dev 15 consecutive UTC minutes starting at `start` (0–44); mask has bits `start..start+14` set.
-    function _eligibleSpanMask(uint8 start) internal pure returns (uint64 m) {
-        unchecked {
-            for (uint256 i; i < 15; ++i) {
-                m |= uint64(1) << uint64(start + i);
-            }
-        }
-    }
-
-    /// @dev Extra game credits on larger single deposits (same wei units as `credits`). Tiers: 1%..10% of deposit.
     function _depositBonusWei(uint256 v) internal pure returns (uint256) {
         if (v >= 1 ether) return (v * 1000) / BPS;
         if (v >= 0.5 ether) return (v * 700) / BPS;
@@ -233,12 +213,10 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         return 0;
     }
 
-    /// @notice Split fees, grant credits (deposit + tier bonus), accrue POT in ETH — credits `msg.sender`.
     function deposit() external payable nonReentrant whenNotPaused {
         _deposit(msg.sender, msg.value);
     }
 
-    /// @notice Same as `deposit()` but credits `player` (EOA). Caller must be `player` or their `clickExecutor`.
     function depositFor(address player) external payable nonReentrant whenNotPaused {
         if (msg.sender != player && msg.sender != clickExecutor[player]) revert GameBadExecutor();
         _deposit(player, msg.value);
@@ -246,31 +224,57 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
 
     function _deposit(address creditTo, uint256 v) internal {
         require(v > 0, "game: eth");
-        uint256 ft = (v * FEE_EACH_BPS) / BPS;
-        uint256 fp = (v * FEE_EACH_BPS) / BPS;
-        uint256 fs = (v * FEE_EACH_BPS) / BPS;
-        uint256 fees = ft + fp + fs;
-        require(fees <= v, "game: fee");
+        uint256 toTreasury = (v * TREASURY_BPS) / BPS;
+        uint256 toPot = (v * POT_BPS) / BPS;
+        uint256 toBlockBet = (v * BLOCK_BET_DEPOSIT_BPS) / BPS;
+        uint256 toTrophy = (v * TROPHY_REV_BPS) / BPS;
 
-        (bool okT,) = treasury.call{value: ft}("");
-        (bool okS,) = secretWallet.call{value: fs}("");
-        require(okT && okS, "game: fee send");
+        (bool okTreasury,) = treasury.call{value: toTreasury}("");
+        require(okTreasury, "game: treasury");
+
+        if (toTrophy > 0) {
+            address payable t = payable(address(trophyNft));
+            if (t != address(0)) {
+                (bool okT,) = t.call{value: toTrophy}("");
+                require(okT, "game: trophy");
+            } else {
+                (bool okT2,) = treasury.call{value: toTrophy}("");
+                require(okT2, "game: trophy fallback");
+            }
+        }
 
         uint256 bonus = _depositBonusWei(v);
         credits[creditTo] += v + bonus;
 
-        uint256 hid = gameHour(block.timestamp);
-        potEthByHour[hid] += fp;
+        uint256 rid = gameRound(block.timestamp);
+        potEthByRound[rid] += toPot;
+        blockBetDepositEthByRound[rid] += toBlockBet;
 
         emit Deposited(creditTo, v, v + bonus);
     }
 
-    /// @notice One click for `msg.sender` (typical EOA path).
+    /// @notice Stake ETH on a 15s slot for the current round (must match `gameRound(block.timestamp)`).
+    function placeBet(uint8 slot) external payable nonReentrant whenNotPaused {
+        if (slot > 3) revert GameBadSlot();
+        uint256 v = msg.value;
+        if (v == 0) revert GameBadParam();
+        uint256 rid = gameRound(block.timestamp);
+        _recordBet(rid, msg.sender, slot, v);
+    }
+
+    function _recordBet(uint256 rid, address bettor, uint8 slot, uint256 v) internal {
+        userBetOnSlot[rid][bettor][slot] += v;
+        totalBetOnSlot[rid][slot] += v;
+        if (!_roundBettorSeen[rid][bettor]) {
+            _roundBettorSeen[rid][bettor] = true;
+            _roundBettors[rid].push(bettor);
+        }
+    }
+
     function click() external nonReentrant whenNotPaused {
         _click(msg.sender);
     }
 
-    /// @notice Sponsored / smart-account path: applies click logic to `player` (must be `clickExecutor[player]`).
     function clickFor(address player) external nonReentrant whenNotPaused {
         if (msg.sender != clickExecutor[player]) revert GameBadExecutor();
         _click(player);
@@ -289,42 +293,40 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
             _clicksInBlock[player][bn]++;
         }
 
-        uint256 hid = gameHour(block.timestamp);
-        uint256 m = _minuteInUtcHour(block.timestamp);
-        require(m < 60, "game: minute");
-        uint8 minute = uint8(m);
+        uint256 rid = gameRound(block.timestamp);
+        uint8 slot = slotInRound(block.timestamp);
 
-        uint256 c = clicksInHour[hid][player] + 1;
-        clicksInHour[hid][player] = c;
-        totalClicksInHour[hid]++;
-        minuteMask[hid][player] |= uint64(1) << uint64(minute);
+        uint256 c = clicksInRound[rid][player] + 1;
+        clicksInRound[rid][player] = c;
+        totalClicksInRound[rid]++;
+        slotMask[rid][player] |= uint8(1 << slot);
 
-        uint256 tier = totalClicksInHour[hid] / clicksPerHashTier;
+        uint256 tier = totalClicksInRound[rid] / clicksPerHashTier;
         uint256 needBits = tier > 4 ? 4 : tier;
         if (needBits > 0) {
             uint256 h = uint256(
-                keccak256(abi.encodePacked(player, hid, c, block.number, block.timestamp, block.prevrandao))
+                keccak256(abi.encodePacked(player, rid, c, block.number, block.timestamp, block.prevrandao))
             );
             require(h >> (256 - needBits) == 0, "game: clickhash");
         }
 
-        if (!_hourListed[hid][player]) {
-            _hourListed[hid][player] = true;
-            _participants[hid].push(player);
+        if (!_roundListed[rid][player]) {
+            _roundListed[rid][player] = true;
+            _participants[rid].push(player);
         }
 
-        emit Clicked(player, hid, c, minute);
+        emit Clicked(player, rid, c, slot);
 
         uint256 reward = baseClickReward;
         if (reward > 0) clickToken.grantVested(player, reward);
 
         BinaryTrophyNFT tn = trophyNft;
-        uint256 dropBps = trophyDropBps;
-        if (address(tn) != address(0) && dropBps > 0) {
+        uint256 w = trophyDropWeight;
+        if (address(tn) != address(0) && w > 0) {
             bytes32 roll = keccak256(
-                abi.encodePacked(player, hid, c, block.number, block.timestamp, block.prevrandao, address(this), "TROPHY")
+                abi.encodePacked(player, rid, c, block.number, block.timestamp, block.prevrandao, address(this), "TROPHY")
             );
-            if (uint256(roll) % BPS < dropBps) {
+            if (uint256(roll) % TROPHY_ROLL_DENOM < w) {
                 uint8 frag = uint8((uint256(roll) >> 128) % 256);
                 uint64 tc = uint64(c > type(uint64).max ? type(uint64).max : c);
                 try tn.mintTrophyForPlayer(player, tc, frag) {} catch {}
@@ -332,43 +334,43 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         }
     }
 
-    /// @notice After a game hour ends (+ RESET_BUFFER), finalize POT for `hourId` (owner / ops only).
-    /// @dev Open `finalizeHour` for everyone would encourage MEV races around pseudo-random entropy. **`owner`** or
-    /// **`potKeeper`** (automation relay) may finalize. Set `potKeeper` to a Gelato/Chainlink forwarder or dedicated bot.
-    /// Pseudo-random window + winner — acceptable for testnet; VRF optional for stronger mainnet fairness.
-    function finalizeHour(uint256 hourId) external nonReentrant onlyOwnerOrPotKeeper whenNotPaused {
-        uint256 cutoff = (hourId + 1) * 3600 + RESET_BUFFER;
+    /// @notice Finalize POT + Block Bet for `roundId` after that round ends (+ ROUND_BUFFER).
+    function finalizeRound(uint256 roundId) external nonReentrant onlyOwnerOrPotKeeper whenNotPaused {
+        uint256 cutoff = (roundId + 1) * 60 + ROUND_BUFFER;
         if (block.timestamp < cutoff) revert GameFinalizeEarly();
-        if (hourFinalized[hourId]) revert GameAlreadyFinalized();
+        if (roundFinalized[roundId]) revert GameAlreadyFinalized();
 
-        hourFinalized[hourId] = true;
+        roundFinalized[roundId] = true;
         _potNonce++;
 
         bytes32 entropy = keccak256(
-            abi.encodePacked(block.prevrandao, hourId, address(this), block.timestamp, _potNonce, block.number)
+            abi.encodePacked(block.prevrandao, roundId, address(this), block.timestamp, _potNonce, block.number)
         );
-        /// Random start minute 0..44 so the 15-minute span stays within the hour (minutes 0..59).
-        uint8 winStartMinute = uint8(uint256(entropy) % 45);
-        uint64 eligible = _eligibleSpanMask(winStartMinute);
+        uint8 winSlot = uint8(uint256(entropy) % 4);
+        roundWinSlot[roundId] = winSlot;
 
-        address[] storage parts = _participants[hourId];
+        _settlePot(roundId, winSlot, entropy);
+        _settleBlockBet(roundId, winSlot);
+    }
+
+    function _settlePot(uint256 roundId, uint8 winSlot, bytes32 entropy) internal {
+        address[] storage parts = _participants[roundId];
         address[] memory cand = new address[](parts.length);
         uint256 n = 0;
+        uint8 mask = uint8(1 << winSlot);
         for (uint256 i = 0; i < parts.length; ++i) {
             address a = parts[i];
-            if (clicksInHour[hourId][a] < minPotClicks) continue;
-            if ((minuteMask[hourId][a] & eligible) == 0) continue;
+            if (clicksInRound[roundId][a] < minPotClicks) continue;
+            if ((slotMask[roundId][a] & mask) == 0) continue;
             cand[n++] = a;
         }
 
-        hourWinWindow[hourId] = winStartMinute;
-
-        uint256 pe = potEthByHour[hourId];
-        potEthByHour[hourId] = 0;
+        uint256 pe = potEthByRound[roundId];
+        potEthByRound[roundId] = 0;
 
         if (n == 0) {
             potCarry += pe;
-            emit PotWin(hourId, address(0), 0, winStartMinute, entropy);
+            emit PotWin(roundId, address(0), 0, winSlot, entropy);
             return;
         }
 
@@ -376,24 +378,111 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         potCarry = 0;
 
         address winner = cand[uint256(entropy) % n];
-        hourWinner[hourId] = winner;
-        hourPayout[hourId] = gross;
+        roundWinner[roundId] = winner;
+        roundPayout[roundId] = gross;
 
         if (gross > 0) {
             (bool paid,) = payable(winner).call{value: gross}("");
             require(paid, "game: pot pay");
         }
 
-        emit PotWin(hourId, winner, gross, winStartMinute, entropy);
+        emit PotWin(roundId, winner, gross, winSlot, entropy);
+    }
+
+    function _settleBlockBet(uint256 roundId, uint8 winSlot) internal {
+        uint256 carriedIn = blockBetCarry;
+        blockBetCarry = 0;
+        uint256 fromDep = blockBetDepositEthByRound[roundId];
+        blockBetDepositEthByRound[roundId] = 0;
+        uint256 sumBets = totalBetOnSlot[roundId][0] + totalBetOnSlot[roundId][1] + totalBetOnSlot[roundId][2]
+            + totalBetOnSlot[roundId][3];
+        uint256 wst = totalBetOnSlot[roundId][winSlot];
+        uint256 pot = fromDep + sumBets + carriedIn;
+
+        address[] storage bettorsArr = _roundBettors[roundId];
+        uint256 blen = bettorsArr.length;
+        (address[] memory pAddr, uint256[] memory pStake, uint256 nP) =
+            _snapshotWinningBets(roundId, winSlot, bettorsArr, blen);
+        _clearAllBets(roundId, bettorsArr, blen);
+
+        if (pot == 0) {
+            emit BlockBetPaid(roundId, winSlot, 0, 0);
+            return;
+        }
+        if (wst == 0) {
+            blockBetCarry += pot;
+            emit BlockBetCarried(roundId, pot);
+            return;
+        }
+
+        uint256 paid = _distributeBlockBet(pot, wst, pAddr, pStake, nP);
+        uint256 dust = pot > paid ? pot - paid : 0;
+        if (dust > 0) blockBetCarry += dust;
+        emit BlockBetPaid(roundId, winSlot, pot, paid);
+    }
+
+    function _snapshotWinningBets(
+        uint256 roundId,
+        uint8 winSlot,
+        address[] storage bettorsArr,
+        uint256 blen
+    )
+        internal
+        view
+        returns (address[] memory addrOut, uint256[] memory stakeOut, uint256 nOut)
+    {
+        addrOut = new address[](blen);
+        stakeOut = new uint256[](blen);
+        nOut = 0;
+        for (uint256 i = 0; i < blen; ++i) {
+            address a = bettorsArr[i];
+            uint256 st = userBetOnSlot[roundId][a][winSlot];
+            if (st > 0) {
+                addrOut[nOut] = a;
+                stakeOut[nOut] = st;
+                ++nOut;
+            }
+        }
+    }
+
+    function _clearAllBets(uint256 roundId, address[] storage bettorsArr, uint256 blen) internal {
+        for (uint8 s = 0; s < 4; s++) {
+            totalBetOnSlot[roundId][s] = 0;
+        }
+        for (uint256 i = 0; i < blen; ++i) {
+            address a = bettorsArr[i];
+            userBetOnSlot[roundId][a][0] = 0;
+            userBetOnSlot[roundId][a][1] = 0;
+            userBetOnSlot[roundId][a][2] = 0;
+            userBetOnSlot[roundId][a][3] = 0;
+            _roundBettorSeen[roundId][a] = false;
+        }
+        delete _roundBettors[roundId];
+    }
+
+    function _distributeBlockBet(
+        uint256 totalPot,
+        uint256 winStake,
+        address[] memory payAddr,
+        uint256[] memory payStake,
+        uint256 nPay
+    ) internal returns (uint256 paidOut) {
+        paidOut = 0;
+        for (uint256 i = 0; i < nPay; ++i) {
+            uint256 share = (totalPot * payStake[i]) / winStake;
+            if (share > 0) {
+                (bool ok,) = payable(payAddr[i]).call{value: share}("");
+                require(ok, "game: block bet pay");
+                paidOut += share;
+            }
+        }
     }
 
     function currentPotEth() external view returns (uint256) {
-        uint256 hid = gameHour(block.timestamp);
-        return potEthByHour[hid] + potCarry;
+        uint256 rid = gameRound(block.timestamp);
+        return potEthByRound[rid] + potCarry;
     }
 
-    /// @notice Owner rescue for rolled POT carry only (does not touch user credit backing ETH).
-    /// @dev Allowed while paused so carry can be recovered if the game is frozen.
     function ownerSweepPotCarry(address payable to, uint256 amount) external onlyOwner {
         require(to != address(0), "game: zero");
         require(amount <= potCarry, "game: carry");
@@ -403,8 +492,6 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         emit PotCarrySwept(to, amount);
     }
 
-    /// @notice Ops: forward trophy mint through the game so `msg.sender` on the NFT is this contract (`onlyClickMintGame`).
-    /// @dev On-click probability can later call `trophyNft.mintTrophyForPlayer` from `_click` directly (same `msg.sender`).
     function mintTrophyForPlayer(address to, uint64 totalClicks, uint8 fragmentSlot) external onlyOwner whenNotPaused {
         if (address(trophyNft) == address(0)) revert GameZeroTrophyAddr();
         trophyNft.mintTrophyForPlayer(to, totalClicks, fragmentSlot);

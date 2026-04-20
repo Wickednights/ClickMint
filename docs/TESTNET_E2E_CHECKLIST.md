@@ -160,7 +160,7 @@ Use **Base Sepolia** explorer: `https://sepolia.basescan.org/address/<0x…>`
 
 | Step | Action | Expected | Pass? |
 |------|--------|----------|-------|
-| D.10.1 | Understand minting | **`ClickMintGame._click`** may call **`trophyNft.mintTrophyForPlayer`** with probability **`trophyDropBps`** / 10_000 (failures are swallowed so the click still succeeds). **Owner** may still call **`mintTrophyForPlayer`** on the game or **`mint`** on the NFT for QA. Redeploy or use **`contracts/scripts/deploy-game-and-relink.ts`** if your on-chain game predates `trophyDropBps`. | |
+| D.10.1 | Understand minting | **`ClickMintGame._click`** may call **`trophyNft.mintTrophyForPlayer`** with probability **`trophyDropWeight` / `TROPHY_ROLL_DENOM`** (1e9 scale; failures are swallowed so the click still succeeds). **Owner** may still call **`mintTrophyForPlayer`** on the game or **`mint`** on the NFT for QA. Redeploy or use **`contracts/scripts/deploy-game-and-relink.ts`** if your on-chain game predates `trophyDropWeight`. | |
 | D.10.2 | After a mint to your wallet | **`/debug`** or dashboard listens for **`Transfer`** mints; toast **“Trophy NFT received”** may fire. | |
 | D.10.3 | Basescan → **Read Contract** → **`tokenURI(tokenId)`** | Returns **`data:application/json;base64,...`** (on-chain JSON), **not** `ipfs://`. Decode base64 JSON — **`image`** is **`data:image/svg+xml;base64,...`** (on-chain SVG). | |
 | D.10.4 | Wallet / OpenSea test | NFT appears with **SVG** image from chain (marketplace support for data-URIs varies). | |

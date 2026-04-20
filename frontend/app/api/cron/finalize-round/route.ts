@@ -31,20 +31,16 @@ function isBenignFinalizeRejection(msg: string): boolean {
 }
 
 /**
- * Vercel Cron: GET /api/cron/finalize-hour
+ * Vercel Cron: GET /api/cron/finalize-round
  *
  * **Auth:** `Authorization: Bearer $CRON_SECRET` — Vercel injects this when `CRON_SECRET` exists on the
- * **same** deployment target as the cron (usually **Production**). If cron hits Production but secrets
- * are only set for Preview, you get 500 / Unauthorized.
+ * **same** deployment target as the cron (usually **Production**).
  *
- * **Schedule:** `1,6,11,16,21,26,31,36,41,46,51,56 * * * *` — first tick **:01** past each hour, then every **5 minutes**
- * so the previous game hour has multiple chances to settle. Vercel cron is minute granularity only (UTC); see
- * https://vercel.com/docs/cron-jobs
+ * **Schedule:** `* * * * *` (every minute UTC) — minute-round games need frequent ticks; benign skips are normal.
  *
- * **Transactions:** When `finalizeHour` is sent, the **keeper address** pays gas — check that wallet on BaseScan
- * (e.g. internal txs / latest). If this route returns **200** with `skipped`, no tx was broadcast.
+ * **Transactions:** `finalizeRound` gas is paid by the **keeper** — fund that wallet on Base / Base Sepolia.
  *
- * `finalizeHour` for the *previous* game hour is only valid **after** that hour ends plus **`RESET_BUFFER` (20s)**.
+ * `finalizeRound` for round `gameRound(now) - 1` is valid only **after** that minute ends plus **`ROUND_BUFFER`** (~5s).
  *
  * @see docs/LP_AERODROME_AND_AUTOMATION.md
  */
@@ -95,35 +91,35 @@ export async function GET(request: NextRequest) {
     const walletClient = createWalletClient({ account, chain: viemChain, transport });
 
     const nowSec = BigInt(Math.floor(Date.now() / 1000));
-    const gameHourNow = await publicClient.readContract({
+    const gameRoundNow = await publicClient.readContract({
       address: gameAddr,
       abi: clickMintGameAbi,
-      functionName: "gameHour",
+      functionName: "gameRound",
       args: [nowSec],
     });
 
-    if (gameHourNow === 0n) {
+    if (gameRoundNow === 0n) {
       return NextResponse.json({
         ok: true,
-        skipped: "no previous game hour yet",
-        gameHourNow: gameHourNow.toString(),
+        skipped: "no previous round yet",
+        gameRoundNow: gameRoundNow.toString(),
         keeper: account.address,
       });
     }
 
-    const targetHour = gameHourNow - 1n;
+    const targetRound = gameRoundNow - 1n;
     const finalized = await publicClient.readContract({
       address: gameAddr,
       abi: clickMintGameAbi,
-      functionName: "hourFinalized",
-      args: [targetHour],
+      functionName: "roundFinalized",
+      args: [targetRound],
     });
 
     if (finalized) {
       return NextResponse.json({
         ok: true,
         skipped: "already finalized",
-        targetHour: targetHour.toString(),
+        targetRound: targetRound.toString(),
         keeper: account.address,
       });
     }
@@ -133,13 +129,13 @@ export async function GET(request: NextRequest) {
         account,
         address: gameAddr,
         abi: clickMintGameAbi,
-        functionName: "finalizeHour",
-        args: [targetHour],
+        functionName: "finalizeRound",
+        args: [targetRound],
       });
       const hash = await walletClient.writeContract(req);
       return NextResponse.json({
         ok: true,
-        targetHour: targetHour.toString(),
+        targetRound: targetRound.toString(),
         txHash: hash,
         keeper: account.address,
       });
@@ -149,7 +145,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({
           ok: true,
           skipped: "finalize not applicable yet (or race on finalized)",
-          targetHour: targetHour.toString(),
+          targetRound: targetRound.toString(),
           detail: detail.slice(0, 800),
           keeper: account.address,
         });
@@ -158,7 +154,7 @@ export async function GET(request: NextRequest) {
         {
           ok: false,
           error: detail.slice(0, 800),
-          targetHour: targetHour.toString(),
+          targetRound: targetRound.toString(),
           keeper: account.address,
           hint: `Check keeper native ETH on ${useMainnet ? "Base mainnet" : "Base Sepolia"}, on-chain potKeeper matches this address, game not paused, and winner can receive ETH (EOA). See Vercel Logs.`,
         },
