@@ -32,7 +32,14 @@ contract Escrow is Ownable, ERC721Holder {
     function deposit(address token, uint256 tokenId, address beneficiary) external returns (uint256 holdId) {
         require(token != address(0), "escrow: token");
         require(beneficiary != address(0), "escrow: beneficiary");
-        require(IERC165(token).supportsInterface(type(IERC721).interfaceId), "escrow: erc721");
+        require(token.code.length > 0, "escrow: erc721");
+        bool supportsErc721;
+        try IERC165(token).supportsInterface(type(IERC721).interfaceId) returns (bool supported) {
+            supportsErc721 = supported;
+        } catch {
+            supportsErc721 = false;
+        }
+        require(supportsErc721, "escrow: erc721");
         holdId = nextHoldId++;
         holds[holdId] = Hold({token: token, tokenId: tokenId, depositor: msg.sender, beneficiary: beneficiary, released: false});
         IERC721(token).safeTransferFrom(msg.sender, address(this), tokenId);

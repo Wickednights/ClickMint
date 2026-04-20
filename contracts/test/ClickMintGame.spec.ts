@@ -53,14 +53,16 @@ async function deployGameFixture() {
 describe("ClickMintGame", () => {
   it("credits plain ETH receive to potCarry", async () => {
     const { game, alice } = await deployGameFixture();
-    await alice.sendTransaction({ to: await game.getAddress(), value: 12345n });
+    const tx = await alice.sendTransaction({ to: await game.getAddress(), value: 12345n });
+    await tx.wait();
     expect(await game.potCarry()).to.equal(12345n);
   });
 
   it("forwards trophy revenue to owner when no NFT minted yet", async () => {
     const { owner, trophy, alice } = await deployGameFixture();
     const before = await ethers.provider.getBalance(owner.address);
-    await alice.sendTransaction({ to: await trophy.getAddress(), value: ethers.parseEther("0.02") });
+    const tx = await alice.sendTransaction({ to: await trophy.getAddress(), value: ethers.parseEther("0.02") });
+    await tx.wait();
     const after = await ethers.provider.getBalance(owner.address);
     expect(await ethers.provider.getBalance(await trophy.getAddress())).to.equal(0n);
     expect(after - before).to.equal(ethers.parseEther("0.02"));
@@ -75,10 +77,11 @@ describe("ClickMintGame", () => {
     await wallet.waitForDeployment();
     const wAddr = await wallet.getAddress();
 
-    await owner.sendTransaction({
+    const fundTx = await owner.sendTransaction({
       to: wAddr,
       value: ethers.parseEther("2"),
     });
+    await fundTx.wait();
 
     let t = BigInt(await time.latest());
     const curR = (t - ROUND_BUFFER) / 60n;
@@ -86,7 +89,8 @@ describe("ClickMintGame", () => {
     await time.setNextBlockTimestamp(roundStart + 1n);
     await mine();
 
-    await wallet.seedCredits({ value: ethers.parseEther("1") });
+    const seedTx = await wallet.seedCredits({ value: ethers.parseEther("1") });
+    await seedTx.wait();
 
     const roundId = (BigInt(await time.latest()) - ROUND_BUFFER) / 60n;
 
@@ -113,7 +117,8 @@ describe("ClickMintGame", () => {
 
     const balBefore = await ethers.provider.getBalance(wAddr);
     await wallet.setRejectPush(false);
-    await wallet.claimPot();
+    const claimTx = await wallet.claimPot();
+    await claimTx.wait();
     const balAfter = await ethers.provider.getBalance(wAddr);
     expect(balAfter).to.be.gt(balBefore);
     expect(await game.potClaimableEth(wAddr)).to.equal(0n);
