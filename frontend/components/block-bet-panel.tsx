@@ -281,10 +281,8 @@ export function BlockBetPanel({
       <div className="flex flex-col gap-3 border-b border-white/10 pb-3 md:flex-row md:flex-wrap md:items-center md:justify-between">
         <div>
           <h3 className="font-label text-[10px] uppercase tracking-[0.28em] text-cyan-200/95">Block bet</h3>
-          <p className="mt-1 max-w-xl font-body text-[11px] leading-snug text-cyan-100/75 md:text-xs">
-            <span className="font-semibold text-cyan-50">46 pools</span> — slot <span className="font-mono">k</span> is
-            the 15s window <span className="font-mono">k–(k+14)</span> in the current minute. One random winning window
-            each round.{" "}
+          <p className="mt-1 max-w-xl font-body text-[11px] text-cyan-100/75 md:text-xs">
+            46 pools · 15s windows · one winner/round.{" "}
             <Link href="/documentation#block-bet" className="text-cyan-300 underline-offset-2 hover:underline">
               Rules
             </Link>
@@ -315,16 +313,15 @@ export function BlockBetPanel({
         ) : null}
         {ring}
         <p className="text-center font-mono text-[10px] text-cyan-300/85 md:text-[11px]">
-          Second <span className="font-semibold text-cyan-100">{sec}</span> in minute — tiles whose window includes it
-          glow · <span className="text-cyan-400/90">{PERIMETER_COUNT} pools</span> (not 4×12: corners count once)
+          Sec <span className="font-semibold text-cyan-100">{sec}</span> · glow = active window · {PERIMETER_COUNT} pools
         </p>
         {belowRing ? (
           <div className="flex w-full max-w-md flex-col items-center justify-center gap-2 px-2">{belowRing}</div>
         ) : null}
       </div>
 
-      <p className="mt-3 text-center font-body text-[10px] leading-relaxed text-cyan-700/95 md:text-[11px]">
-        Randomness is on-chain (pseudo). High stakes → plan VRF.
+      <p className="mt-2 text-center font-body text-[9px] text-cyan-600/90 md:text-[10px]">
+        On-chain randomness — see docs for VRF.
       </p>
     </section>
   );

@@ -52,8 +52,7 @@ import { cn } from "@/lib/utils";
 import { BlockBetPanel } from "@/components/block-bet-panel";
 import { ClickHistoryPanel } from "@/components/click-history-panel";
 import { SidebarRecentTrophies, TrophyRoomGrid } from "@/components/trophy-room-panel";
-import { EscrowPanel } from "@/components/escrow-panel";
-import { getClickAddress, getEscrowAddress, getGameAddress, getTrophyNftAddress } from "@/lib/addresses";
+import { getClickAddress, getGameAddress, getTrophyNftAddress } from "@/lib/addresses";
 import { economyPresetHint, economyPresetShortLabel } from "@/lib/economy-preset";
 import { useClickMintAudio } from "@/hooks/use-clickmint-audio";
 import {
@@ -86,16 +85,6 @@ function slotSpanLabel(winSlot: number): string {
   return `${a}–${a + 14}s in minute`;
 }
 
-function formatEpochLocalShort(epochSec: number): string {
-  return new Date(epochSec * 1000).toLocaleString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
 function formatCountdown(totalSec: number): string {
   if (totalSec <= 0) return "0:00";
   const h = Math.floor(totalSec / 3600);
@@ -120,10 +109,13 @@ function Icon({ name, className }: { name: string; className?: string }) {
 function WinnerTable({ rows, genesisGameHour }: { rows: PotRow[]; genesisGameHour: bigint | null }) {
   if (rows.length === 0) {
     return (
-      <p className="text-center font-body text-sm leading-relaxed text-secondary opacity-80 md:text-base">
-        No POT finalizations in the indexed block range. Set{" "}
-        <code className="text-primary-fixed/90">NEXT_PUBLIC_GAME_DEPLOY_BLOCK</code> to your game contract creation
-        block on {clickmintChainLabel()} if the RPC truncates logs, then redeploy the frontend.
+      <p className="text-center font-body text-sm text-secondary opacity-80 md:text-base">
+        No rows in range. Set <code className="text-primary-fixed/90">NEXT_PUBLIC_GAME_DEPLOY_BLOCK</code> if logs are
+        truncated — see{" "}
+        <Link href="/documentation" className="text-primary-fixed underline-offset-2 hover:underline">
+          docs
+        </Link>
+        .
       </p>
     );
   }
@@ -164,11 +156,12 @@ function WinnerTable({ rows, genesisGameHour }: { rows: PotRow[]; genesisGameHou
           </tbody>
         </table>
       </div>
-      <p className="text-center font-body text-xs text-secondary opacity-75 md:text-sm">
-        Amounts match on-chain <code className="text-primary-fixed/90">PotWin.ethPayout</code> (wei). Winners receive
-        that ETH in the same <code className="text-primary-fixed/90">finalizeRound</code> transaction.
-        Each minute round&apos;s POT slice stays in the contract until that round is finalized; no-winner rounds roll into{" "}
-        <code className="text-primary-fixed/90">potCarry</code>.
+      <p className="text-center font-body text-[11px] text-secondary opacity-75 md:text-xs">
+        On-chain <code className="text-primary-fixed/90">PotWin</code> / <code className="text-primary-fixed/90">finalizeRound</code>
+        .{" "}
+        <Link href="/documentation#pot" className="text-primary-fixed underline-offset-2 hover:underline">
+          Details
+        </Link>
       </p>
     </div>
   );
@@ -187,9 +180,7 @@ function SidebarPotWinners({ rows, genesisGameHour }: { rows: PotRow[]; genesisG
         POT winners
       </h3>
       {shown.length === 0 ? (
-        <p className="text-center font-body text-sm leading-snug text-secondary">
-          No POT winners in range yet — finalize rounds (cron or operator) or widen log history via deploy block env.
-        </p>
+        <p className="text-center font-body text-xs text-secondary">None in indexed range.</p>
       ) : (
         <ul className="space-y-2.5">
           {shown.map((r) => (
@@ -218,7 +209,6 @@ export function ClickMintDashboard() {
   const gameAddr = getGameAddress();
   const clickAddr = getClickAddress();
   const trophyAddr = getTrophyNftAddress();
-  const escrowAddr = getEscrowAddress();
 
   const {
     musicOn,
@@ -943,12 +933,8 @@ export function ClickMintDashboard() {
           style={{ width: `${potFillPct}%` }}
         />
       </div>
-      <p className="font-body text-[11px] leading-snug text-secondary opacity-90 md:text-xs">
-        {minPotClicks !== undefined ? (
-          <>
-            Qualify: ≥{minPotClicks.toString()} clicks this round + overlap with winning 15s slot.{" "}
-          </>
-        ) : null}
+      <p className="font-body text-[10px] text-secondary opacity-90 md:text-[11px]">
+        {minPotClicks !== undefined ? <>≥{minPotClicks.toString()} clicks + winning slot. </> : null}
         <Link href="/documentation#pot" className="text-primary-fixed/90 underline-offset-2 hover:underline">
           Rules
         </Link>
@@ -966,84 +952,54 @@ export function ClickMintDashboard() {
 
   const resetTimerStrip =
     potClock !== null ? (
-      <div className="w-full max-w-lg rounded border border-outline-variant/20 bg-surface-container-low/30 px-3 py-2.5 text-center font-body text-[12px] leading-snug text-secondary md:text-sm">
-        <p className="font-headline text-sm font-bold tabular-nums text-white md:text-base">
+      <div className="w-full max-w-lg rounded border border-outline-variant/20 bg-surface-container-low/30 px-3 py-2 text-center font-body text-[11px] text-secondary md:text-xs">
+        <p className="font-headline text-sm font-bold tabular-nums text-white">
           Next round <span className="text-primary-fixed">{formatCountdown(potClock.secToRoundEnd)}</span>
         </p>
-        <p className="mt-1 text-[11px] text-on-surface/80 md:text-xs">
-          ~{formatEpochLocalShort(potClock.nextBoundaryEpochSec)} your time
-        </p>
-        <p className="mt-2 text-[12px] font-semibold text-primary-fixed md:text-sm">
-          15s slot: <span className="text-on-surface/90">{wallSlotLabel}</span>
-          <span className="mx-1.5 font-normal text-outline-variant">·</span>
-          <span className="font-normal text-on-surface/85">
-            {new Date(tickSec * 1000).toLocaleTimeString(undefined, {
-              hour: "numeric",
-              minute: "2-digit",
-              second: "2-digit",
-            })}{" "}
-            local
-          </span>
+        <p className="mt-0.5 text-[10px] text-on-surface/75 md:text-[11px]">
+          {wallSlotLabel} ·{" "}
+          {new Date(tickSec * 1000).toLocaleTimeString(undefined, {
+            hour: "numeric",
+            minute: "2-digit",
+            second: "2-digit",
+          })}
         </p>
         {prevRound !== undefined && prevFinalized !== undefined ? (
-          <p className="mt-2 text-[11px] text-secondary md:text-xs">
-            Last {potRoundKind(genesisGameHour)} {hourIdForDisplay(prevRound, genesisGameHour)}{" "}
-            {prevFinalized ? (
-              <span className="text-emerald-300/90">settled</span>
+          <p className="mt-1.5 text-[10px] md:text-[11px]">
+            Prev {hourIdForDisplay(prevRound, genesisGameHour)}{" "}
+            {prevFinalized ? <span className="text-emerald-300/90">done</span> : <span className="text-amber-200/90">open</span>}
+            {prevFinalized && prevRoundWinSlot !== undefined ? (
+              <>
+                {" "}
+                · <span className="text-primary-fixed">{slotSpanLabel(Number(prevRoundWinSlot))}</span>
+              </>
+            ) : null}
+          </p>
+        ) : null}
+        {prevRound !== undefined && prevFinalized === false && potClock.secUntilFinalizeGate !== null ? (
+          <p className="mt-1 text-[10px] md:text-[11px]">
+            {potClock.secUntilFinalizeGate > 0 ? (
+              <>
+                Settle in <span className="tabular-nums text-primary-fixed">{formatCountdown(potClock.secUntilFinalizeGate)}</span>
+              </>
             ) : (
-              <span className="text-amber-200/90">awaiting settlement</span>
+              <span className="text-amber-100/95">Ready to finalize</span>
             )}
           </p>
         ) : null}
-        {prevRound !== undefined ? (
-          <div className="mt-1 text-[11px] leading-snug md:text-xs">
-            {prevFinalized ? (
-              <p className="text-secondary">
-                Winning slot:{" "}
-                <span className="font-semibold text-primary-fixed">
-                  {prevRoundWinSlot !== undefined ? slotSpanLabel(Number(prevRoundWinSlot)) : "—"}
-                </span>
-              </p>
-            ) : potClock.secUntilFinalizeGate !== null ? (
-              potClock.secUntilFinalizeGate > 0 ? (
-                <p className="text-secondary">
-                  Settlement — {potRoundKind(genesisGameHour)} {hourIdForDisplay(prevRound, genesisGameHour)} in{" "}
-                  <span className="font-semibold tabular-nums text-primary-fixed">
-                    {formatCountdown(potClock.secUntilFinalizeGate)}
-                  </span>
-                </p>
-              ) : (
-                <p className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100/95 md:text-xs">
-                  {potRoundKind(genesisGameHour)} {hourIdForDisplay(prevRound, genesisGameHour)} ready to settle (operators).
-                </p>
-              )
-            ) : null}
-          </div>
-        ) : null}
       </div>
     ) : (
-      <p className="font-body text-[12px] text-secondary">Loading round clock…</p>
+      <p className="font-body text-[11px] text-secondary">Loading clock…</p>
     );
 
   const terminalBody = (
     <>
-      {/* One-line objective for new players */}
-      <section className="mx-auto w-full max-w-xl space-y-3 px-2 text-center">
-        <p className="mx-auto max-w-xl font-body text-[13px] leading-relaxed text-secondary md:text-sm">
-          <span className="font-semibold text-on-surface/95">Objective:</span> spend credits to{" "}
-          <span className="text-primary-fixed/95">CLICK</span> each minute round, earn $CLICK (vesting), and compete for the
-          ETH pot + Block Bet. Use <span className="text-primary-fixed/90">Claim vested</span> for time-unlocked tokens, or{" "}
-          <span className="text-primary-fixed/90">Early claim</span> to exit locked balance early — details under the amount
-          field (<span className="font-semibold text-primary-fixed/85">More info</span>).
-        </p>
-        <p className="mx-auto max-w-xl font-body text-[12px] leading-relaxed text-secondary md:text-[13px]">
-          <span className="font-semibold text-on-surface/95">Trophies:</span> lucky clicks can mint{" "}
-          <span className="text-primary-fixed/90">Binary Trophy</span> NFTs to your wallet. Each one can earn ongoing{" "}
-          <span className="font-semibold text-primary-fixed/85">revenue share</span> from protocol fees.{" "}
-          <Link href="/documentation#trophies" className="text-primary-fixed underline-offset-2 hover:underline">
-            Read how trophies &amp; revenue work
+      <section className="mx-auto w-full max-w-md px-2 text-center">
+        <p className="font-body text-[11px] text-secondary md:text-xs">
+          Credits → <span className="text-primary-fixed/90">CLICK</span> → $CLICK + POT + block bet.{" "}
+          <Link href="/documentation" className="text-primary-fixed underline-offset-2 hover:underline">
+            How it works
           </Link>
-          .
         </p>
       </section>
 
@@ -1061,14 +1017,12 @@ export function ClickMintDashboard() {
       <section className="mx-auto flex w-full max-w-sm flex-col items-center space-y-5 md:max-w-lg">
         {!gameLinkPending && !gameLinkOk && (
           <div className="w-full border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-center font-body text-[11px] text-amber-200 md:text-xs">
-            Game not linked. Owner runs <span className="font-mono text-amber-100">CLICK.setGame({gameAddr})</span> (
-            <span className="font-mono">contracts/scripts/set-game.ts</span>).
+            Game not linked — owner: <span className="font-mono text-amber-100">set-game.ts</span>.
           </div>
         )}
         {baseClickReward !== undefined && baseClickReward === 0n && (
           <div className="w-full border border-outline-variant/40 bg-surface-container-low/80 px-3 py-2 text-center font-body text-[11px] text-secondary md:text-xs">
-            <span className="text-primary-fixed/90">No $CLICK per click</span> here —{" "}
-            <span className="font-mono">baseClickReward</span> is 0. See{" "}
+            <span className="text-primary-fixed/90">No $CLICK per click</span> — see{" "}
             <Link href="/documentation" className="text-primary-fixed underline">
               docs
             </Link>
@@ -1076,10 +1030,9 @@ export function ClickMintDashboard() {
           </div>
         )}
         {tinyClickCost && (
-          <p className="w-full text-center font-body text-[11px] leading-snug text-amber-200/90 md:text-xs">
-            Test economy: <span className="font-mono">clickCostCredits</span> is tiny (often 1 wei), so credit numbers are
-            huge. Owner: run <span className="font-mono">setEconomy</span> via{" "}
-            <span className="font-mono">contracts/scripts/set-economy-round.ts</span>.
+          <p className="w-full text-center font-body text-[11px] text-amber-200/90 md:text-xs">
+            Test mode: tiny <span className="font-mono">clickCostCredits</span> → huge credit counts. Fix via{" "}
+            <span className="font-mono">set-economy-round.ts</span>.
           </p>
         )}
       </section>
@@ -1199,15 +1152,11 @@ export function ClickMintDashboard() {
                 Add credits
               </button>
               {gasless.status === "ready" ? (
-                <p className="max-w-md px-2 text-center font-body text-[11px] leading-snug text-secondary md:text-xs">
-                  <span className="font-semibold text-primary-fixed/90">Gasless mode active</span> — clicks are free of
-                  gas. Your EOA receives all rewards and uses your existing credits. Executor:{" "}
-                  <span className="font-mono text-primary-fixed/85">
-                    {gasless.smartAccountAddress
-                      ? `${gasless.smartAccountAddress.slice(0, 6)}…${gasless.smartAccountAddress.slice(-4)}`
-                      : "—"}
-                  </span>
-                  .
+                <p className="max-w-sm px-2 text-center font-mono text-[10px] text-secondary md:text-[11px]">
+                  Gasless ·{" "}
+                  {gasless.smartAccountAddress
+                    ? `${gasless.smartAccountAddress.slice(0, 6)}…${gasless.smartAccountAddress.slice(-4)}`
+                    : "—"}
                 </p>
               ) : null}
             </div>
@@ -1226,12 +1175,8 @@ export function ClickMintDashboard() {
               <p className="font-headline text-3xl font-black text-white md:text-4xl md:tabular-nums">
                 {clickCostCredits === undefined ? "—" : unlimitedClicks ? "∞" : formatWholeCredits(playsRemainingBig)}
               </p>
-              <p className="mt-2 font-body text-[12px] leading-snug text-primary-fixed/90 md:text-sm">
-                {clickCostCredits === undefined
-                  ? "Loading…"
-                  : unlimitedClicks
-                    ? "Free clicks — balance still tracks deposits."
-                    : "Remaining clicks (1 credit each)."}
+              <p className="mt-1 font-body text-[11px] text-primary-fixed/80 md:text-xs">
+                {clickCostCredits === undefined ? "…" : unlimitedClicks ? "Free mode" : "1 credit / click"}
               </p>
             </div>
             <div className="h-10 w-px bg-outline-variant/30" aria-hidden />
@@ -1317,17 +1262,13 @@ export function ClickMintDashboard() {
               </div>
             ) : null}
           </div>
-          <div className="mx-auto mt-2 flex max-w-md flex-col items-center gap-2">
-            <p className="text-center font-body text-[12px] leading-snug text-secondary md:text-sm">
-              Cash out <span className="font-semibold text-on-surface/90">unvested</span> early — not the same as{" "}
-              <span className="font-semibold">Claim vested</span>.
-            </p>
+          <div className="mx-auto mt-2 flex max-w-md flex-col items-center gap-1">
             <button
               type="button"
               onClick={() => setEarlyClaimInfoOpen(true)}
-              className="font-label text-[11px] uppercase tracking-wider text-primary-fixed underline-offset-2 hover:underline"
+              className="font-label text-[10px] uppercase tracking-wider text-primary-fixed underline-offset-2 hover:underline md:text-[11px]"
             >
-              More info
+              Early vs vested — what’s the difference?
             </button>
           </div>
           <Dialog open={earlyClaimInfoOpen} onOpenChange={setEarlyClaimInfoOpen}>
@@ -1335,38 +1276,27 @@ export function ClickMintDashboard() {
               <DialogHeader>
                 <DialogTitle>Early claim</DialogTitle>
                 <DialogDescription className="text-left text-secondary">
-                  How unvested exit differs from claiming time-unlocked tokens.
+                  Unvested exit ≠ time-unlocked claim.
                 </DialogDescription>
               </DialogHeader>
-              <div className="space-y-3 text-left font-body text-sm leading-relaxed text-secondary">
+              <div className="space-y-2 text-left font-body text-sm text-secondary">
                 <p>
-                  <span className="font-semibold text-on-surface/95">Early claim</span> uses your{" "}
-                  <span className="font-semibold">locked (unvested)</span> balance.{" "}
-                  <span className="font-semibold text-on-surface/95">Claim vested</span> only releases tokens that have
-                  finished vesting on schedule.
-                </p>
-                <p>
-                  When you early-claim, part of what you exit stays in the protocol (burn, treasury, liquidity pools). You
-                  keep roughly <span className="font-semibold text-primary-fixed/90">one fifth</span> of the amount you exit
-                  as liquid <span className="text-primary-fixed/90">$CLICK</span> in your wallet — exact amounts follow
-                  on-chain rules.
-                </p>
-                <p>
-                  The <span className="font-semibold">Preview</span> line under the form (when you enter an amount) estimates
-                  liquid $CLICK from your input.
+                  <span className="font-semibold text-on-surface/95">Early</span> spends locked balance; protocol keeps a
+                  cut. <span className="font-semibold text-on-surface/95">Claim vested</span> only releases schedule-unlocked
+                  tokens.
                 </p>
                 <p>
                   <Link href="/documentation#early-claim" className="text-primary-fixed underline-offset-2 hover:underline">
-                    Full early-claim documentation
+                    Full docs
                   </Link>
                 </p>
               </div>
             </DialogContent>
           </Dialog>
           {earlyLiquidPreview !== null && canAct && parsedEarlySpend.ok && (
-            <p className="mx-auto mt-2 max-w-md text-center font-body text-[12px] leading-snug text-primary-fixed/95 md:text-sm">
-              Preview: exiting {formatClickDisplayWei(earlyLiquidPreview.spend)} unvested → about{" "}
-              {formatClickDisplayWei(earlyLiquidPreview.liquid)} liquid $CLICK to your wallet (estimate from your input).
+            <p className="mx-auto mt-2 max-w-md text-center font-mono text-[11px] text-primary-fixed/95 md:text-xs">
+              ~{formatClickDisplayWei(earlyLiquidPreview.liquid)} liquid from {formatClickDisplayWei(earlyLiquidPreview.spend)}{" "}
+              unvested
             </p>
           )}
           {canAct && !parsedEarlySpend.ok && (
@@ -1386,10 +1316,6 @@ export function ClickMintDashboard() {
           )}
         </div>
       </section>
-
-      <div className="mx-auto flex w-full max-w-xl justify-center px-1">
-        <EscrowPanel escrowAddr={escrowAddr} trophyAddr={trophyAddr} />
-      </div>
 
       {/* Minimal footer strip */}
       <section className="flex max-w-lg flex-col items-center gap-4 text-center">
@@ -1580,7 +1506,7 @@ export function ClickMintDashboard() {
             <DialogHeader>
               <DialogTitle>Add click credits</DialogTitle>
               <DialogDescription id="deposit-dialog-desc" className="text-left font-body text-sm text-secondary">
-                Deposit ETH for in-game credits (not $CLICK). Larger single deposits may include tier bonuses.
+                ETH → click credits (not $CLICK). Bonuses on larger deposits.
               </DialogDescription>
             </DialogHeader>
             {clickCostCredits !== undefined && clickCostCredits === 0n && (
@@ -1641,18 +1567,8 @@ export function ClickMintDashboard() {
                 <span className="font-mono text-primary-fixed/80">set-economy-round.ts</span>.
               </p>
             )}
-            <p className="text-center font-body text-[10px] leading-snug text-secondary opacity-90">
-              Deposits use native ETH. To fund from USDC or other tokens, swap to ETH on {clickmintChainLabel()} first
-              (e.g.{" "}
-              <a
-                href="https://app.uniswap.org/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary-fixed underline-offset-2 hover:underline"
-              >
-                Uniswap
-              </a>
-              ), then add credits here.
+            <p className="text-center font-body text-[10px] text-secondary opacity-90">
+              Native ETH only — swap on {clickmintChainLabel()} first if needed.
             </p>
             <p className="text-center">
               <Link
@@ -1877,11 +1793,11 @@ export function ClickMintDashboard() {
             <h2 className="mb-4 font-headline text-xs font-bold uppercase tracking-[0.2em] text-primary-fixed">
               Trophy room
             </h2>
-            <p className="mb-4 font-body text-[10px] text-secondary opacity-80">
-              On-chain Binary Trophy mints (lucky clicks). Thumbnails use metadata from the contract. Card links open
-              BaseScan. For full history if your RPC truncates logs, set{" "}
-              <code className="text-primary-fixed/90">NEXT_PUBLIC_TROPHY_DEPLOY_BLOCK</code> to the NFT contract creation
-              block.
+            <p className="mb-3 font-body text-[10px] text-secondary opacity-80">
+              Lucky-click NFTs.{" "}
+              <Link href="/documentation#trophies" className="text-primary-fixed underline-offset-2 hover:underline">
+                Docs
+              </Link>
             </p>
             <TrophyRoomGrid trophyAddr={trophyAddr} rows={trophyMintHistory} />
           </section>
