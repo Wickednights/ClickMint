@@ -31,7 +31,7 @@ export default function DocumentationPage() {
         <p className="mt-4 font-headline text-lg text-primary-fixed md:text-xl">Click Fast. Earn Real. Win Epic.</p>
         <p className="mt-4 font-body text-sm leading-relaxed text-secondary md:text-base">
           Target product (see repo <span className="font-mono text-primary-fixed/90">docs/GAME_MECHANICS.md</span> for the full
-          canonical spec): minute-long rounds on Base, ETH Click Pot, Block Bet on four 15-second slots, and optional gasless
+          canonical spec): minute-long rounds on Base, ETH Click Pot, Block Bet on 46 fifteen-second windows per minute, and optional gasless
           clicks via Pimlico. Until your deployment catches up, treat on-chain values as{" "}
           <strong className="text-white">live</strong> and this page as <strong className="text-white">roadmap-aligned</strong>{" "}
           copy.
@@ -52,9 +52,11 @@ export default function DocumentationPage() {
               is per <strong className="text-white">L2 block</strong> (burst-friendly); the UI may add a short cooldown.
             </li>
             <li>
-              <strong className="text-white">Block Bet (optional)</strong> — stake ETH on slot 0–3 for the current minute; pool
-              settles on <span className="font-mono text-primary-fixed/90">finalizeRound</span> with the same winning slot
-              entropy as the POT (see below).
+              <strong className="text-white">Block Bet (optional)</strong> — stake ETH on window{" "}
+              <span className="font-mono text-primary-fixed/90">0..45</span> (slot <span className="font-mono">k</span> = seconds{" "}
+              <span className="font-mono">k–(k+14)</span> in the minute).{" "}
+              <span className="font-mono text-primary-fixed/90">finalizeRound</span> picks a winning window for the block bet
+              separately from the POT’s four click quadrants.
             </li>
             <li>
               <strong className="text-white">Watch for trophies</strong> — random Binary Trophy NFT mints; holders accrue ETH
@@ -120,9 +122,14 @@ export default function DocumentationPage() {
         <Section id="block-bet" title="Block Bet">
           <ul className="mt-3 list-disc space-y-2 pl-5 font-body text-sm leading-relaxed text-secondary md:text-base">
             <li>
-              Pool = carry-forward + 20% deposit slice for the round + explicit <span className="font-mono">placeBet</span> stakes.
+              Pool = carry-forward + 20% deposit slice for the round + explicit <span className="font-mono">placeBet</span>{" "}
+              stakes on slots <span className="font-mono">0..45</span> (46 independent pools).
             </li>
-            <li>Winning slot matches POT settlement; winners on that slot split pro-rata. If no stake on the winning slot, the pool carries.</li>
+            <li>
+              Winning block-bet slot is <span className="text-white">0..45</span> (one 15s window). POT still uses four click
+              quadrants <span className="font-mono">0..3</span>. Winners on the winning window split pro-rata; if unstaked,
+              the pool carries.
+            </li>
             <li>v1 is ETH-only on the game contract.</li>
           </ul>
         </Section>

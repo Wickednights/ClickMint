@@ -68,7 +68,7 @@ This repository **does not** include that helper yet; it is a small dedicated co
 ## How minute POT + Block Bet settlement works
 
 1. **`finalizeRound(roundId)`** on **ClickMintGame** runs **after** that UTC **minute** round ends and **`ROUND_BUFFER`** (~5s) has passed — see `GameFinalizeEarly` in the contract.
-2. It derives **pseudo-random** entropy, picks a **winning 15-second slot** `0–3` within the minute, then **POT** eligible players (min clicks + click in that slot) and **Block Bet** parimutuel winners on the same slot. Sends accumulated POT ETH (`potEthByRound` + `potCarry`) to the POT winner; settles or carries the Block Bet pool. If there is no eligible POT winner, **carries** forward in **`potCarry`**.
+2. It derives **pseudo-random** entropy. **POT:** winning **quadrant** `0–3` (same buckets as **`slotInRound`** for clicks); eligible players need min clicks and a click in that quadrant. **Block bet:** a **separate** draw picks winning window **`0..45`** (15s slice starting at second `k`). POT ETH goes to the POT winner; block-bet ETH splits among stakers on the winning **`k`**, or **carries** if unstaked. If there is no eligible POT winner, POT ETH **carries** in **`potCarry`**.
 3. **`owner`** or **`potKeeper`** may call `finalizeRound` (when `potKeeper` is set).
 
 ### Automatic settlement (no manual owner click)

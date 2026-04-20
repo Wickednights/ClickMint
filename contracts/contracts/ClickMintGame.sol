@@ -42,8 +42,11 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     mapping(uint256 roundId => bool) public roundFinalized;
     mapping(uint256 roundId => address) public roundWinner;
     mapping(uint256 roundId => uint256) public roundPayout;
-    /// @notice Winning 15s slot index 0..3 after `finalizeRound`.
+    /// @notice Winning **POT** quadrant 0..3 (same as click `slotInRound` buckets) after `finalizeRound`. Block bet uses 46 windows separately.
     mapping(uint256 roundId => uint8) public roundWinSlot;
+
+    /// @notice Block bet: 46 disjoint 15s windows in a minute — window `k` covers seconds `[k, k+14]` for `k` in `0..45`.
+    uint256 public constant BLOCK_BET_SLOT_COUNT = 46;
 
     mapping(address => uint256) public credits;
     mapping(uint256 roundId => mapping(address => uint256)) public clicksInRound;
@@ -253,9 +256,9 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         emit Deposited(creditTo, v, v + bonus);
     }
 
-    /// @notice Stake ETH on a 15s slot for the current round (must match `gameRound(block.timestamp)`).
+    /// @notice Stake ETH on block-bet window `slot` (0..45) for the current round; window covers seconds `slot..slot+14` of the wall-clock minute.
     function placeBet(uint8 slot) external payable nonReentrant whenNotPaused {
-        if (slot > 3) revert GameBadSlot();
+        if (uint256(slot) >= BLOCK_BET_SLOT_COUNT) revert GameBadSlot();
         uint256 v = msg.value;
         if (v == 0) revert GameBadParam();
         uint256 rid = gameRound(block.timestamp);
@@ -346,11 +349,14 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         bytes32 entropy = keccak256(
             abi.encodePacked(block.prevrandao, roundId, address(this), block.timestamp, _potNonce, block.number)
         );
-        uint8 winSlot = uint8(uint256(entropy) % 4);
-        roundWinSlot[roundId] = winSlot;
+        uint8 potQuadrant = uint8(uint256(entropy) % 4);
+        roundWinSlot[roundId] = potQuadrant;
 
-        _settlePot(roundId, winSlot, entropy);
-        _settleBlockBet(roundId, winSlot);
+        _settlePot(roundId, potQuadrant, entropy);
+
+        bytes32 betMix = keccak256(abi.encodePacked(entropy, roundId, address(this), "BLOCKBET46", block.number));
+        uint8 blockBetWin = uint8(uint256(betMix) % BLOCK_BET_SLOT_COUNT);
+        _settleBlockBet(roundId, blockBetWin);
     }
 
     function _settlePot(uint256 roundId, uint8 winSlot, bytes32 entropy) internal {
@@ -394,8 +400,7 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         blockBetCarry = 0;
         uint256 fromDep = blockBetDepositEthByRound[roundId];
         blockBetDepositEthByRound[roundId] = 0;
-        uint256 sumBets = totalBetOnSlot[roundId][0] + totalBetOnSlot[roundId][1] + totalBetOnSlot[roundId][2]
-            + totalBetOnSlot[roundId][3];
+        uint256 sumBets = _sumBetsOnAllSlots(roundId);
         uint256 wst = totalBetOnSlot[roundId][winSlot];
         uint256 pot = fromDep + sumBets + carriedIn;
 
@@ -445,19 +450,39 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         }
     }
 
+    function _sumBetsOnAllSlots(uint256 roundId) internal view returns (uint256 sum) {
+        sum = 0;
+        for (uint256 s = 0; s < BLOCK_BET_SLOT_COUNT; ++s) {
+            sum += totalBetOnSlot[roundId][uint8(s)];
+        }
+    }
+
     function _clearAllBets(uint256 roundId, address[] storage bettorsArr, uint256 blen) internal {
-        for (uint8 s = 0; s < 4; s++) {
-            totalBetOnSlot[roundId][s] = 0;
+        for (uint256 s = 0; s < BLOCK_BET_SLOT_COUNT; ++s) {
+            totalBetOnSlot[roundId][uint8(s)] = 0;
         }
         for (uint256 i = 0; i < blen; ++i) {
             address a = bettorsArr[i];
-            userBetOnSlot[roundId][a][0] = 0;
-            userBetOnSlot[roundId][a][1] = 0;
-            userBetOnSlot[roundId][a][2] = 0;
-            userBetOnSlot[roundId][a][3] = 0;
+            for (uint256 s = 0; s < BLOCK_BET_SLOT_COUNT; ++s) {
+                userBetOnSlot[roundId][a][uint8(s)] = 0;
+            }
             _roundBettorSeen[roundId][a] = false;
         }
         delete _roundBettors[roundId];
+    }
+
+    /// @notice All `totalBetOnSlot` values for `roundId` (index = window start second 0..45).
+    function totalBetsAllSlots(uint256 roundId) external view returns (uint256[46] memory out) {
+        for (uint256 i = 0; i < BLOCK_BET_SLOT_COUNT; ++i) {
+            out[i] = totalBetOnSlot[roundId][uint8(i)];
+        }
+    }
+
+    /// @notice User stakes per slot for `roundId` (same indexing as `totalBetsAllSlots`).
+    function userBetsAllSlots(uint256 roundId, address bettor) external view returns (uint256[46] memory out) {
+        for (uint256 i = 0; i < BLOCK_BET_SLOT_COUNT; ++i) {
+            out[i] = userBetOnSlot[roundId][bettor][uint8(i)];
+        }
     }
 
     function _distributeBlockBet(
