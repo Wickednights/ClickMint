@@ -808,16 +808,20 @@ export function ClickMintDashboard() {
     }
   };
 
-  const onEarlySpend = async () => {
+  const onEarlySpend = async (fixedAmountWei?: bigint) => {
     if (!clickAddr || wrongChain || !address) return;
     const cap = unvestedWei ?? 0n;
     let amt: bigint;
-    try {
-      amt = parseEther(earlyAmt.trim() === "" ? "0" : earlyAmt.trim());
-    } catch {
-      sfxRef.current.playError();
-      toast.error("Early claim", { description: "Enter a valid $CLICK amount (on-chain uses ether-style decimals)." });
-      return;
+    if (fixedAmountWei !== undefined) {
+      amt = fixedAmountWei;
+    } else {
+      try {
+        amt = parseEther(earlyAmt.trim() === "" ? "0" : earlyAmt.trim());
+      } catch {
+        sfxRef.current.playError();
+        toast.error("Early claim", { description: "Enter a valid $CLICK amount (on-chain uses ether-style decimals)." });
+        return;
+      }
     }
     if (amt === 0n) {
       toast.message("Enter an amount ≤ your unvested balance (see Unvested).");
@@ -1063,100 +1067,112 @@ export function ClickMintDashboard() {
 
   const blockBetPotEthDisplay = formatCompactHudPotEthDisplay(blockBet.totalPotWei);
 
+  const hudTileMax = "w-full max-w-[6.25rem]";
+
   /** Mobile-only: 3-column top/bottom bands in the gutter; default bet under block pot, same state as menu card. */
   const mobileGameCornerHud = (
     <div className="pointer-events-none absolute inset-0 z-[25] md:hidden" role="region" aria-label="Game quick stats">
-      <div className="pointer-events-none absolute left-0 right-0 top-0 grid grid-cols-[1fr_minmax(0,auto)_1fr] items-start gap-x-1 sm:gap-x-2">
-        <div
-          className="min-w-0 rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1.5 text-left shadow-[0_0_20px_rgba(0,251,251,0.15)] sm:px-2"
-          title="Credits — remaining full clicks at current click cost"
-        >
-          <span className="block font-label text-[8px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80 sm:text-[9px]">
-            Credits
-          </span>
-          <span className="mt-0.5 block font-mono text-xs font-bold tabular-nums leading-none text-primary-fixed sm:text-sm">
-            {!isConnected ? "—" : clickCostCredits === undefined ? "…" : unlimitedClicks ? "∞" : formatWholeCredits(playsRemainingBig)}
-          </span>
-        </div>
-        <div
-          className="max-w-[31vw] rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1.5 text-center shadow-[0_0_20px_rgba(0,251,251,0.15)] sm:max-w-[9.5rem] sm:px-2"
-          title={vestingDisplay.unvested.caption}
-        >
-          <span className="block font-label text-[8px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80 sm:text-[9px]">
-            Unvested $CLICK
-          </span>
-          <span className="mt-0.5 block font-mono text-xs font-bold tabular-nums leading-none text-primary-fixed sm:text-sm">
-            {!isConnected ? "—" : vestingDisplay.unvested.headline}
-          </span>
-        </div>
-        <div
-          className="min-w-0 rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1.5 text-right shadow-[0_0_20px_rgba(0,251,251,0.15)] sm:px-2"
-          title="Minute Click Pot (ETH)"
-        >
-          <span className="block font-label text-[8px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80 sm:text-[9px]">
-            Click Pot
-          </span>
-          <span className="mt-0.5 block font-mono text-xs font-bold tabular-nums leading-none text-primary-fixed sm:text-sm">
-            {potEthStr} ETH
-          </span>
-        </div>
-      </div>
-      <div className="absolute bottom-0 left-0 right-0 grid grid-cols-[1fr_minmax(0,auto)_1fr] items-end gap-x-1 sm:gap-x-2">
-        <div className="flex min-w-0 flex-col gap-1">
+      <div className="pointer-events-none absolute left-0 right-0 top-0 grid grid-cols-3 items-start gap-x-1">
+        <div className="flex justify-start">
           <div
-            className="pointer-events-none rounded-md border border-cyan-400/55 bg-black/55 px-1.5 py-1.5 text-left shadow-[0_0_20px_rgba(34,211,238,0.18)] sm:px-2"
-            title="Block Bet pot (ETH)"
+            className={cn(hudTileMax, "rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1 text-left shadow-[0_0_20px_rgba(0,251,251,0.15)]")}
+            title="Credits — remaining full clicks at current click cost"
           >
-            <span className="block font-label text-[8px] font-bold uppercase leading-tight tracking-wide text-cyan-300/95 sm:text-[9px]">
-              Block Bet Pot
+            <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
+              Credits
             </span>
-            <span className="mt-0.5 block font-mono text-xs font-bold tabular-nums leading-none text-cyan-100 sm:text-sm">
-              {blockBetPotEthDisplay} ETH
+            <span className="mt-0.5 block break-all font-mono text-[11px] font-bold tabular-nums leading-none text-primary-fixed">
+              {!isConnected ? "—" : clickCostCredits === undefined ? "…" : unlimitedClicks ? "∞" : formatWholeCredits(playsRemainingBig)}
             </span>
           </div>
-          <label
-            className="pointer-events-auto flex items-center justify-between gap-0.5 rounded-md border border-cyan-500/40 bg-black/60 px-1.5 py-1 text-[9px] shadow-[0_0_16px_rgba(34,211,238,0.12)] sm:gap-1 sm:px-2 sm:py-1.5 sm:text-[10px]"
-            title="ETH per tap on a block-bet window (same as Block bet card in the menu)"
+        </div>
+        <div className="flex justify-center">
+          <div
+            className={cn(hudTileMax, "rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1 text-center shadow-[0_0_20px_rgba(0,251,251,0.15)]")}
+            title={vestingDisplay.unvested.caption}
           >
-            <span className="shrink-0 font-label text-[7px] font-bold uppercase tracking-wide text-cyan-300/90 sm:text-[8px]">
-              Default Bet
+            <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
+              Unvested $CLICK
             </span>
-            <input
-              value={blockBet.betEth}
-              onChange={(e) => blockBet.setBetEth(e.target.value)}
-              inputMode="decimal"
-              autoComplete="off"
-              aria-label="Default block bet in ETH"
-              className="min-w-0 flex-1 border-0 bg-transparent text-right font-mono text-[11px] tabular-nums text-cyan-50 outline-none sm:text-xs"
-            />
-            <span className="shrink-0 font-mono text-[9px] text-cyan-400/90 sm:text-[10px]">ETH</span>
-          </label>
+            <span className="mt-0.5 block font-mono text-[11px] font-bold tabular-nums leading-none text-primary-fixed">
+              {!isConnected ? "—" : vestingDisplay.unvested.headline}
+            </span>
+          </div>
         </div>
-        <div
-          className="pointer-events-none max-w-[31vw] rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1.5 text-center shadow-[0_0_20px_rgba(0,251,251,0.15)] sm:max-w-[9.5rem] sm:px-2"
-          title={vestingDisplay.claimable.caption}
-        >
-          <span className="block font-label text-[8px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80 sm:text-[9px]">
-            Vested $CLICK
-          </span>
-          <span className="mt-0.5 block font-mono text-xs font-bold tabular-nums leading-none text-primary-fixed sm:text-sm">
-            {!isConnected ? "—" : vestingDisplay.claimable.headline}
-          </span>
+        <div className="flex justify-end">
+          <div
+            className={cn(hudTileMax, "rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1 text-right shadow-[0_0_20px_rgba(0,251,251,0.15)]")}
+            title="Minute Click Pot (ETH)"
+          >
+            <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
+              Click Pot
+            </span>
+            <span className="mt-0.5 block font-mono text-[11px] font-bold tabular-nums leading-none text-primary-fixed">
+              {potEthStr} ETH
+            </span>
+          </div>
         </div>
-        <div
-          className="pointer-events-none min-w-0 rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1.5 text-right shadow-[0_0_20px_rgba(0,251,251,0.15)] sm:px-2"
-          title={
-            roundsSinceLaunch !== undefined
-              ? "Minute rounds since this game was deployed."
-              : "On-chain minute round id (all players share the same round)."
-          }
-        >
-          <span className="block font-label text-[8px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80 sm:text-[9px]">
-            Round
-          </span>
-          <span className="mt-0.5 block font-mono text-xs font-bold tabular-nums leading-none text-primary-fixed/95 sm:text-sm">
-            {gameRoundNow === undefined ? "—" : roundsSinceLaunch !== undefined ? roundsSinceLaunch.toString() : `#${gameRoundNow.toString()}`}
-          </span>
+      </div>
+      <div className="absolute bottom-0 left-0 right-0 grid grid-cols-3 items-end gap-x-1">
+        <div className="flex justify-start">
+          <div className={cn("flex flex-col gap-1", hudTileMax)}>
+            <div
+              className="pointer-events-none rounded-md border border-cyan-400/55 bg-black/55 px-1.5 py-1 text-left shadow-[0_0_20px_rgba(34,211,238,0.18)]"
+              title="Block Bet pot (ETH)"
+            >
+              <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-cyan-300/95">
+                Block Bet Pot
+              </span>
+              <span className="mt-0.5 block font-mono text-[11px] font-bold tabular-nums leading-none text-cyan-100">
+                {blockBetPotEthDisplay} ETH
+              </span>
+            </div>
+            <label
+              className="pointer-events-auto flex items-center justify-between gap-0.5 rounded-md border border-cyan-500/40 bg-black/60 px-1.5 py-1 text-[8px] shadow-[0_0_16px_rgba(34,211,238,0.12)]"
+              title="ETH per tap on a block-bet window (same as Block bet card in the menu)"
+            >
+              <span className="shrink-0 font-label text-[6px] font-bold uppercase tracking-wide text-cyan-300/90">Default Bet</span>
+              <input
+                value={blockBet.betEth}
+                onChange={(e) => blockBet.setBetEth(e.target.value)}
+                inputMode="decimal"
+                autoComplete="off"
+                aria-label="Default block bet in ETH"
+                className="min-w-0 flex-1 border-0 bg-transparent text-right font-mono text-[10px] tabular-nums text-cyan-50 outline-none"
+              />
+              <span className="shrink-0 font-mono text-[8px] text-cyan-400/90">ETH</span>
+            </label>
+          </div>
+        </div>
+        <div className="flex justify-center">
+          <div
+            className={cn(hudTileMax, "pointer-events-none rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1 text-center shadow-[0_0_20px_rgba(0,251,251,0.15)]")}
+            title={vestingDisplay.claimable.caption}
+          >
+            <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
+              Vested $CLICK
+            </span>
+            <span className="mt-0.5 block font-mono text-[11px] font-bold tabular-nums leading-none text-primary-fixed">
+              {!isConnected ? "—" : vestingDisplay.claimable.headline}
+            </span>
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <div
+            className={cn(hudTileMax, "pointer-events-none rounded-md border border-primary-fixed/50 bg-black/55 px-1.5 py-1 text-right shadow-[0_0_20px_rgba(0,251,251,0.15)]")}
+            title={
+              roundsSinceLaunch !== undefined
+                ? "Minute rounds since this game was deployed."
+                : "On-chain minute round id (all players share the same round)."
+            }
+          >
+            <span className="block font-label text-[7px] font-bold uppercase leading-tight tracking-wide text-primary-fixed/80">
+              Round
+            </span>
+            <span className="mt-0.5 block font-mono text-[11px] font-bold tabular-nums leading-none text-primary-fixed/95">
+              {gameRoundNow === undefined ? "—" : roundsSinceLaunch !== undefined ? roundsSinceLaunch.toString() : `#${gameRoundNow.toString()}`}
+            </span>
+          </div>
         </div>
       </div>
     </div>
@@ -1329,6 +1345,35 @@ export function ClickMintDashboard() {
                 <Icon name="add_circle" className="text-sm opacity-90" />
                 Add credits
               </button>
+              <div className="flex w-full max-w-sm flex-col items-stretch gap-1 px-1 md:hidden">
+                <button
+                  type="button"
+                  disabled={!isConnected || !canAct || unvestedCap === 0n}
+                  title={earlyClaimHoverSummary}
+                  onClick={() => {
+                    setEarlyAmt(formatEther(unvestedCap));
+                    void onEarlySpend(unvestedCap);
+                  }}
+                  className={cn(
+                    "w-full rounded-md border px-3 py-2 font-label text-[10px] font-bold uppercase tracking-[0.12em] transition-colors",
+                    "border-amber-400/55 bg-amber-500/15 text-amber-100 hover:bg-amber-500/25 disabled:opacity-35"
+                  )}
+                >
+                  Early claim (unvested)
+                </button>
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    className="font-body text-[10px] text-primary-fixed/90 underline-offset-2 hover:underline"
+                    onClick={() => setEarlyClaimInfoOpen(true)}
+                  >
+                    Early vs vested
+                  </button>
+                </div>
+                {isConnected && canAct && unvestedCap === 0n ? (
+                  <p className="text-center font-body text-[9px] text-secondary/85">No unvested $CLICK to exit early.</p>
+                ) : null}
+              </div>
               {gasless.status === "ready" ? (
                 <p className="max-w-sm px-2 text-center font-mono text-[10px] text-secondary md:text-[11px]">
                   Gasless ·{" "}
