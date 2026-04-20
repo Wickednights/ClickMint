@@ -28,9 +28,9 @@ Testnet values exist so you can hit caps quickly; mainnet values match [GAME_MEC
 Each **`deposit()`** routes **`msg.value`** by **basis points** on **`ClickMintGame`** (must sum to 10_000):
 
 - **50%** — Click Pot accrual (ETH in the game for POT winners)
-- **29.5%** — treasury (`call` to `treasury`)
-- **20%** — Block Bet pool for that **minute** round
-- **0.5%** — Binary Trophy `receive()` (or treasury if trophy unset)
+- **30%** — treasury (`call` to `treasury`)
+- **10%** — Block Bet pool for that **minute** round
+- **10%** — Binary Trophy `receive()` — NFT holder revshare (or treasury if trophy unset)
 
 The user’s **credit balance** still increases by **`msg.value` + tier bonus** (wei-sized credits). This is separate from where the ETH is sent.
 

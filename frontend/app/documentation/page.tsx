@@ -42,10 +42,10 @@ export default function DocumentationPage() {
             <li>
               <strong className="text-white">Deposit ETH</strong> using the quick-buy buttons. You receive{" "}
               <strong className="text-primary-fixed">full advertised click credits</strong> (wei-based bookkeeping plus tier
-              bonuses).               Incoming ETH is split by on-chain BPS: <strong className="text-white">50%</strong> Click Pot accrual,{" "}
-              <strong className="text-white">29.5%</strong> treasury, <strong className="text-white">20%</strong> Block Bet for that
-              minute, <strong className="text-white">0.5%</strong> Binary Trophy <span className="font-mono">receive()</span> (or treasury
-              if unset).
+              bonuses). Incoming ETH is split by on-chain BPS: <strong className="text-white">50%</strong> Click Pot accrual,{" "}
+              <strong className="text-white">30%</strong> treasury, <strong className="text-white">10%</strong> Block Bet for that
+              minute, <strong className="text-white">10%</strong> Binary Trophy <span className="font-mono">receive()</span> (NFT holder
+              revshare; or treasury if unset).
             </li>
             <li>
               <strong className="text-white">Click the glowing button</strong>. Each click burns{" "}
@@ -123,7 +123,7 @@ export default function DocumentationPage() {
         <Section id="block-bet" title="Block Bet">
           <ul className="mt-3 list-disc space-y-2 pl-5 font-body text-sm leading-relaxed text-secondary md:text-base">
             <li>
-              Pool = carry-forward + 20% deposit slice for the round + explicit <span className="font-mono">placeBet</span>{" "}
+              Pool = carry-forward + 10% deposit slice for the round + explicit <span className="font-mono">placeBet</span>{" "}
               stakes on slots <span className="font-mono">0..45</span> (46 independent pools).
             </li>
             <li>

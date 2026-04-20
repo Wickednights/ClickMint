@@ -54,4 +54,4 @@ Living snapshot for founders and reviewers. Update this when milestones shift.
 
 ### Last oriented update
 
-- **2026-04-06:** **Docs + Phase 0 prep** — Canonical **10B / 30d** mainnet preset, **50/29.5/20/0.5** deposit BPS, **`finalizeRound`** + Block Bet **`claimBlockBetEth`** reflected across **ARCHITECTURE**, **ECONOMY**, **HOWTO**, **POST_DEPLOY**, **TESTNET_E2E**, **GROK review**, **`/documentation`**, **`ENVIRONMENT_VARIABLES.md`**, **README**. **Phase 0** expanded in **PHASED_DEPLOY_AND_MAINNET_QA**. Next: redeploy contracts on Sepolia and refresh env + **DEPLOYMENT_ADDRESSES**.
+- **2026-04-06:** **Docs + Phase 0 prep** — Canonical **10B / 30d** mainnet preset, **50/30/10/10** deposit BPS (pot / treasury / block bet / NFT revshare), **`finalizeRound`** + Block Bet **`claimBlockBetEth`** reflected across **ARCHITECTURE**, **ECONOMY**, **HOWTO**, **POST_DEPLOY**, **TESTNET_E2E**, **GROK review**, **`/documentation`**, **`ENVIRONMENT_VARIABLES.md`**, **README**. **Phase 0** expanded in **PHASED_DEPLOY_AND_MAINNET_QA**. Next: redeploy contracts on Sepolia and refresh env + **DEPLOYMENT_ADDRESSES**.

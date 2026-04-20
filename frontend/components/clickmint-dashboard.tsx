@@ -1060,9 +1060,48 @@ export function ClickMintDashboard() {
       <p className="font-body text-[11px] text-secondary">Loading clock…</p>
     );
 
+  const blockBetPotEthDisplay = Number(formatEther(blockBet.totalPotWei)).toLocaleString(undefined, {
+    maximumFractionDigits: 4,
+    minimumFractionDigits: 0,
+  });
+
+  /** Mobile-only: four corner readouts on the tile ring (full controls live in the header menu). */
+  const mobileGameCornerHud = (
+    <div className="pointer-events-none absolute inset-0 z-[25] md:hidden" aria-hidden>
+      <div
+        className="absolute left-0 top-0 max-w-[44%] rounded border border-primary-fixed/25 bg-black/70 px-1 py-0.5 text-left font-mono text-[9px] leading-tight text-primary-fixed tabular-nums shadow-[0_0_10px_rgba(0,0,0,0.65)]"
+        title="Credits — remaining full clicks at current click cost"
+      >
+        <span className="block font-label text-[6px] uppercase leading-none tracking-wider text-secondary">Cr</span>
+        {!isConnected ? "—" : clickCostCredits === undefined ? "…" : unlimitedClicks ? "∞" : formatWholeCredits(playsRemainingBig)}
+      </div>
+      <div
+        className="absolute right-0 top-0 max-w-[44%] rounded border border-primary-fixed/25 bg-black/70 px-1 py-0.5 text-right font-mono text-[9px] leading-tight text-primary-fixed tabular-nums shadow-[0_0_10px_rgba(0,0,0,0.65)]"
+        title="Minute POT (ETH)"
+      >
+        <span className="block font-label text-[6px] uppercase leading-none tracking-wider text-secondary">Pot</span>
+        {potEthStr} Ξ
+      </div>
+      <div
+        className="absolute bottom-0 left-0 max-w-[44%] rounded border border-cyan-500/35 bg-black/70 px-1 py-0.5 text-left font-mono text-[9px] leading-tight text-cyan-200 tabular-nums shadow-[0_0_10px_rgba(0,0,0,0.65)]"
+        title="Block bet pot (ETH)"
+      >
+        <span className="block font-label text-[6px] uppercase leading-none tracking-wider text-cyan-500/80">BB</span>
+        {blockBetPotEthDisplay} Ξ
+      </div>
+      <div
+        className="absolute bottom-0 right-0 max-w-[44%] rounded border border-primary-fixed/25 bg-black/70 px-1 py-0.5 text-right font-mono text-[9px] leading-tight text-primary-fixed/90 tabular-nums shadow-[0_0_10px_rgba(0,0,0,0.65)]"
+        title="Total on-chain clicks this minute round (all players)"
+      >
+        <span className="block font-label text-[6px] uppercase leading-none tracking-wider text-secondary">Rnd</span>
+        {totalClicksThisRound !== undefined ? totalClicksThisRound.toString() : "—"}
+      </div>
+    </div>
+  );
+
   const terminalBody = (
     <>
-      <section className="mx-auto w-full max-w-4xl space-y-2 px-2 text-center">
+      <section className="mx-auto hidden w-full max-w-4xl space-y-2 px-2 text-center md:block">
         <p className="font-mono text-xs leading-snug text-on-surface/90 sm:text-sm md:text-[15px] md:leading-relaxed">
           <span className="font-semibold text-primary-fixed/95">Main Game</span> → Buy Credits → Press{" "}
           <span className="text-primary-fixed/95">CLICK</span> → Earn $CLICK → Win Revshare NFTs + Chance at ETH Pot → No
@@ -1081,16 +1120,6 @@ export function ClickMintDashboard() {
           </Link>
         </p>
       </section>
-
-      {/* Mobile: collapsible click history (desktop has sidebar feed) */}
-      <details className="mx-auto w-full max-w-xl rounded border border-outline-variant/30 bg-surface-container-low/30 px-3 py-2 md:hidden [&_summary::-webkit-details-marker]:hidden">
-        <summary className="cursor-pointer list-none text-center font-label text-[11px] font-bold uppercase tracking-[0.2em] text-primary-fixed">
-          Click history
-        </summary>
-        <div className="mt-3 max-h-[min(70vh,28rem)] overflow-y-auto">
-          <ClickHistoryPanel gameAddr={gameAddr} compact genesisGameHour={genesisGameHour} />
-        </div>
-      </details>
 
       {/* Setup / economy alerts */}
       <section className="mx-auto flex w-full max-w-sm flex-col items-center space-y-5 md:max-w-lg">
@@ -1122,6 +1151,7 @@ export function ClickMintDashboard() {
           wrongChain={wrongChain}
           canAct={canAct}
           blockBet={blockBet}
+          mobileRingOverlay={mobileGameCornerHud}
           aboveRing={
             gameRoundNow !== undefined ? (
               <div className="hidden w-full flex-col items-center pb-0.5 text-center md:flex">
@@ -1726,7 +1756,7 @@ export function ClickMintDashboard() {
             <DialogHeader>
               <DialogTitle>Menu</DialogTitle>
               <DialogDescription id="mobile-menu-desc" className="sr-only">
-                Credits, audio, gasless, and documentation
+                Balances, minute POT, block bet, click history, audio, gasless, and documentation
               </DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-3 font-headline uppercase tracking-widest">
@@ -1746,6 +1776,37 @@ export function ClickMintDashboard() {
               >
                 + Add credits
               </button>
+
+              <div className="space-y-2 border-t border-outline-variant/25 pt-3 normal-case">
+                <p className="font-label text-[9px] uppercase tracking-[0.2em] text-primary-fixed">Balances &amp; claims</p>
+                {isConnected ? (
+                  walletBalancesPanel
+                ) : (
+                  <p className="rounded-md border border-outline-variant/30 bg-surface-container-low/40 px-2 py-2 text-center font-body text-[11px] text-secondary">
+                    Connect a wallet for credits, vested claims, and early exit.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-2 border-t border-outline-variant/25 pt-3 normal-case">
+                <p className="font-label text-[9px] uppercase tracking-[0.2em] text-primary-fixed">Round &amp; minute POT</p>
+                <div className="flex w-full justify-center">{resetTimerStrip}</div>
+                <div className="flex w-full justify-center">{minutePotCard}</div>
+              </div>
+
+              <div className="space-y-2 border-t border-outline-variant/25 pt-3 normal-case">
+                <p className="font-label text-[9px] uppercase tracking-[0.2em] text-cyan-300/90">Block bet</p>
+                <div className="flex justify-center">
+                  <BlockBetSidebarCard blockBet={blockBet} wrongChain={wrongChain} canAct={canAct} />
+                </div>
+              </div>
+
+              <div className="space-y-2 border-t border-outline-variant/25 pt-3 normal-case">
+                <p className="font-label text-[9px] uppercase tracking-[0.2em] text-primary-fixed">Click history</p>
+                <div className="max-h-[min(42vh,16rem)] overflow-y-auto rounded-md border border-outline-variant/20 bg-surface-container-low/30 p-2">
+                  <ClickHistoryPanel gameAddr={gameAddr} compact genesisGameHour={genesisGameHour} liveFeedMax={12} />
+                </div>
+              </div>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -1860,18 +1921,14 @@ export function ClickMintDashboard() {
       </aside>
 
       {/* Main — full width between rails; inner column caps copy width on ultra-wide screens */}
-      <main className="relative z-10 mx-auto flex w-full max-w-none flex-col items-center px-4 pb-24 pt-28 md:ml-72 md:mr-72 md:pb-16 md:pt-36">
+      {/* No w-full here: with md:ml-72/md:mr-72, width:100% is 100vw and adds margins → overflow + content hugging the right rail. */}
+      <main className="relative z-10 mx-auto flex min-w-0 max-w-none flex-col items-center px-4 pb-24 pt-28 md:ml-72 md:mr-72 md:pb-16 md:pt-36">
         <div
           className={cn(
-            "flex w-full max-w-4xl flex-col items-center",
+            "mx-auto flex w-full min-w-0 max-w-4xl flex-col items-center",
             mobileTab === "terminal" ? "space-y-4 md:space-y-5" : "space-y-8 md:space-y-6"
           )}
         >
-          {isConnected ? <div className="w-full max-w-md md:hidden">{walletBalancesPanel}</div> : null}
-          <div className="flex w-full max-w-md flex-col items-stretch gap-3 md:hidden">
-            <div className="w-full">{resetTimerStrip}</div>
-            <div className="w-full">{minutePotCard}</div>
-          </div>
           {mobileTab === "terminal" && terminalBody}
 
           {mobileTab === "history" && (

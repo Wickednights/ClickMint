@@ -10,7 +10,7 @@ import {BinaryTrophyNFT} from "./BinaryTrophyNFT.sol";
 
 /// @title ClickMintGame — ETH credits, deposit splits, rate-limited clicks, minute-round ETH POT + Block Bet.
 /// @dev Randomness: pseudo-random — upgrade to Chainlink VRF for high-stakes mainnet fairness.
-///      Deposits: 50% Click Pot accrual, 29.5% treasury, 20% Block Bet pool, 0.5% trophy NFT (or treasury if trophy unset).
+///      Deposits: 50% Click Pot accrual, 30% treasury, 10% Block Bet pool, 10% trophy NFT revshare (or treasury if trophy unset).
 ///      Credits granted: full `msg.value` wei + bonus (same UX as legacy; ETH is routed per BPS).
 contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     CLICK public immutable clickToken;
@@ -20,11 +20,11 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     /// @notice Seconds after each UTC minute boundary before the next round id ticks (settlement buffer).
     uint256 public constant ROUND_BUFFER = 5;
     uint256 public constant BPS = 10_000;
-    /// @dev Sum must equal BPS. Product split: 50% pot / 29.5% treasury / 20% block bet / 0.5% trophy revshare.
+    /// @dev Sum must equal BPS. Product split: 50% pot / 30% treasury / 10% block bet / 10% trophy (NFT holder revshare).
     uint256 public constant POT_BPS = 5000;
-    uint256 public constant TREASURY_BPS = 2950;
-    uint256 public constant BLOCK_BET_DEPOSIT_BPS = 2000;
-    uint256 public constant TROPHY_REV_BPS = 50;
+    uint256 public constant TREASURY_BPS = 3000;
+    uint256 public constant BLOCK_BET_DEPOSIT_BPS = 1000;
+    uint256 public constant TROPHY_REV_BPS = 1000;
 
     uint256 public constant MAX_CLICKS_PER_BLOCK = 20;
     /// @dev Trophy mint probability per successful click = `trophyDropWeight / TROPHY_ROLL_DENOM` (finer than BPS).
@@ -59,7 +59,7 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
     uint256 public potCarry;
     uint256 internal _potNonce;
 
-    /// @notice 20% deposit slice accruing to Block Bet parimutuel for this round.
+    /// @notice 10% deposit slice accruing to Block Bet parimutuel for this round.
     mapping(uint256 roundId => uint256) public blockBetDepositEthByRound;
     /// @notice User bets: explicit ETH staked on a slot (wei).
     mapping(uint256 roundId => mapping(address => mapping(uint8 => uint256))) public userBetOnSlot;

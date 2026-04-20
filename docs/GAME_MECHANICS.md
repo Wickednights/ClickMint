@@ -1,6 +1,6 @@
 # ClickMint — game mechanics (canonical spec)
 
-This document describes **target product behavior** aligned with the current codebase direction: **minute-long rounds**, **ETH Click Pot**, **Block Bet** with **46** independent ETH pools per minute (15s windows `k..k+14` for `k = 0..45`), **50 / 29.5 / 20 / 0.5** deposit routing (Pot / Treasury / Block Bet / Trophy revshare), **10B CLICK cap**, **1 CLICK per successful click** (1e18 wei), **30-day vesting** on mainnet, and **gasless** optional path via Pimlico.
+This document describes **target product behavior** aligned with the current codebase direction: **minute-long rounds**, **ETH Click Pot**, **Block Bet** with **46** independent ETH pools per minute (15s windows `k..k+14` for `k = 0..45`), **50 / 30 / 10 / 10** deposit routing (Pot / Treasury / Block Bet / NFT holder revshare via Trophy `receive()`), **10B CLICK cap**, **1 CLICK per successful click** (1e18 wei), **30-day vesting** on mainnet, and **gasless** optional path via Pimlico.
 
 **Randomness:** Settlement uses on-chain pseudo-randomness (`block.prevrandao` + salts). High-stakes production should plan for **Chainlink VRF** or equivalent.
 
@@ -21,9 +21,9 @@ This document describes **target product behavior** aligned with the current cod
 - Players deposit **native ETH**. **Click credits** are bookkeeping in **wei-sized units** (same convention as today): you receive **full deposit wei** toward credits plus **tier bonuses** (larger single deposits get extra credits). The ETH itself is **not** held 1:1 as “backing” for credits; credits are burned per click via `clickCostCredits`.
 - **Routing of each deposit (basis points, sum 10_000):**
   - **50%** — **Click Pot** (ETH accrues in the game contract for that round’s POT winner).
-  - **~29.5%** — **Treasury** (sent to the treasury address).
-  - **20%** — **Block Bet** pool for that round (parimutuel layer; see below).
-  - **~0.5%** — **Binary Trophy NFT** contract (`receive()`), split **pro-rata** across minted trophies (existing accumulator + `claimRevenue` on the NFT). If the trophy address is not yet wired, that slice is sent to treasury instead.
+  - **30%** — **Treasury** (sent to the treasury address).
+  - **10%** — **Block Bet** pool for that round (parimutuel layer; see below).
+  - **10%** — **Binary Trophy NFT** contract (`receive()`), split **pro-rata** across minted trophies for **NFT holders** (accumulator + `claimRevenue` on the NFT). If the trophy address is not yet wired, that slice is sent to treasury instead.
 
 Exact BPS constants live on-chain (`ClickMintGame`) and may be tuned only by a **new deploy** if made immutable, or via owner-governed setters if added later.
 
@@ -62,7 +62,7 @@ Exact BPS constants live on-chain (`ClickMintGame`) and may be tuned only by a *
 ## Block Bet (ETH, v1)
 
 - **46 on-chain slots per minute:** Slot **`k`** (where **`k ∈ {0,…,45}`**) is the **15-second window** covering **seconds `k` through `k+14`** of the wall-clock minute (only **`k ≤ 45`** fits fully in a 60s minute — that yields **46** windows). Each slot has its own stake totals: **`placeBet(k)`** adds ETH to pool **`k`** only.
-- **Parimutuel pool per round:** **20%** deposit slice for that round **plus** all ETH staked via **`placeBet`** across **all 46** slots.
+- **Parimutuel pool per round:** **10%** deposit slice for that round **plus** all ETH staked via **`placeBet`** across **all 46** slots.
 - **Settlement:** On `finalizeRound`, the **ETH POT** still draws a **winning quadrant `0..3`** (same as click **`slotInRound`** buckets) for click/POT eligibility. **Block bet** draws a **separate** winning index **`0..45`** from mixed entropy (`BLOCKBET46`). Only stakers on **that** window split the Block Bet pot **pro-rata**; other slots’ stakes do not win this round.
 - **Failed winner transfer:** If a winner’s address cannot accept ETH during settlement, that share is credited to **`blockBetClaimableEth[winner]`** and the winner calls **`claimBlockBetEth()`** to pull it (so one bad recipient cannot block `finalizeRound` for everyone).
 - **No bets on the winning slot:** The pot **carries** forward (`blockBetCarry`) until a future round pays out.
