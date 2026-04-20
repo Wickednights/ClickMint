@@ -41,7 +41,7 @@ _Supersedes all entries in Archive._
 | **BinaryTrophyNFT** | `0xe279ba6Bc919aa27E3EB761670f4F2AE6fa8B02c` |
 | **Escrow** | `0x39556E85f90CC98b87341507BEAfcE7920B484e0` |
 
-**Notes:** `DEPLOY_ECONOMY=testnet`; **`tCLICK`** / **`tBTROPHY`**. **Frontend env hints:** `NEXT_PUBLIC_GAME_GENESIS_UNIX=1776618714` (game deploy block time), `NEXT_PUBLIC_GAME_DEPLOY_BLOCK=40425213`, `NEXT_PUBLIC_TROPHY_DEPLOY_BLOCK=40425214`. Includes `trophyDropWeight` pacing (~75% CLICK supply), `POT_BPS=5000` (50% pot — BPS sum fix), CLICK `mintForTesting`, `SecretPrizeWallet` from `deploy.ts`.
+**Notes:** `DEPLOY_ECONOMY=testnet`; **`tCLICK`** / **`tBTROPHY`**. **Frontend env hints:** `NEXT_PUBLIC_GAME_GENESIS_UNIX=1776618714` (game deploy block time), `NEXT_PUBLIC_GAME_DEPLOY_BLOCK=40425213`, `NEXT_PUBLIC_TROPHY_DEPLOY_BLOCK=40425214`. Includes `trophyDropWeight` pacing (~75% CLICK supply). **Deposit BPS** on a fresh deploy: **50 / 30 / 10 / 10** (pot / treasury / block bet / trophy revshare). Older deployments may still use the previous split — verify on-chain constants. CLICK `mintForTesting`, `SecretPrizeWallet` from `deploy.ts`.
 
 ### Base Sepolia — Uniswap v2 (test LP)
 

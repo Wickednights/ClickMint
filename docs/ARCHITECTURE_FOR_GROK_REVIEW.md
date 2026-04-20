@@ -6,7 +6,7 @@
 
 ## 1. Executive summary
 
-ClickMint is an on-chain **click-to-earn** game on **Base Sepolia** (**tCLICK** / **tBTROPHY**) and **Base mainnet** (DEX/LP QA, real fees). Users **deposit ETH**, get **wei-sized credits**, **click** through a **hash gate**, and earn **$CLICK** into **vesting**. Each **`deposit()`** routes ETH by **BPS** on **`ClickMintGame`**: **50%** pot accrual, **29.5%** treasury, **20%** Block Bet bucket for that **minute**, **0.5%** trophy **`receive()`** (else treasury). **`finalizeRound(roundId)`** settles the **minute POT** (native ETH winner) and **Block Bet** (pro-rata; failed `call` → **`blockBetClaimableEth`** / **`claimBlockBetEth`**). **`clickPerEthWei`** is **legacy** in storage. **`SecretPrizeWallet`** is still deployed by **`deploy.ts`** but **not** wired into this deposit split.
+ClickMint is an on-chain **click-to-earn** game on **Base Sepolia** (**tCLICK** / **tBTROPHY**) and **Base mainnet** (DEX/LP QA, real fees). Users **deposit ETH**, get **wei-sized credits**, **click** through a **hash gate**, and earn **$CLICK** into **vesting**. Each **`deposit()`** routes ETH by **BPS** on **`ClickMintGame`**: **50%** pot accrual, **30%** treasury, **10%** Block Bet bucket for that **minute**, **10%** trophy **`receive()`** (NFT holder revshare; else treasury). **`finalizeRound(roundId)`** settles the **minute POT** (native ETH winner) and **Block Bet** (pro-rata; failed `call` → **`blockBetClaimableEth`** / **`claimBlockBetEth`**). **`clickPerEthWei`** is **legacy** in storage. **`SecretPrizeWallet`** is still deployed by **`deploy.ts`** but **not** wired into this deposit split.
 
 **Ops:** **`potKeeper`** or **`owner`** calls **`finalizeRound`**. **Vercel Cron** → **`GET /api/cron/finalize-round`** with **`CRON_SECRET`**; **`POT_KEEPER_PRIVATE_KEY`** signs txs. Frontend: **PotWin** / Block Bet history, gasless optional path, audio.
 
@@ -20,7 +20,7 @@ ClickMint is an on-chain **click-to-earn** game on **Base Sepolia** (**tCLICK** 
 
 Player **`deposit()`** flow in `ClickMintGame`:
 
-- **BPS split** (10_000 total): **50%** POT accrual, **29.5%** treasury, **20%** Block Bet deposit for the round, **0.5%** trophy (or treasury if trophy unset).
+- **BPS split** (10_000 total): **50%** POT accrual, **30%** treasury, **10%** Block Bet deposit for the round, **10%** trophy / NFT holder revshare (or treasury if trophy unset).
 - The user’s **credit balance** still increases by **`msg.value` + tier bonus** (wei units).
 - **None** of that ETH is forwarded to **Pimlico** or any bundler address.
 
@@ -83,10 +83,10 @@ flowchart TB
   EP --> SCW
   SCW -->|clickFor(EOA)| Game
 
-  Game -->|29.5% BPS| Treas
+  Game -->|30% BPS| Treas
   Game -->|50% pot BPS| Game
-  Game -->|20% block bet BPS| Game
-  Game -->|0.5% BPS| Trophy
+  Game -->|10% block bet BPS| Game
+  Game -->|10% BPS| Trophy
   Game -->|grantVested| Click
   Game -.->|mintTrophyForPlayer| Trophy
 ```

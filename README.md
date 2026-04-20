@@ -1,6 +1,6 @@
 # ClickMint
 
-ClickMint — on-chain clicker on Base: **minute rounds**, ETH **Click Pot**, **Block Bet** (46 fifteen-second windows per minute, slots `0..45`), **50 / 29.5 / 20 / 0.5%** deposit routing (pot / treasury / block bet / trophy `receive`), **$CLICK** vesting + 30/30/20/20 early spend, and optional **gasless** clicks (Pimlico). See [`docs/GAME_MECHANICS.md`](docs/GAME_MECHANICS.md) for the canonical spec.
+ClickMint — on-chain clicker on Base: **minute rounds**, ETH **Click Pot**, **Block Bet** (46 fifteen-second windows per minute, slots `0..45`), **50 / 30 / 10 / 10%** deposit routing (pot / treasury / block bet / NFT holder revshare via trophy `receive`), **$CLICK** vesting + 30/30/20/20 early spend, and optional **gasless** clicks (Pimlico). See [`docs/GAME_MECHANICS.md`](docs/GAME_MECHANICS.md) for the canonical spec.
 
 ## Docs
 

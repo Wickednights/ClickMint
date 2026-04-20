@@ -180,7 +180,7 @@ Format:
 
 - **`docs/ENVIRONMENT_VARIABLES.md`:** New canonical list (Hardhat, all `NEXT_PUBLIC_*`, cron/keeper, Vercel checklist).
 - **Economy / deploy truth:** Mainnet **10B** cap, **30d** vesting, **`baseClickReward` 1e18**, **`minPotClicks` 10**, **`clicksPerHashTier` 1000**; testnet **1M**, **600s** vesting, **`minPotClicks` 5** — aligned **`ECONOMY.md`**, **`POST_DEPLOY_VERIFICATION.md`**, **`HOWTO.md`**, **`contracts/scripts/config/README.md`**, **`contracts/.env.example`**, **`frontend/lib/economy-preset.ts`**.
-- **Deposit routing:** **50 / 29.5 / 20 / 0.5%** BPS on **`ClickMintGame`** — **`README.md`**, **`/documentation`**, **`ARCHITECTURE.md`**, **`ARCHITECTURE_FOR_GROK_REVIEW.md`** (removed stale **3×1%** / hourly model).
+- **Deposit routing:** **50 / 30 / 10 / 10%** BPS on **`ClickMintGame`** (pot / treasury / block bet / NFT revshare) — **`README.md`**, **`/documentation`**, **`ARCHITECTURE.md`**, **`ARCHITECTURE_FOR_GROK_REVIEW.md`** (removed stale **3×1%** / hourly model).
 - **Settlement:** **`finalizeRound`**, **`/api/cron/finalize-round`** — **`SYSTEM_VERIFICATION.md`**, **`TESTNET_E2E_CHECKLIST.md`**, **`KNOWN_ISSUES.md`**, **`POST_DEPLOY_VERIFICATION.md`**.
 - **Block Bet:** **`blockBetClaimableEth` / `claimBlockBetEth`** noted on docs site + testnet checklist.
 - **`SecretPrizeWallet`:** Documented as deployed but **not** in current game deposit split — **`DEPLOYMENT_ADDRESSES.md`**, **`ARCHITECTURE*.md`**.

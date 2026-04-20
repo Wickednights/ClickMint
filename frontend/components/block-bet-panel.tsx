@@ -326,6 +326,8 @@ export type BlockBetPanelProps = {
   center?: ReactNode;
   /** READY, add credits, etc. — below the full perimeter for a balanced layout. */
   belowRing?: ReactNode;
+  /** Mobile-only overlay around the tile ring (e.g. corner stats); use `md:hidden` inside. */
+  mobileRingOverlay?: ReactNode;
 };
 
 export function BlockBetPanel({
@@ -335,8 +337,9 @@ export function BlockBetPanel({
   aboveRing,
   center,
   belowRing,
+  mobileRingOverlay,
 }: BlockBetPanelProps) {
-  const { onBet, sec, userTotals, isPending, address, betEth, setBetEth, totalPotWei, secToRoundEnd } = blockBet;
+  const { onBet, sec, userTotals, isPending, address } = blockBet;
 
   const ring = (
     <div
@@ -405,42 +408,17 @@ export function BlockBetPanel({
         "w-full max-w-3xl rounded-xl border border-cyan-500/20 bg-black/60 px-3 py-2 shadow-[0_0_32px_rgba(34,211,238,0.06)] md:px-4 md:py-3"
       )}
     >
-      {/* Mobile: full header. Desktop: compact controls on right rail (`BlockBetSidebarCard`). */}
-      <div className="flex flex-col gap-3 border-b border-white/10 pb-3 md:hidden">
-        <div>
-          <h3 className="font-label text-[10px] uppercase tracking-[0.28em] text-cyan-200/95">Block bet</h3>
-          <p className="mt-1 max-w-xl font-body text-[11px] text-cyan-100/75">
-            {BLOCK_BET_PERIMETER_COUNT} pools · 15s windows · one winner/round.{" "}
-            <Link href="/documentation#block-bet" className="text-cyan-300 underline-offset-2 hover:underline">
-              Rules
-            </Link>
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3 text-[11px]">
-          <label className="flex items-center gap-1.5 rounded border border-cyan-500/30 bg-black/50 px-2 py-1">
-            <span className="text-cyan-400/90">Stake</span>
-            <input
-              value={betEth}
-              onChange={(e) => setBetEth(e.target.value)}
-              className="w-20 border-0 bg-transparent text-right font-mono text-cyan-50 tabular-nums outline-none"
-            />
-            <span className="text-cyan-500/80">ETH</span>
-          </label>
-          <div className="tabular-nums text-cyan-100/90">
-            Pot <span className="font-mono font-semibold text-white">{formatEther(totalPotWei)}</span> Ξ
-          </div>
-          <div className="tabular-nums text-cyan-200/85">
-            Ends <span className="font-semibold text-white">{formatCountdownShort(secToRoundEnd)}</span>
-          </div>
-        </div>
-      </div>
+      {/* Mobile: block-bet controls live in the header menu; desktop: right rail (`BlockBetSidebarCard`). */}
 
-      <div className="mt-3 flex flex-col items-center gap-2 md:mt-2">
+      <div className="mt-0 flex flex-col items-center gap-2 md:mt-2">
         {aboveRing ? (
           <div className="flex w-full flex-col items-center justify-center px-1">{aboveRing}</div>
         ) : null}
-        {ring}
-        <p className="text-center font-mono text-[10px] text-cyan-300/85 md:text-[11px]">
+        <div className="relative mx-auto w-fit max-w-full">
+          {mobileRingOverlay}
+          {ring}
+        </div>
+        <p className="hidden text-center font-mono text-[10px] text-cyan-300/85 md:block md:text-[11px]">
           Sec <span className="font-semibold text-cyan-100">{sec}</span> · glow = active window · {BLOCK_BET_PERIMETER_COUNT}{" "}
           pools
         </p>
@@ -449,7 +427,7 @@ export function BlockBetPanel({
         ) : null}
       </div>
 
-      <p className="mt-2 text-center font-body text-[9px] text-cyan-600/90 md:text-[10px]">
+      <p className="mt-2 hidden text-center font-body text-[9px] text-cyan-600/90 md:block md:text-[10px]">
         On-chain randomness — see docs for VRF.
       </p>
     </section>

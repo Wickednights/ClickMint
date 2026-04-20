@@ -21,9 +21,9 @@ flowchart LR
 
   User -->|ETH deposit / click / placeBet| Game
   Game -->|50% pot BPS| Game
-  Game -->|29.5% BPS| Treasury
-  Game -->|20% BPS| Game
-  Game -->|0.5% BPS| Trophy
+  Game -->|30% BPS| Treasury
+  Game -->|10% block bet BPS| Game
+  Game -->|10% BPS| Trophy
   Game -->|grantVested| CLICK
 
   Trophy -->|claimRevenue| User
