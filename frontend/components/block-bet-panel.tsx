@@ -359,7 +359,7 @@ export function BlockBetPanel({
             type="button"
             disabled={!canAct || !address || wrongChain || isPending}
             title={`Window ${windowLabel(slot)} · on-chain slot ${slot}`}
-            aria-label={`Place default bet on window ${windowLabel(slot)}`}
+            aria-label={`Place bet (default amount) on window ${windowLabel(slot)}`}
             onClick={() => void onBet(slot)}
             className={cn(
               "relative z-20 min-h-0 min-w-0 rounded-sm border text-[0.5rem] font-bold leading-none shadow-md transition-transform active:scale-90 disabled:opacity-35 md:text-[0.55rem]",

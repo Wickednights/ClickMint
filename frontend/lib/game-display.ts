@@ -104,6 +104,24 @@ export function formatPotEthDisplay(wei: bigint): string {
 }
 
 /**
+ * Narrow mobile HUD: thousands separators + capped fraction length so tiles don’t clip.
+ * Truncates fractional digits only (no `Number(wei)` — stays bigint-safe vs overflow).
+ */
+export function formatCompactHudPotEthDisplay(wei: bigint): string {
+  if (wei === 0n) return "0";
+  if (wei < 0n) return "—";
+  const s = trimEtherString(formatEther(wei));
+  const [wholeRaw, fracRaw = ""] = s.split(".");
+  const whole = wholeRaw || "0";
+  const maxFrac =
+    wei >= parseEther("1000") ? 2 : wei >= parseEther("1") ? 4 : wei >= parseEther("0.01") ? 6 : 8;
+  const fracTrim = fracRaw.slice(0, maxFrac).replace(/0+$/, "");
+  const wholeWithSep = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  if (!fracTrim) return wholeWithSep;
+  return `${wholeWithSep}.${fracTrim}`;
+}
+
+/**
  * Human-readable **$CLICK** from wei for UI. **Truncates** (floors) to `maxFractionDigits` — never rounds up, so users never see
  * more than they can spend. If balance is positive but below one display step, shows `<0.01` (or `<0.001` for 3 decimals, etc.).
  */
