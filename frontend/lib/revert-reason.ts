@@ -39,6 +39,9 @@ export function explainRevertData(data: `0x${string}` | undefined): string {
       if (s === "game: claim pot") {
         return "claimPotEth transfer failed (e.g. smart wallet cannot receive ETH). Use an EOA or a wallet that accepts ETH.";
       }
+      if (s === "trophy: pending rev") {
+        return "Binary Trophy: claimPendingOwnerRevEth failed — use an address that accepts ETH or retry.";
+      }
       return s;
     } catch {
       return "Revert string (could not decode)";

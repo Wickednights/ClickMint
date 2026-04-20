@@ -9,8 +9,9 @@ import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 
 /// @title BinaryTrophyNFT — deploy-set cap, 10% royalties (EIP-2981), on-chain SVG+stats + scalable ETH revenue share.
 /// @dev Revenue uses a per-share accumulator so `receive()` stays O(1) (required for caps up to 10,000).
-///      If **no trophy is minted yet** (`n == 0`), incoming ETH is **forwarded to `owner()`** so deposits from the game are not
-///      stranded before the first drop (after the first mint, `receive` accrues to per-share rewards as usual).
+///      If **no trophy is minted yet** (`n == 0`), incoming ETH is **best-effort forwarded to `owner()`**. If that push fails
+///      (e.g. owner is a contract with no `receive`), ETH is held in `pendingOwnerRevEth` for `claimPendingOwnerRevEth` — this
+///      avoids reverting game `deposit` txs. After the first mint, `receive` accrues to per-share rewards as usual.
 ///
 /// Minting model:
 /// - **Owner `mint`** — bootstrap / admin (MVP).
@@ -25,6 +26,8 @@ contract BinaryTrophyNFT is ERC721, ERC2981, Ownable {
     address public clickMintGame;
 
     uint256 private constant _REWARD_PRECISION = 1e18;
+    /// @notice ETH from `receive` when `n == 0` and forward-to-owner failed — owner pulls via `claimPendingOwnerRevEth`.
+    uint256 public pendingOwnerRevEth;
     /// @notice Cumulative ETH wei per trophy share (× 1e18 precision) from all `receive()` deposits.
     uint256 public rewardPerShareStored;
     mapping(uint256 tokenId => uint256) public rewardPerSharePaid;
@@ -37,6 +40,9 @@ contract BinaryTrophyNFT is ERC721, ERC2981, Ownable {
     event TrophyMinted(address indexed to, uint256 indexed tokenId, uint64 totalClicks, uint8 fragmentSlot, bool viaGame);
     /// @dev Emitted when `receive` forwards to `owner()` because no NFT exists yet (`_nextId == 1`).
     event RevEthForwardedToOwner(uint256 amount);
+    /// @dev Emitted when forward failed and ETH was credited to `pendingOwnerRevEth` instead.
+    event RevEthHeldForOwner(uint256 amount);
+    event PendingOwnerRevEthClaimed(address indexed to, uint256 amount);
 
     error TrophyCap();
     error TrophyZeroAddr();
@@ -100,11 +106,25 @@ contract BinaryTrophyNFT is ERC721, ERC2981, Ownable {
         uint256 n = _nextId - 1;
         if (n == 0) {
             (bool ok,) = payable(owner()).call{value: msg.value}("");
-            require(ok, "trophy: forward owner");
-            emit RevEthForwardedToOwner(msg.value);
+            if (ok) {
+                emit RevEthForwardedToOwner(msg.value);
+            } else {
+                pendingOwnerRevEth += msg.value;
+                emit RevEthHeldForOwner(msg.value);
+            }
             return;
         }
         rewardPerShareStored += (msg.value * _REWARD_PRECISION) / n;
+    }
+
+    /// @notice Pull ETH held when pre-mint forward to `owner()` failed (non-reverting game deposits).
+    function claimPendingOwnerRevEth() external onlyOwner {
+        uint256 v = pendingOwnerRevEth;
+        if (v == 0) return;
+        pendingOwnerRevEth = 0;
+        (bool ok,) = payable(msg.sender).call{value: v}("");
+        require(ok, "trophy: pending rev");
+        emit PendingOwnerRevEthClaimed(msg.sender, v);
     }
 
     /// @notice Pull ETH accrued to this trophy from `receive()` splits (per-token, gas-safe).
