@@ -19,7 +19,7 @@ import { GAME_ROUND_BUFFER_SEC } from "@/lib/game-genesis";
 /** Hollow frame: 12×13 grid → 46 perimeter cells; each cell is on-chain slot 0..45 (15s window [slot, slot+14]). */
 const GRID_ROWS = 13;
 const GRID_COLS = 12;
-const PERIMETER_COUNT = 46;
+export const BLOCK_BET_PERIMETER_COUNT = 46;
 
 function formatCountdownShort(totalSec: number): string {
   if (totalSec <= 0) return "0:00";
@@ -50,8 +50,8 @@ function buildPerimeterMeta(): { r: number; c: number; slot: number }[] {
   for (let r = GRID_ROWS - 2; r >= 1; r--) {
     list.push({ r, c: 0, slot: slot++ });
   }
-  if (list.length !== PERIMETER_COUNT) {
-    console.warn("block-bet perimeter count", list.length, "expected", PERIMETER_COUNT);
+  if (list.length !== BLOCK_BET_PERIMETER_COUNT) {
+    console.warn("block-bet perimeter count", list.length, "expected", BLOCK_BET_PERIMETER_COUNT);
   }
   return list;
 }
@@ -59,7 +59,7 @@ function buildPerimeterMeta(): { r: number; c: number; slot: number }[] {
 const PERIMETER = buildPerimeterMeta();
 
 function hueForSlot(slot: number): { h: number; h2: number } {
-  const t = slot / PERIMETER_COUNT;
+  const t = slot / BLOCK_BET_PERIMETER_COUNT;
   const h = (t * 300 + 160) % 360;
   const h2 = (h + 22) % 360;
   return { h, h2 };
@@ -77,28 +77,14 @@ function windowCoversSecond(slot: number, sec: number): boolean {
 /** Tile size — smaller cells = larger inner hole for the CLICK control. */
 const TILE_REM = 1.5;
 
-export type BlockBetPanelProps = {
+export type UseBlockBetGameParams = {
   gameAddr: `0x${string}`;
   tickSec: number;
   wrongChain: boolean;
   canAct: boolean;
-  /** e.g. round / “since launch” — sits above the tile ring, not inside the hole. */
-  aboveRing?: ReactNode;
-  /** Main CLICK control only — centered inside the hollow frame. */
-  center?: ReactNode;
-  /** READY, add credits, etc. — below the full perimeter for a balanced layout. */
-  belowRing?: ReactNode;
 };
 
-export function BlockBetPanel({
-  gameAddr,
-  tickSec,
-  wrongChain,
-  canAct,
-  aboveRing,
-  center,
-  belowRing,
-}: BlockBetPanelProps) {
+export function useBlockBetGame({ gameAddr, tickSec, wrongChain, canAct }: UseBlockBetGameParams) {
   const { address } = useAccount();
   const publicClient = usePublicClient({ chainId: clickmintChainId() });
   const { writeContractAsync, isPending } = useWriteContract();
@@ -147,6 +133,17 @@ export function BlockBetPanel({
     query: { enabled: !!gameAddr && !!address && gameRoundNow !== undefined, refetchInterval: 6_000 },
   });
 
+  const { data: blockBetClaimableWei, refetch: refetchBlockBetClaimable } = useReadContract({
+    address: gameAddr,
+    abi: clickMintGameAbi,
+    functionName: "blockBetClaimableEth",
+    args: address ? [address] : undefined,
+    query: {
+      enabled: !!gameAddr && !!address && !wrongChain,
+      refetchInterval: 12_000,
+    },
+  });
+
   const sumStakes = useMemo(() => {
     if (!totals?.length) return 0n;
     let s = 0n;
@@ -178,6 +175,17 @@ export function BlockBetPanel({
           });
         }
       }
+      void refetchBlockBetClaimable();
+    },
+  });
+
+  useWatchContractEvent({
+    address: gameAddr,
+    abi: clickMintGameAbi,
+    eventName: "BlockBetEthClaimed",
+    enabled: !!gameAddr,
+    onLogs() {
+      void refetchBlockBetClaimable();
     },
   });
 
@@ -210,6 +218,127 @@ export function BlockBetPanel({
       toast.error("Bet failed", { description: (e as Error).message.slice(0, 200) });
     }
   };
+
+  const onClaimBlockBetEth = async () => {
+    if (!address || wrongChain || !publicClient || !canAct) return;
+    if (!blockBetClaimableWei || blockBetClaimableWei === 0n) return;
+    try {
+      const hash = await writeContractAsync({
+        chainId: clickmintChainId(),
+        address: gameAddr,
+        abi: clickMintGameAbi,
+        functionName: "claimBlockBetEth",
+      });
+      await publicClient.waitForTransactionReceipt({ hash });
+      toast.success(`Claimed ${formatEther(blockBetClaimableWei)} ETH (block bet)`);
+      void refetchBlockBetClaimable();
+    } catch (e) {
+      console.error("claimBlockBetEth failed", e);
+      toast.error("Claim failed", { description: (e as Error).message.slice(0, 200) });
+    }
+  };
+
+  return {
+    betEth,
+    setBetEth,
+    onBet,
+    onClaimBlockBetEth,
+    blockBetClaimableWei,
+    totalPotWei,
+    secToRoundEnd,
+    sec,
+    userTotals,
+    isPending,
+    address,
+    gameRoundNow,
+  };
+}
+
+export type BlockBetGameApi = ReturnType<typeof useBlockBetGame>;
+
+/** Desktop sidebar: stake / pot / timer (matches Minute POT card layout). */
+export function BlockBetSidebarCard({
+  blockBet,
+  wrongChain,
+  canAct,
+}: {
+  blockBet: BlockBetGameApi;
+  wrongChain: boolean;
+  canAct: boolean;
+}) {
+  const { betEth, setBetEth, totalPotWei, secToRoundEnd, blockBetClaimableWei, onClaimBlockBetEth, isPending } =
+    blockBet;
+  const claimable = blockBetClaimableWei ?? 0n;
+  const showClaim = !wrongChain && claimable > 0n;
+  return (
+    <div className="w-full max-w-[17rem] space-y-2 rounded border border-cyan-500/25 bg-surface-container-low/50 px-3 py-2.5 text-left shadow-sm shadow-black/20">
+      <p className="text-center font-label text-[10px] uppercase tracking-[0.2em] text-cyan-300/95">Block bet</p>
+      <p className="text-center font-body text-[10px] leading-snug text-cyan-100/80">
+        {BLOCK_BET_PERIMETER_COUNT} pools · 15s windows · one winner/round.{" "}
+        <Link href="/documentation#block-bet" className="text-cyan-400 underline-offset-2 hover:underline">
+          Rules
+        </Link>
+      </p>
+      <label className="flex w-full items-center justify-between gap-1 rounded border border-cyan-500/30 bg-black/40 px-2 py-1.5 text-[10px] md:text-[11px]">
+        <span className="shrink-0 text-cyan-400/90">Stake</span>
+        <input
+          value={betEth}
+          onChange={(e) => setBetEth(e.target.value)}
+          className="min-w-0 flex-1 border-0 bg-transparent text-right font-mono text-cyan-50 tabular-nums outline-none"
+        />
+        <span className="shrink-0 text-cyan-500/80">ETH</span>
+      </label>
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 font-mono text-[10px] tabular-nums text-cyan-100/90 md:text-[11px]">
+        <span>
+          Pot <span className="font-semibold text-white">{formatEther(totalPotWei)}</span> Ξ
+        </span>
+        <span className="text-cyan-200/85">
+          Ends <span className="font-semibold text-white">{formatCountdownShort(secToRoundEnd)}</span>
+        </span>
+      </div>
+      {showClaim ? (
+        <div className="flex flex-col gap-1.5 rounded border border-amber-500/35 bg-amber-500/10 px-2 py-2">
+          <p className="font-mono text-[10px] text-amber-100/95">
+            Pending payout{" "}
+            <span className="font-semibold tabular-nums text-white">{formatEther(claimable)}</span> Ξ
+          </p>
+          <button
+            type="button"
+            disabled={!canAct || isPending}
+            onClick={() => void onClaimBlockBetEth()}
+            className="rounded border border-amber-400/50 bg-black/30 px-2 py-1.5 font-label text-[9px] uppercase tracking-wider text-amber-200 hover:bg-amber-500/15 disabled:opacity-40"
+          >
+            Claim ETH
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export type BlockBetPanelProps = {
+  gameAddr: `0x${string}`;
+  tickSec: number;
+  wrongChain: boolean;
+  canAct: boolean;
+  blockBet: BlockBetGameApi;
+  /** e.g. round / “since launch” — sits above the tile ring, not inside the hole. */
+  aboveRing?: ReactNode;
+  /** Main CLICK control only — centered inside the hollow frame. */
+  center?: ReactNode;
+  /** READY, add credits, etc. — below the full perimeter for a balanced layout. */
+  belowRing?: ReactNode;
+};
+
+export function BlockBetPanel({
+  wrongChain,
+  canAct,
+  blockBet,
+  aboveRing,
+  center,
+  belowRing,
+}: BlockBetPanelProps) {
+  const { onBet, sec, userTotals, isPending, address, betEth, setBetEth, totalPotWei, secToRoundEnd } = blockBet;
 
   const ring = (
     <div
@@ -275,20 +404,21 @@ export function BlockBetPanel({
   return (
     <section
       className={cn(
-        "w-full max-w-3xl rounded-xl border border-cyan-500/20 bg-black/60 px-3 py-3 shadow-[0_0_32px_rgba(34,211,238,0.06)] md:px-4 md:py-4"
+        "w-full max-w-3xl rounded-xl border border-cyan-500/20 bg-black/60 px-3 py-2 shadow-[0_0_32px_rgba(34,211,238,0.06)] md:px-4 md:py-3"
       )}
     >
-      <div className="flex flex-col gap-3 border-b border-white/10 pb-3 md:flex-row md:flex-wrap md:items-center md:justify-between">
+      {/* Mobile: full header. Desktop: header lives in sidebar (`BlockBetSidebarCard`). */}
+      <div className="flex flex-col gap-3 border-b border-white/10 pb-3 md:hidden">
         <div>
           <h3 className="font-label text-[10px] uppercase tracking-[0.28em] text-cyan-200/95">Block bet</h3>
-          <p className="mt-1 max-w-xl font-body text-[11px] text-cyan-100/75 md:text-xs">
-            {PERIMETER_COUNT} pools · 15s windows · one winner/round.{" "}
+          <p className="mt-1 max-w-xl font-body text-[11px] text-cyan-100/75">
+            {BLOCK_BET_PERIMETER_COUNT} pools · 15s windows · one winner/round.{" "}
             <Link href="/documentation#block-bet" className="text-cyan-300 underline-offset-2 hover:underline">
               Rules
             </Link>
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-[11px] md:justify-end md:text-xs">
+        <div className="flex flex-wrap items-center gap-3 text-[11px]">
           <label className="flex items-center gap-1.5 rounded border border-cyan-500/30 bg-black/50 px-2 py-1">
             <span className="text-cyan-400/90">Stake</span>
             <input
@@ -307,13 +437,14 @@ export function BlockBetPanel({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col items-center gap-3">
+      <div className="mt-3 flex flex-col items-center gap-2 md:mt-2">
         {aboveRing ? (
           <div className="flex w-full flex-col items-center justify-center px-1">{aboveRing}</div>
         ) : null}
         {ring}
         <p className="text-center font-mono text-[10px] text-cyan-300/85 md:text-[11px]">
-          Sec <span className="font-semibold text-cyan-100">{sec}</span> · glow = active window · {PERIMETER_COUNT} pools
+          Sec <span className="font-semibold text-cyan-100">{sec}</span> · glow = active window · {BLOCK_BET_PERIMETER_COUNT}{" "}
+          pools
         </p>
         {belowRing ? (
           <div className="flex w-full max-w-md flex-col items-center justify-center gap-2 px-2">{belowRing}</div>

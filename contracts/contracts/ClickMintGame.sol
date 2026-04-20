@@ -462,8 +462,9 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
         }
     }
 
-    /// @dev Bet state is keyed by `roundId`; new rounds use new ids, so zeroing O(slots×bettors) storage on settlement is unnecessary
-    ///      and can exceed block gas limits. Drop only the bettor list for this round to refund storage where possible.
+    /// @dev Bet state is keyed by `roundId`; new rounds use new ids, so zeroing O(slots×bettors) fields on settlement is unnecessary
+    ///      and can exceed block gas limits. We only `delete` the iterable bettor list for this round, which resets its length; that does
+    ///      not zero underlying array slots, and `_roundBettorSeen[roundId]` / slot totals for that id are not cleared (round ids are monotonic).
     function _clearAllBets(uint256 roundId) internal {
         delete _roundBettors[roundId];
     }
@@ -498,6 +499,7 @@ contract ClickMintGame is Ownable, ReentrancyGuard, Pausable {
                     paidOut += share;
                 } else {
                     blockBetClaimableEth[payAddr[i]] += share;
+                    paidOut += share; // allocated from pot; pull-claim path — must count toward `paid` so dust/carry is not double-booked
                 }
             }
         }
