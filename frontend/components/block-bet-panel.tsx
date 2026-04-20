@@ -412,7 +412,7 @@ export function BlockBetPanel({
     >
       {/* Mobile: block-bet controls live in the header menu; desktop: right rail (`BlockBetSidebarCard`). */}
 
-      <div className="mt-0 flex flex-col items-center gap-2 md:mt-2">
+      <div className="mt-0 flex flex-col items-center gap-1 md:mt-2 md:gap-2">
         {aboveRing ? (
           <div className="flex w-full flex-col items-center justify-center px-1">{aboveRing}</div>
         ) : null}
@@ -421,7 +421,7 @@ export function BlockBetPanel({
             "relative mx-auto w-fit max-w-full",
             /* Mobile: gutter outside the tile grid so corner HUD clears perimeter buttons (overlay is md:hidden inside). */
             mobileRingOverlay
-              ? "max-md:px-3 max-md:pb-[8.75rem] max-md:pt-14 sm:max-md:px-4 sm:max-md:pb-[9.25rem] sm:max-md:pt-16"
+              ? "max-md:px-2.5 max-md:pb-[7.1rem] max-md:pt-12 sm:max-md:px-3 sm:max-md:pb-[7.45rem] sm:max-md:pt-14"
               : null
           )}
         >
@@ -433,7 +433,7 @@ export function BlockBetPanel({
           pools
         </p>
         {belowRing ? (
-          <div className="flex w-full max-w-md flex-col items-center justify-center gap-2 px-2">{belowRing}</div>
+          <div className="flex w-full max-w-md flex-col items-center justify-center gap-1 px-1 md:gap-2 md:px-2">{belowRing}</div>
         ) : null}
       </div>
 
