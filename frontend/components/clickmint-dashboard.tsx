@@ -1084,125 +1084,131 @@ export function ClickMintDashboard() {
         )}
       </section>
 
-      {/* Centered CLICK hero — desktop: round/since launch sits above button (aligned with main column). */}
-      <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center justify-center space-y-2 px-1 py-1 md:space-y-3 md:py-4">
-        {gameRoundNow !== undefined ? (
-          <div className="hidden w-full flex-col items-center pb-0.5 text-center md:flex">
-            <p
-              className={cn("font-mono text-4xl font-black tabular-nums leading-none md:text-5xl", NEON_MAGENTA_TEXT)}
-              title={
-                roundsSinceLaunch !== undefined
-                  ? "Rounds since this game contract was deployed."
-                  : "Raw on-chain minute round id. Add NEXT_PUBLIC_GAME_GENESIS_UNIX or NEXT_PUBLIC_GAME_DEPLOY_BLOCK for “rounds since launch.”"
-              }
-            >
-              {roundsSinceLaunch !== undefined ? roundsSinceLaunch.toString() : `#${gameRoundNow.toString()}`}
-            </p>
-            <p className="mt-1 max-w-[14rem] font-label text-[10px] uppercase tracking-widest text-secondary md:text-[11px]">
-              {roundsSinceLaunch !== undefined ? "Since launch" : "Game round index (chain)"}
-            </p>
-          </div>
-        ) : null}
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-10 md:hidden">
-          <div className="pulse-ring h-64 w-64 rounded-full border border-primary-container" />
-        </div>
-        <button
-          type="button"
-          disabled={!canSendClick}
-          onClick={() => {
-            triggerHeroClickFlash();
-            void onClick();
-          }}
-          className={cn(
-            "relative z-10 flex h-56 w-56 flex-col items-center justify-center font-headline font-black uppercase transition-transform active:scale-90",
-            "md:h-[17rem] md:w-[17rem] md:shrink-0",
-            "rounded-full border-4 border-primary-container bg-surface-container md:rounded-none md:border-0 md:bg-primary-fixed md:text-on-primary-fixed",
-            wrongChain && "ring-2 ring-amber-400/80"
-          )}
-        >
-          <span
-            aria-hidden
-            className={cn(
-              "pointer-events-none absolute inset-0 z-0 rounded-full md:rounded-none neon-pulse",
-              heroClickFlash && "click-hero-flash"
-            )}
-          />
-          <span className="absolute inset-0 z-[1] bg-gradient-to-tr from-primary-container/20 to-transparent md:hidden" />
-          <span className="relative z-20 font-headline text-5xl font-extrabold tracking-tighter text-white glitch-text md:text-6xl md:text-on-primary-fixed md:[text-shadow:none]">
-            CLICK
-          </span>
-          <span className="relative z-20 mt-1 font-label text-[10px] font-medium tracking-[0.3em] text-primary-fixed md:hidden">
-            EXECUTE
-          </span>
-        </button>
-        {wrongChain && (
-          <p className="max-w-xs text-center font-body text-[10px] uppercase tracking-wider text-amber-200/90 md:text-[11px]">
-            Wrong network — tap CLICK to switch to {clickmintChainLabel()}, or use the header link.
-          </p>
-        )}
-        <div className="flex flex-col items-center gap-1.5">
-          <div className="border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 font-label text-[10px] uppercase tracking-widest text-primary-fixed">
-            <span className="inline-flex items-center gap-2">
-              <span
-                className="material-symbols-outlined text-xs"
-                style={{ fontVariationSettings: `"FILL" 1, "wght" 400` } as CSSProperties}
+      {/* CLICK hero inside 46-tile block-bet ring (4×15s sides). */}
+      <div className="mx-auto w-full max-w-3xl px-2 py-2 md:py-4">
+        <BlockBetPanel
+          gameAddr={gameAddr}
+          tickSec={tickSec}
+          wrongChain={wrongChain}
+          canAct={canAct}
+          center={
+            <div className="relative flex w-full max-w-[min(100%,20rem)] flex-col items-center justify-center space-y-2 md:max-w-none md:space-y-3">
+              {gameRoundNow !== undefined ? (
+                <div className="hidden w-full flex-col items-center pb-0.5 text-center md:flex">
+                  <p
+                    className={cn("font-mono text-3xl font-black tabular-nums leading-none md:text-4xl", NEON_MAGENTA_TEXT)}
+                    title={
+                      roundsSinceLaunch !== undefined
+                        ? "Rounds since this game contract was deployed."
+                        : "Raw on-chain minute round id. Add NEXT_PUBLIC_GAME_GENESIS_UNIX or NEXT_PUBLIC_GAME_DEPLOY_BLOCK for “rounds since launch.”"
+                    }
+                  >
+                    {roundsSinceLaunch !== undefined ? roundsSinceLaunch.toString() : `#${gameRoundNow.toString()}`}
+                  </p>
+                  <p className="mt-1 max-w-[14rem] font-label text-[10px] uppercase tracking-widest text-secondary md:text-[11px]">
+                    {roundsSinceLaunch !== undefined ? "Since launch" : "Game round index (chain)"}
+                  </p>
+                </div>
+              ) : null}
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-10 md:hidden">
+                <div className="pulse-ring h-52 w-52 rounded-full border border-primary-container" />
+              </div>
+              <button
+                type="button"
+                disabled={!canSendClick}
+                onClick={() => {
+                  triggerHeroClickFlash();
+                  void onClick();
+                }}
+                className={cn(
+                  "relative z-10 flex h-52 w-52 flex-col items-center justify-center font-headline font-black uppercase transition-transform active:scale-90",
+                  "md:h-60 md:w-60 md:shrink-0",
+                  "rounded-full border-4 border-primary-container bg-surface-container md:rounded-2xl md:border-2 md:bg-primary-fixed md:text-on-primary-fixed",
+                  wrongChain && "ring-2 ring-amber-400/80"
+                )}
               >
-                bolt
-              </span>
-              {cooldownLabel !== null ? (
-                <>RATE LIMIT: {cooldownLabel}s</>
-              ) : needsBuyCredits ? (
-                <>Buy credits</>
-              ) : (
-                <>READY</>
+                <span
+                  aria-hidden
+                  className={cn(
+                    "pointer-events-none absolute inset-0 z-0 rounded-full md:rounded-2xl neon-pulse",
+                    heroClickFlash && "click-hero-flash"
+                  )}
+                />
+                <span className="absolute inset-0 z-[1] rounded-full bg-gradient-to-tr from-primary-container/20 to-transparent md:rounded-2xl md:hidden" />
+                <span className="relative z-20 font-headline text-4xl font-extrabold tracking-tighter text-white glitch-text md:text-5xl md:text-on-primary-fixed md:[text-shadow:none]">
+                  CLICK
+                </span>
+                <span className="relative z-20 mt-1 font-label text-[10px] font-medium tracking-[0.3em] text-primary-fixed md:hidden">
+                  EXECUTE
+                </span>
+              </button>
+              {wrongChain && (
+                <p className="max-w-xs text-center font-body text-[10px] uppercase tracking-wider text-amber-200/90 md:text-[11px]">
+                  Wrong network — tap CLICK to switch to {clickmintChainLabel()}, or use the header link.
+                </p>
               )}
-            </span>
-          </div>
-          {totalClicksThisRound !== undefined ? (
-            <p
-              className="max-w-sm px-2 text-center font-mono text-[11px] tabular-nums text-primary-fixed/90 md:text-xs"
-              title="All players’ clicks recorded on-chain for the current minute round."
-            >
-              Total clicks this round:{" "}
-              <span className="font-semibold text-on-surface/95">{totalClicksThisRound.toString()}</span>
-            </p>
-          ) : null}
-          <button
-            type="button"
-            id="hero-add-credits"
-            aria-haspopup="dialog"
-            aria-expanded={depositOpen}
-            disabled={!isConnected}
-            onClick={() => setDepositOpen(true)}
-            className={cn(
-              "inline-flex items-center gap-1.5 px-3 py-1.5 font-label text-[10px] font-bold uppercase tracking-[0.15em] transition-colors",
-              !isConnected
-                ? "cursor-not-allowed border-2 border-outline-variant/30 text-secondary opacity-50"
-                : depositOpen
-                  ? cn(NEON_MAGENTA_BTN, "bg-[#ff2ee8]/20")
-                  : cn(NEON_MAGENTA_BTN)
-            )}
-          >
-            <Icon name="add_circle" className="text-sm opacity-90" />
-            Add credits
-          </button>
-        </div>
-        {gasless.status === "ready" ? (
-          <p className="max-w-md px-2 text-center font-body text-[11px] leading-snug text-secondary md:text-xs">
-            <span className="font-semibold text-primary-fixed/90">Gasless mode active</span> — clicks are free of gas. Your
-            EOA receives all rewards and uses your existing credits. Executor:{" "}
-            <span className="font-mono text-primary-fixed/85">
-              {gasless.smartAccountAddress
-                ? `${gasless.smartAccountAddress.slice(0, 6)}…${gasless.smartAccountAddress.slice(-4)}`
-                : "—"}
-            </span>
-            .
-          </p>
-        ) : null}
-      </div>
-
-      <div className="mx-auto w-full max-w-3xl px-2 py-3">
-        <BlockBetPanel gameAddr={gameAddr} tickSec={tickSec} wrongChain={wrongChain} canAct={canAct} />
+              <div className="flex flex-col items-center gap-1.5">
+                <div className="border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 font-label text-[10px] uppercase tracking-widest text-primary-fixed">
+                  <span className="inline-flex items-center gap-2">
+                    <span
+                      className="material-symbols-outlined text-xs"
+                      style={{ fontVariationSettings: `"FILL" 1, "wght" 400` } as CSSProperties}
+                    >
+                      bolt
+                    </span>
+                    {cooldownLabel !== null ? (
+                      <>RATE LIMIT: {cooldownLabel}s</>
+                    ) : needsBuyCredits ? (
+                      <>Buy credits</>
+                    ) : (
+                      <>READY</>
+                    )}
+                  </span>
+                </div>
+                {totalClicksThisRound !== undefined ? (
+                  <p
+                    className="max-w-sm px-2 text-center font-mono text-[11px] tabular-nums text-primary-fixed/90 md:text-xs"
+                    title="All players’ clicks recorded on-chain for the current minute round."
+                  >
+                    Total clicks this round:{" "}
+                    <span className="font-semibold text-on-surface/95">{totalClicksThisRound.toString()}</span>
+                  </p>
+                ) : null}
+                <button
+                  type="button"
+                  id="hero-add-credits"
+                  aria-haspopup="dialog"
+                  aria-expanded={depositOpen}
+                  disabled={!isConnected}
+                  onClick={() => setDepositOpen(true)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-3 py-1.5 font-label text-[10px] font-bold uppercase tracking-[0.15em] transition-colors",
+                    !isConnected
+                      ? "cursor-not-allowed border-2 border-outline-variant/30 text-secondary opacity-50"
+                      : depositOpen
+                        ? cn(NEON_MAGENTA_BTN, "bg-[#ff2ee8]/20")
+                        : cn(NEON_MAGENTA_BTN)
+                  )}
+                >
+                  <Icon name="add_circle" className="text-sm opacity-90" />
+                  Add credits
+                </button>
+              </div>
+              {gasless.status === "ready" ? (
+                <p className="max-w-md px-2 text-center font-body text-[11px] leading-snug text-secondary md:text-xs">
+                  <span className="font-semibold text-primary-fixed/90">Gasless mode active</span> — clicks are free of
+                  gas. Your EOA receives all rewards and uses your existing credits. Executor:{" "}
+                  <span className="font-mono text-primary-fixed/85">
+                    {gasless.smartAccountAddress
+                      ? `${gasless.smartAccountAddress.slice(0, 6)}…${gasless.smartAccountAddress.slice(-4)}`
+                      : "—"}
+                  </span>
+                  .
+                </p>
+              ) : null}
+            </div>
+          }
+        />
       </div>
 
       {/* Stats — top center */}

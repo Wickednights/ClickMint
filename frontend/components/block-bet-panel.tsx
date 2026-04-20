@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { formatEther, parseEther } from "viem";
 import {
   useAccount,
@@ -16,7 +16,20 @@ import { clickmintChainId } from "@/lib/clickmint-chain";
 import { cn } from "@/lib/utils";
 import { GAME_ROUND_BUFFER_SEC } from "@/lib/game-genesis";
 
-const SLOT_LABELS = ["0–14s", "15–29s", "30–44s", "45–59s"] as const;
+/** Hollow frame: 12×13 grid → 12+12+11+11 = 46 perimeter cells. Each full side maps to one on-chain 15s slot. */
+const GRID_ROWS = 13;
+const GRID_COLS = 12;
+const PERIMETER_COUNT = 46;
+
+const SLOT_HINTS = [
+  "0–14s",
+  "15–29s",
+  "30–44s",
+  "45–59s",
+] as const;
+
+/** Slot hue anchors for neon gradient (quarters of the minute). */
+const SLOT_HUE = [188, 312, 88, 268] as const;
 
 function formatCountdownShort(totalSec: number): string {
   if (totalSec <= 0) return "0:00";
@@ -25,14 +38,46 @@ function formatCountdownShort(totalSec: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-type BlockBetPanelProps = {
+/** Clockwise step index 0..45 from top-left, for smooth hue sweep. */
+function buildPerimeterMeta(): { r: number; c: number; slot: number; step: number }[] {
+  const list: { r: number; c: number; slot: number; step: number }[] = [];
+  let step = 0;
+  for (let c = 0; c < GRID_COLS; c++) {
+    list.push({ r: 0, c, slot: 0, step: step++ });
+  }
+  for (let r = 1; r < GRID_ROWS - 1; r++) {
+    list.push({ r, c: GRID_COLS - 1, slot: 1, step: step++ });
+  }
+  for (let c = GRID_COLS - 1; c >= 0; c--) {
+    list.push({ r: GRID_ROWS - 1, c, slot: 2, step: step++ });
+  }
+  for (let r = GRID_ROWS - 2; r >= 1; r--) {
+    list.push({ r, c: 0, slot: 3, step: step++ });
+  }
+  if (list.length !== PERIMETER_COUNT) {
+    console.warn("block-bet perimeter count", list.length, "expected", PERIMETER_COUNT);
+  }
+  return list;
+}
+
+const PERIMETER = buildPerimeterMeta();
+
+function hueForStep(step: number, slot: number): number {
+  const base = SLOT_HUE[slot];
+  const sweep = (step / PERIMETER_COUNT) * 28 - 14;
+  return (base + sweep + 360) % 360;
+}
+
+export type BlockBetPanelProps = {
   gameAddr: `0x${string}`;
   tickSec: number;
   wrongChain: boolean;
   canAct: boolean;
+  /** When set, renders the ring around this node (e.g. main CLICK button). */
+  center?: ReactNode;
 };
 
-export function BlockBetPanel({ gameAddr, tickSec, wrongChain, canAct }: BlockBetPanelProps) {
+export function BlockBetPanel({ gameAddr, tickSec, wrongChain, canAct, center }: BlockBetPanelProps) {
   const { address } = useAccount();
   const publicClient = usePublicClient({ chainId: clickmintChainId() });
   const { writeContractAsync, isPending } = useWriteContract();
@@ -140,6 +185,7 @@ export function BlockBetPanel({ gameAddr, tickSec, wrongChain, canAct }: BlockBe
         : undefined,
     query: { enabled: !!gameAddr && !!address && gameRoundNow !== undefined, refetchInterval: 6_000 },
   });
+
   const totalPotWei = useMemo(() => {
     const c = carryWei ?? 0n;
     const d = depWei ?? 0n;
@@ -151,9 +197,10 @@ export function BlockBetPanel({ gameAddr, tickSec, wrongChain, canAct }: BlockBe
   const secToRoundEnd = useMemo(() => {
     if (gameRoundNow === undefined) return 0;
     const nextBoundary = (gameRoundNow + 1n) * 60n + BigInt(GAME_ROUND_BUFFER_SEC);
-    const n = Math.max(0, Number(nextBoundary - ts));
-    return n;
+    return Math.max(0, Number(nextBoundary - ts));
   }, [gameRoundNow, ts]);
+
+  const userBySlot = [user0.data, user1.data, user2.data, user3.data];
 
   useWatchContractEvent({
     address: gameAddr,
@@ -165,7 +212,9 @@ export function BlockBetPanel({ gameAddr, tickSec, wrongChain, canAct }: BlockBe
         const a = log.args as { roundId?: bigint; winSlot?: number; totalPot?: bigint; winnersPaid?: bigint };
         if (a.totalPot !== undefined && a.winnersPaid !== undefined) {
           toast.message("Block bet settled", {
-            description: `Slot ${a.winSlot ?? "?"}` + ` · ${formatEther(a.winnersPaid)} ETH paid (pot ${formatEther(a.totalPot)} ETH)`,
+            description:
+              `Slot ${a.winSlot ?? "?"}` +
+              ` · ${formatEther(a.winnersPaid)} ETH paid (pot ${formatEther(a.totalPot)} ETH)`,
           });
         }
       }
@@ -195,95 +244,124 @@ export function BlockBetPanel({ gameAddr, tickSec, wrongChain, canAct }: BlockBe
         value: v,
       });
       await publicClient.waitForTransactionReceipt({ hash });
-      toast.success(`Bet placed on slot ${slot}`);
+      toast.success(`Bet on ${SLOT_HINTS[slot]}`);
     } catch (e) {
       console.error("placeBet failed", e);
       toast.error("Bet failed", { description: (e as Error).message.slice(0, 200) });
     }
   };
 
+  const ring = (
+    <div
+      className="relative mx-auto inline-grid gap-1 p-1"
+      style={{
+        gridTemplateColumns: `repeat(${GRID_COLS}, minmax(0, 1.65rem))`,
+        gridTemplateRows: `repeat(${GRID_ROWS}, minmax(0, 1.65rem))`,
+      }}
+    >
+      {PERIMETER.map(({ r, c, slot, step }) => {
+        const h = hueForStep(step, slot);
+        const h2 = (h + 18) % 360;
+        const active = slotNow === slot;
+        const mine = userBySlot[slot];
+        return (
+          <button
+            key={`${r}-${c}`}
+            type="button"
+            disabled={!canAct || !address || wrongChain || isPending}
+            title={`${SLOT_HINTS[slot]} · on-chain slot ${slot}`}
+            aria-label={`Place block bet on ${SLOT_HINTS[slot]}, slot ${slot}`}
+            onClick={() => void onBet(slot)}
+            className={cn(
+              "relative z-20 min-h-0 min-w-0 rounded-sm border text-[0.5rem] font-bold uppercase leading-none shadow-md transition-transform active:scale-90 disabled:opacity-35 md:text-[0.55rem]",
+              active
+                ? "z-30 border-white/80 ring-2 ring-white/90 ring-offset-1 ring-offset-black"
+                : "border-white/20"
+            )}
+            style={{
+              gridRow: r + 1,
+              gridColumn: c + 1,
+              background: `linear-gradient(145deg, hsl(${h}, 92%, 52%) 0%, hsl(${h2}, 88%, 38%) 100%)`,
+              color: "rgba(0,0,0,0.88)",
+              boxShadow: active
+                ? `0 0 14px hsl(${h}, 100%, 55%), 0 0 28px hsl(${h}, 90%, 45%)`
+                : `0 0 6px hsl(${h}, 85%, 40%)`,
+            }}
+          >
+            <span className="flex h-full w-full items-center justify-center font-mono tabular-nums">
+              <span className="opacity-95">{slot}</span>
+            </span>
+            {mine !== undefined && mine > 0n ? (
+              <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-black/80 ring-1 ring-white/60" />
+            ) : null}
+          </button>
+        );
+      })}
+      {center ? (
+        <div
+          className="pointer-events-none z-10 flex min-h-0 items-center justify-center"
+          style={{
+            gridRow: `2 / ${GRID_ROWS}`,
+            gridColumn: `2 / ${GRID_COLS}`,
+          }}
+        >
+          <div className="pointer-events-auto flex max-h-full max-w-full items-center justify-center overflow-visible p-1">
+            {center}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+
   return (
     <section
       className={cn(
-        "w-full max-w-3xl rounded border border-cyan-400/25 bg-black/50 px-3 py-3 font-mono text-cyan-200/95 shadow-[0_0_24px_rgba(34,211,238,0.08)] md:px-4 md:py-4"
+        "w-full max-w-3xl rounded-xl border border-cyan-500/20 bg-black/60 px-3 py-3 shadow-[0_0_32px_rgba(34,211,238,0.06)] md:px-4 md:py-4"
       )}
     >
-      <div className="flex flex-wrap items-end justify-between gap-2 border-b border-cyan-500/20 pb-2">
+      <div className="flex flex-col gap-3 border-b border-white/10 pb-3 md:flex-row md:flex-wrap md:items-center md:justify-between">
         <div>
-          <h3 className="font-label text-[10px] uppercase tracking-[0.25em] text-cyan-300/90">Block bet</h3>
-          <p className="mt-0.5 text-[11px] text-cyan-100/70 md:text-xs">
-            Parimutuel on four 15s slots this minute. Pool = carry + 20% deposits + stakes.{" "}
+          <h3 className="font-label text-[10px] uppercase tracking-[0.28em] text-cyan-200/95">Block bet</h3>
+          <p className="mt-1 max-w-xl font-body text-[11px] leading-snug text-cyan-100/75 md:text-xs">
+            <span className="font-semibold text-cyan-50">46 tiles</span> ring the button — each side is one{" "}
+            <span className="font-mono text-cyan-200/90">15s</span> window (4 windows per minute). Tap any tile on a
+            side to stake that window.{" "}
             <Link href="/documentation#block-bet" className="text-cyan-300 underline-offset-2 hover:underline">
               Rules
             </Link>
           </p>
         </div>
-        <div className="text-right text-[11px] tabular-nums md:text-xs">
-          <div>
-            Round ends in{" "}
-            <span className="font-semibold text-cyan-100">{formatCountdownShort(secToRoundEnd)}</span>
+        <div className="flex flex-wrap items-center gap-3 text-[11px] md:justify-end md:text-xs">
+          <label className="flex items-center gap-1.5 rounded border border-cyan-500/30 bg-black/50 px-2 py-1">
+            <span className="text-cyan-400/90">Stake</span>
+            <input
+              value={betEth}
+              onChange={(e) => setBetEth(e.target.value)}
+              className="w-20 border-0 bg-transparent text-right font-mono text-cyan-50 tabular-nums outline-none"
+            />
+            <span className="text-cyan-500/80">ETH</span>
+          </label>
+          <div className="tabular-nums text-cyan-100/90">
+            Pot <span className="font-mono font-semibold text-white">{formatEther(totalPotWei)}</span> Ξ
           </div>
-          {slotNow !== undefined ? (
-            <div className="text-cyan-400/80">Wall slot now: {SLOT_LABELS[slotNow]}</div>
-          ) : null}
+          <div className="tabular-nums text-cyan-200/85">
+            Ends <span className="font-semibold text-white">{formatCountdownShort(secToRoundEnd)}</span>
+          </div>
         </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] md:text-xs">
-        <span className="text-cyan-100/85">
-          Est. pot (this settlement):{" "}
-          <span className="font-semibold tabular-nums text-cyan-50">{formatEther(totalPotWei)} ETH</span>
-        </span>
-        <label className="flex items-center gap-1.5">
-          <span className="text-cyan-500/90">Bet size</span>
-          <input
-            value={betEth}
-            onChange={(e) => setBetEth(e.target.value)}
-            className="w-24 border border-cyan-500/35 bg-black/60 px-2 py-1 text-right text-cyan-100 tabular-nums"
-          />
-          <span className="text-cyan-500/80">ETH</span>
-        </label>
+      <div className="mt-4 flex flex-col items-center gap-3">
+        {ring}
+        {slotNow !== undefined ? (
+          <p className="text-center font-mono text-[10px] text-cyan-300/85 md:text-[11px]">
+            Clock · live 15s band:{" "}
+            <span className="font-semibold text-cyan-100">{SLOT_HINTS[slotNow]}</span> (slot {slotNow})
+          </p>
+        ) : null}
       </div>
 
-      <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
-        {SLOT_LABELS.map((label, slot) => {
-          const sw = [q0.data, q1.data, q2.data, q3.data][slot];
-          const uw = [user0.data, user1.data, user2.data, user3.data][slot];
-          const active = slotNow === slot;
-          return (
-            <div
-              key={slot}
-              className={cn(
-                "flex flex-col gap-1.5 rounded border px-2 py-2 text-center",
-                active ? "border-cyan-300/50 bg-cyan-500/10" : "border-cyan-600/30 bg-black/40"
-              )}
-            >
-              <div className="text-[10px] uppercase tracking-wider text-cyan-400/90">Slot {slot}</div>
-              <div className="text-[10px] text-cyan-200/80">{label}</div>
-              <div className="text-[11px] tabular-nums text-cyan-100/90">
-                {sw !== undefined ? `${formatEther(sw)} Ξ` : "…"}
-              </div>
-              {uw !== undefined && uw > 0n ? (
-                <div className="text-[10px] text-cyan-500/80">You {formatEther(uw)}</div>
-              ) : (
-                <div className="text-[10px] text-cyan-700/80">—</div>
-              )}
-              <button
-                type="button"
-                disabled={!canAct || !address || wrongChain || isPending}
-                onClick={() => void onBet(slot)}
-                className="mt-auto border border-cyan-400/40 py-1 text-[10px] font-bold uppercase tracking-wider text-cyan-100 hover:bg-cyan-500/15 disabled:opacity-40"
-              >
-                Bet
-              </button>
-            </div>
-          );
-        })}
-      </div>
-
-      <p className="mt-3 text-center text-[10px] leading-relaxed text-cyan-600/90 md:text-[11px]">
-        Trophy holders: claim ETH from the NFT contract when accrued — see docs. Randomness is on-chain pseudo-random;
-        high stakes → plan VRF.
+      <p className="mt-3 text-center font-body text-[10px] leading-relaxed text-cyan-700/95 md:text-[11px]">
+        Randomness is on-chain (pseudo). High stakes → plan VRF.
       </p>
     </section>
   );
