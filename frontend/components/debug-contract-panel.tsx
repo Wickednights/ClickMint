@@ -272,20 +272,20 @@ export function DebugContractPanel() {
     query: { enabled: !!clickAddr && !!address },
   });
 
-  const { data: gameHourNow } = useReadContract({
+  const { data: gameRoundNow } = useReadContract({
     address: gameAddr,
     abi: clickMintGameAbi,
-    functionName: "gameHour",
+    functionName: "gameRound",
     args: [BigInt(Math.floor(Date.now() / 1000))],
     query: { enabled: !!gameAddr },
   });
 
-  const { data: potHourWei } = useReadContract({
+  const { data: potRoundWei } = useReadContract({
     address: gameAddr,
     abi: clickMintGameAbi,
-    functionName: "potEthByHour",
-    args: gameHourNow !== undefined ? [gameHourNow] : undefined,
-    query: { enabled: !!gameAddr && gameHourNow !== undefined },
+    functionName: "potEthByRound",
+    args: gameRoundNow !== undefined ? [gameRoundNow] : undefined,
+    query: { enabled: !!gameAddr && gameRoundNow !== undefined },
   });
 
   const { data: potCarryWei } = useReadContract({
@@ -318,7 +318,7 @@ export function DebugContractPanel() {
       <p>clickCostCredits (wei): {clickCostCredits !== undefined ? clickCostCredits.toString() : "—"}</p>
       <p>Click Credits (credits / cost): {creditsWhole}</p>
       <p>baseClickReward / click: {baseClickReward !== undefined ? `${formatEther(baseClickReward)} $CLICK` : "—"}</p>
-      <p>clicksPerHashTier (game hour): {clicksPerHashTier !== undefined ? clicksPerHashTier.toString() : "—"}</p>
+      <p>clicksPerHashTier (per round): {clicksPerHashTier !== undefined ? clicksPerHashTier.toString() : "—"}</p>
       <p>
         CLICK.maxSupply:{" "}
         {clickMaxSupply !== undefined
@@ -336,11 +336,11 @@ export function DebugContractPanel() {
         Trophy NFT: {trophyAddr}
       </p>
       <p>
-        potEthByHour (current game hour):{" "}
-        {potHourWei !== undefined ? `${formatEther(potHourWei)} ETH · ${potHourWei.toString()} wei` : "—"}
+        potEthByRound (current minute round accrual):{" "}
+        {potRoundWei !== undefined ? `${formatEther(potRoundWei)} ETH · ${potRoundWei.toString()} wei` : "—"}
       </p>
       <p>potCarry: {potCarryWei !== undefined ? `${formatEther(potCarryWei)} ETH` : "—"}</p>
-      <p>gameHour (now): {gameHourNow?.toString() ?? "—"}</p>
+      <p>gameRound (now): {gameRoundNow?.toString() ?? "—"}</p>
 
       {clickAddr ? <TestnetMintClickSection clickAddr={clickAddr} /> : null}
     </section>

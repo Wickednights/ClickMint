@@ -5,7 +5,7 @@
  *   CLICK_ADDRESS=0x... GAME_ADDRESS=0x... TROPHY_ADDRESS=0x... npx hardhat run scripts/verify-deployment.ts --network baseSepolia
  *
  * Optional:
- *   EXPECTED_MAX_SUPPLY_WEI — if set, must equal CLICK.maxSupply() (e.g. mainnet 100B cap).
+ *   EXPECTED_MAX_SUPPLY_WEI — if set, must equal CLICK.maxSupply() (e.g. mainnet 10B cap).
  */
 import { ethers } from "hardhat";
 
@@ -36,7 +36,8 @@ async function main() {
   const isPausedAlias = await game.isPaused();
   const clickTok = await game.clickToken();
   const trophyOnGame = await game.trophyNft();
-  const trophyDropBps = await game.trophyDropBps();
+  const trophyDropWeight = await game.trophyDropWeight();
+  const trophyRollDenom = await game.TROPHY_ROLL_DENOM();
 
   console.log("--- ClickMint post-deploy verification ---");
   console.log("CLICK.address:", clickAddr);
@@ -60,7 +61,8 @@ async function main() {
   console.log("game.isPaused():", isPausedAlias);
   console.log("game.clickToken matches CLICK:", clickTok.toLowerCase() === clickAddr.toLowerCase());
   console.log("game.trophyNft():", trophyOnGame);
-  console.log("game.trophyDropBps():", trophyDropBps.toString());
+  console.log("game.TROPHY_ROLL_DENOM():", trophyRollDenom.toString());
+  console.log("game.trophyDropWeight():", trophyDropWeight.toString());
 
   if (trophyAddr) {
     const trophy = await ethers.getContractAt("BinaryTrophyNFT", trophyAddr);

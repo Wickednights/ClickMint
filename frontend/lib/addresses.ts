@@ -5,12 +5,12 @@ const ZERO = "0x0000000000000000000000000000000000000000" as Address;
 
 /** Base Sepolia — last known test deploy. Override with `NEXT_PUBLIC_*` in `.env.local`. */
 export const baseSepoliaDeployed = {
-  click: "0xeB4928cf96D10F47d76d5997Ef1179c242C95Dc1",
-  treasury: "0x9869d1e0e4416b7e3B246D9C444a6355cA19344c",
-  secretPrizeWallet: "0xeCB7132cc27e177f7028475f58Ee8b3D43F074E2",
-  binaryTrophyNft: "0xd190828F946659a1ff338AD6bC6BAF7C59f9eefD",
-  escrow: "0x3F71C068aaC3359332E5c464E91F0c8b23dF590a",
-  game: "0x1EFf9a6c3F3C438a2929301d1AEeD9D048f04D6B",
+  click: "0x0f1F23237a5BF6A7f3958795289AE82197fc3253",
+  treasury: "0xF2d3A5C96Ff923E0892e337939226bbf8aecb864",
+  secretPrizeWallet: "0xF6787fdDc65707860260812FdD16882247441B7B",
+  binaryTrophyNft: "0xe279ba6Bc919aa27E3EB761670f4F2AE6fa8B02c",
+  escrow: "0x39556E85f90CC98b87341507BEAfcE7920B484e0",
+  game: "0x31b62083176338a0A9d05c7d3A51557b28E3c6A6",
 } as const satisfies Record<string, Address>;
 
 /**

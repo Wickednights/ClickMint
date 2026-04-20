@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export const metadata = {
   title: "Game mechanics — ClickMint",
-  description: "ClickMint rules, $CLICK token, POT, trophies, and testnet parameters.",
+  description: "ClickMint rules, $CLICK token, minute POT, Block Bet, trophies, and parameters.",
 };
 
 export default function DocumentationPage() {
@@ -30,24 +30,37 @@ export default function DocumentationPage() {
         </h1>
         <p className="mt-4 font-headline text-lg text-primary-fixed md:text-xl">Click Fast. Earn Real. Win Epic.</p>
         <p className="mt-4 font-body text-sm leading-relaxed text-secondary md:text-base">
-          ClickMint is a fair, addictive on-chain clicker game on Base. Deposit ETH, smash the glowing CLICK button up to 2 times
-          per second, and turn every tap into real value.
+          Target product (see repo <span className="font-mono text-primary-fixed/90">docs/GAME_MECHANICS.md</span> for the full
+          canonical spec): minute-long rounds on Base, ETH Click Pot, Block Bet on 46 fifteen-second windows per minute, and optional gasless
+          clicks via Pimlico. Until your deployment catches up, treat on-chain values as{" "}
+          <strong className="text-white">live</strong> and this page as <strong className="text-white">roadmap-aligned</strong>{" "}
+          copy.
         </p>
 
         <Section id="how-to-play" title="How to Play">
           <ol className="mt-3 list-decimal space-y-3 pl-5 font-body text-sm leading-relaxed text-secondary md:text-base">
             <li>
-              <strong className="text-white">Deposit ETH</strong> using the quick-buy buttons (0.001 / 0.01 / 0.1 / 0.25 / 0.5 /
-              1 ETH). You receive <strong className="text-primary-fixed">full advertised click credits instantly</strong>. The
-              protocol quietly takes a 3% fee split behind the scenes.
+              <strong className="text-white">Deposit ETH</strong> using the quick-buy buttons. You receive{" "}
+              <strong className="text-primary-fixed">full advertised click credits</strong> (wei-based bookkeeping plus tier
+              bonuses). Incoming ETH is split by basis points: roughly <strong className="text-white">50%</strong> to the
+              Click Pot accrual, <strong className="text-white">30%</strong> to treasury, <strong className="text-white">20%</strong>{" "}
+              to the Block Bet pool for that minute, and a small slice to the Binary Trophy contract (or treasury if unset).
             </li>
             <li>
-              <strong className="text-white">Click the big glowing button</strong> (maximum 2 clicks per second per wallet).
-              Each click consumes 1 credit and mints $CLICK tokens.
+              <strong className="text-white">Click the glowing button</strong>. Each click burns{" "}
+              <span className="font-mono text-primary-fixed/90">clickCostCredits</span> and mints vesting $CLICK. On-chain pacing
+              is per <strong className="text-white">L2 block</strong> (burst-friendly); the UI may add a short cooldown.
             </li>
             <li>
-              <strong className="text-white">Watch for surprises</strong> — mystery Binary Trophy NFTs and hourly CLICK POT
-              wins.
+              <strong className="text-white">Block Bet (optional)</strong> — stake ETH on window{" "}
+              <span className="font-mono text-primary-fixed/90">0..45</span> (slot <span className="font-mono">k</span> = seconds{" "}
+              <span className="font-mono">k–(k+14)</span> in the minute).{" "}
+              <span className="font-mono text-primary-fixed/90">finalizeRound</span> picks a winning window for the block bet
+              separately from the POT’s four click quadrants.
+            </li>
+            <li>
+              <strong className="text-white">Watch for trophies</strong> — random Binary Trophy NFT mints; holders accrue ETH
+              via the NFT contract (<span className="font-mono text-primary-fixed/90">claimRevenue</span>).
             </li>
           </ol>
         </Section>
@@ -55,164 +68,109 @@ export default function DocumentationPage() {
         <Section id="click-token" title="$CLICK Token">
           <ul className="mt-3 list-disc space-y-2 pl-5 font-body text-sm leading-relaxed text-secondary md:text-base">
             <li>
-              Base reward: <strong className="text-white">10 $CLICK per successful click</strong> (dynamic Clickhash Rate can
-              reject low-quality hashes; emission uses the full base on success)
+              Base reward (mainnet target): <strong className="text-white">1 $CLICK</strong> (
+              <span className="font-mono">1e18</span> wei) per successful click into vesting; Clickhash difficulty can reject
+              low-quality hashes.
             </li>
             <li>
-              Total supply cap:{" "}
-              <strong className="text-white">100,000,000,000 (100 billion) $CLICK</strong>
+              Total supply cap (mainnet target):{" "}
+              <strong className="text-white">10,000,000,000 (10 billion) $CLICK</strong>
             </li>
-            <li>1% transfer tax on every $CLICK movement (goes to protocol treasury)</li>
+            <li>1% transfer tax on every $CLICK movement (protocol treasury pattern)</li>
             <li>
-              Vesting: All newly minted $CLICK goes to your <strong className="text-white">pending balance</strong> and fully
-              vests over <strong className="text-white">7 days</strong>
+              Vesting (mainnet target): newly minted $CLICK vests over <strong className="text-white">30 days</strong> (testnet
+              uses short windows).
             </li>
           </ul>
           <h3 id="early-claim" className="mt-6 scroll-mt-24 font-headline text-sm uppercase tracking-widest text-primary-fixed">
             Early claim
           </h3>
           <p className="mt-2 font-body text-sm leading-relaxed text-secondary md:text-base">
-            You can convert part of your <strong className="text-white">pending</strong> $CLICK into liquid tokens right away
-            instead of waiting for the full vesting schedule. The amount you choose is split:
-          </p>
-          <ul className="mt-2 list-disc space-y-1 pl-5 font-body text-sm text-secondary md:text-base">
-            <li>30% burned</li>
-            <li>30% to the protocol treasury</li>
-            <li>
-              20% minted to the protocol&apos;s <strong className="text-white">liquidity address</strong> (operators choose
-              this address at deploy; default deploy sends it to the same wallet as the owner until you point it at a multisig
-              or LP workflow)
-            </li>
-            <li>20% to your wallet as liquid $CLICK</li>
-          </ul>
-          <p className="mt-3 font-body text-sm leading-relaxed text-secondary md:text-base">
-            This is <strong className="text-white">not</strong> automatic Uniswap liquidity: the contract only mints tokens to
-            that address. Moving funds into a pool (and pairing with ETH) is a separate step the team runs when a pool exists.
+            You can convert part of your <strong className="text-white">unvested</strong> balance into liquid tokens early.
+            The amount is split 30 / 30 / 20 / 20 (burn / treasury / liquidity address / you) — see on-chain{" "}
+            <span className="font-mono text-primary-fixed/90">CLICK</span> for exact rules.
           </p>
         </Section>
 
         <Section id="click-credits" title="Click Credits & Deposits">
           <ul className="mt-3 list-disc space-y-2 pl-5 font-body text-sm leading-relaxed text-secondary md:text-base">
             <li>
-              Click cost: ~<strong className="text-white">1 cent per click</strong> (tuned dynamically)
+              Click cost is set from deploy economics (mainnet targets roughly <strong className="text-white">~$0.10 per click</strong>{" "}
+              via ETH/USD assumptions in <span className="font-mono text-primary-fixed/90">economy.ts</span>).
             </li>
-            <li>You can buy credits in convenient packs: 0.001 / 0.01 / 0.1 / 0.25 / 0.5 / 1 ETH</li>
-            <li>
-              You always receive the <strong className="text-white">full number of credits</strong> shown — the 3% protocol fee
-              is absorbed automatically
-            </li>
-            <li>Higher tiers may include extra credits (visible on the deposit buttons)</li>
+            <li>Quick-buy packs: 0.001 / 0.01 / 0.1 / 0.25 / 0.5 / 1 ETH</li>
+            <li>Credits are wei-based; larger single deposits can earn bonus credits (tier table on-chain).</li>
           </ul>
         </Section>
 
-        <Section id="pot" title="The CLICK POT (Hourly Prize)">
+        <Section id="pot" title="The CLICK POT (minute prize)">
           <ul className="mt-3 list-disc space-y-2 pl-5 font-body text-sm leading-relaxed text-secondary md:text-base">
-            <li>Receives 1% of every ETH deposit + a portion of minted $CLICK</li>
+            <li>Funded from the Pot BPS slice of each deposit (plus carry when no one wins).</li>
             <li>
-              <strong className="text-white">Pays out once every hour</strong> after the round is settled
+              <strong className="text-white">Settlement</strong> — anyone authorized (owner or <span className="font-mono">potKeeper</span>)
+              calls <span className="font-mono text-primary-fixed/90">finalizeRound(roundId)</span> after the minute ends plus a
+              short buffer.
             </li>
-            <li>Eligibility: Must have clicked at least 100 times during the hour</li>
             <li>
-              Winner selection: At settlement, a random 15-minute span is chosen — it can start at any UTC minute{" "}
-              <strong className="text-white">0 through 44</strong> (so it never crosses the hour). Each of your clicks tags the
-              exact minute it was mined; you must have at least one click in that winning span (and meet the hourly click
-              minimum) to be eligible.
+              Eligibility: at least <span className="font-mono">minPotClicks</span> in that round and at least one click in the{" "}
+              <strong className="text-white">winning 15-second slot</strong> (0–3).
             </li>
-            <li>Timing uses a short buffer after each UTC hour so the pot can reset cleanly</li>
-            <li>Winners see a live notification when a round pays out</li>
-            <li>Use POT history in the app to see past winners</li>
+            <li>Payout is native ETH to the winner; pseudo-randomness today — plan VRF for high-stakes production.</li>
+          </ul>
+        </Section>
+
+        <Section id="block-bet" title="Block Bet">
+          <ul className="mt-3 list-disc space-y-2 pl-5 font-body text-sm leading-relaxed text-secondary md:text-base">
+            <li>
+              Pool = carry-forward + 20% deposit slice for the round + explicit <span className="font-mono">placeBet</span>{" "}
+              stakes on slots <span className="font-mono">0..45</span> (46 independent pools).
+            </li>
+            <li>
+              Winning block-bet slot is <span className="text-white">0..45</span> (one 15s window). POT still uses four click
+              quadrants <span className="font-mono">0..3</span>. Winners on the winning window split pro-rata; if unstaked,
+              the pool carries.
+            </li>
+            <li>v1 is ETH-only on the game contract.</li>
           </ul>
         </Section>
 
         <Section id="trophies" title="Binary Trophy NFTs">
           <ul className="mt-3 list-disc space-y-2 pl-5 font-body text-sm leading-relaxed text-secondary md:text-base">
             <li>
-              Maximum <strong className="text-white">10,000 NFTs</strong> will ever exist
+              Capped collection (10k target); random drops from clicks use
+              <span className="font-mono"> trophyDropWeight / TROPHY_ROLL_DENOM</span> (1e9 scale), tuned for ~75% supply
+              pacing.
             </li>
-            <li>Drop randomly during clicks (chance decreases with global difficulty)</li>
-            <li>Each NFT is a unique glowing binary trophy with your exact win stats permanently on-chain</li>
-            <li>Every NFT you own earns a permanent revenue share from protocol fees</li>
-            <li>
-              Hidden in every NFT&apos;s metadata is <strong className="text-white">one secret cipher fragment</strong>
-            </li>
+            <li>On-chain metadata; revenue from royalties plus a small deposit share to <span className="font-mono">receive()</span>.</li>
           </ul>
         </Section>
 
-        <Section id="cipher" title="The Secret Cipher Prize">
+        <Section id="difficulty" title="Dynamic Difficulty (Clickhash)">
           <ul className="mt-3 list-disc space-y-2 pl-5 font-body text-sm leading-relaxed text-secondary md:text-base">
-            <li>1% of all $CLICK ever minted + 1% of all protocol revenue flows automatically into a secret prize wallet</li>
-            <li>The 10,000 cipher fragments (one per NFT) form a complete Ottendorf Cipher</li>
-            <li>Whoever assembles the full cipher gains access to the prize wallet and claims the entire accumulated cache</li>
-            <li>This mechanic is completely secret until clues are released</li>
-          </ul>
-        </Section>
-
-        <Section id="difficulty" title="Dynamic Difficulty (Clickhash Rate)">
-          <ul className="mt-3 list-disc space-y-2 pl-5 font-body text-sm leading-relaxed text-secondary md:text-base">
-            <li>BTC-style difficulty curve that increases with global clicking activity</li>
-            <li>Prevents the entire supply or all NFTs from being minted too quickly</li>
-            <li>Guarantees the full 100B $CLICK and 10k NFTs will take ~12+ months under realistic usage</li>
+            <li>Difficulty scales with global clicks per round (leading zero bits, capped).</li>
+            <li>Tunes emission and NFT pace together with supply caps.</li>
           </ul>
         </Section>
 
         <Section id="endgame" title="Endgame">
           <p className="mt-3 font-body text-sm leading-relaxed text-secondary md:text-base">
-            Minting of new $CLICK and new NFTs completely stops{" "}
-            <strong className="text-white">only after BOTH</strong> conditions are met:
+            New $CLICK and trophy minting stop when protocol caps are reached (10B CLICK and trophy cap on-chain).
           </p>
-          <ul className="mt-2 list-disc space-y-1 pl-5 font-body text-sm text-secondary md:text-base">
-            <li>10,000 Binary Trophy NFTs have been minted, and</li>
-            <li>100,000,000,000 $CLICK have been minted</li>
-          </ul>
-          <p className="mt-3 font-body text-sm text-secondary">Season 2 can be planned afterward.</p>
         </Section>
 
-        <Section id="testnet" title="Testnet Section">
+        <Section id="testnet" title="Testnet">
           <p className="mt-1 text-[11px] font-medium uppercase tracking-wider text-amber-200/90">
-            This section is for testing only.
-          </p>
-          <p className="mt-3 font-body text-sm leading-relaxed text-secondary md:text-base">
-            On Base Sepolia testnet we use heavily scaled numbers so you can experience the full game loop quickly:
+            Base Sepolia — scaled parameters for fast iteration.
           </p>
           <ul className="mt-3 list-disc space-y-2 pl-5 font-body text-sm text-secondary md:text-base">
-            <li>
-              $CLICK total supply: <strong className="text-white">1,000,000</strong> (instead of 1B)
-            </li>
-            <li>
-              NFT cap: <strong className="text-white">10</strong> (instead of 10,000)
-            </li>
-            <li>
-              Vesting period: <strong className="text-white">10 minutes</strong> (instead of 7 days)
-            </li>
-            <li>All other mechanics (POT, difficulty, early claim, fees, etc.) behave exactly like mainnet</li>
+            <li>Lower supply cap, shorter vesting, and permissive click costs vs mainnet targets.</li>
+            <li>Get ETH from the Coinbase Base Sepolia faucet and use the app with chain id 84532.</li>
           </ul>
-          <h3 className="mt-6 font-headline text-sm uppercase tracking-widest text-primary-fixed">How to test</h3>
-          <ul className="mt-2 list-disc space-y-2 pl-5 font-body text-sm text-secondary md:text-base">
-            <li>Use the same Vercel link (it automatically points to testnet)</li>
-            <li>
-              Get free test ETH from{" "}
-              <a
-                href="https://www.coinbase.com/faucet"
-                className="text-primary-fixed underline underline-offset-2 hover:text-white"
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                Coinbase Base Sepolia Faucet
-              </a>
-            </li>
-            <li>Deposit small amounts and click rapidly</li>
-            <li>Watch for hourly POT wins and NFT drops within minutes instead of hours/days</li>
-          </ul>
-          <p className="mt-4 font-body text-sm leading-relaxed text-secondary md:text-base">
-            When we move to mainnet, the economy numbers will automatically switch to the full 100B $CLICK / 10k trophies /
-            7-day vesting values.
-          </p>
         </Section>
 
         <p className="mt-12 border-t border-outline-variant/30 pt-8 font-body text-xs text-outline">
-          Parameters on the live testnet deployment may differ from this specification until mainnet launch. Operators can
-          open the <span className="font-mono text-outline">/debug</span> route manually in the browser for raw contract
-          values (no public nav link by design).
+          Canonical numbers and BPS live in <span className="font-mono text-outline">docs/GAME_MECHANICS.md</span>. Operators can
+          open <span className="font-mono text-outline">/debug</span> for raw contract values.
         </p>
       </article>
     </div>

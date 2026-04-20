@@ -23,6 +23,10 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "CLICKMINT // SYSTEM_READY",
   description: "Base Sepolia terminal — credits, vested CLICK, hourly POT",
+  icons: {
+    icon: "/ClickMint_logo_solid.jpg",
+    apple: "/ClickMint_logo_solid.jpg",
+  },
   openGraph: {
     title: "CLICKMINT // SYSTEM_READY",
     description: "Base Sepolia terminal — credits, vested CLICK, hourly POT",

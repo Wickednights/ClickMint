@@ -2,6 +2,7 @@
 
 import type { CSSProperties } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -48,6 +49,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { BlockBetPanel } from "@/components/block-bet-panel";
 import { ClickHistoryPanel } from "@/components/click-history-panel";
 import { SidebarRecentTrophies, TrophyRoomGrid } from "@/components/trophy-room-panel";
 import { EscrowPanel } from "@/components/escrow-panel";
@@ -55,10 +57,10 @@ import { getClickAddress, getEscrowAddress, getGameAddress, getTrophyNftAddress 
 import { economyPresetHint, economyPresetShortLabel } from "@/lib/economy-preset";
 import { useClickMintAudio } from "@/hooks/use-clickmint-audio";
 import {
-  gameHourIndexFromUnixSec,
+  gameRoundIndexFromUnixSec,
   hourIdForDisplay,
   potRoundKind,
-  readGenesisGameHourFromEnv,
+  readGenesisGameRoundFromEnv,
   GAME_RESET_BUFFER_SEC,
 } from "@/lib/game-genesis";
 import { fetchPotWinLogs, potHistoryFromBlock, type PotWinLogRow } from "@/lib/pot-win-logs";
@@ -76,16 +78,12 @@ const NEON_MAGENTA_BTN =
 
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000" as const;
 
-/** UTC minute-of-hour 0..59 (same as on-chain `_minuteInUtcHour`). */
-function minuteInHourFromUnix(sec: number): number {
-  return Math.floor((sec % 3600) / 60);
-}
-
-/** Winning POT span after finalize: `startMinute` is 0..44; span is 15 consecutive UTC minutes. */
-function utcPotSpanLabel(startMinute: number): string {
-  if (startMinute < 0 || startMinute > 44) return "—";
-  const endMinute = startMinute + 14;
-  return `:${String(startMinute).padStart(2, "0")}–:${String(endMinute).padStart(2, "0")} UTC`;
+/** Winning 15s slot after finalize: 0..3 within the minute. */
+function slotSpanLabel(winSlot: number): string {
+  if (winSlot < 0 || winSlot > 3) return "—";
+  const starts = [0, 15, 30, 45];
+  const a = starts[winSlot];
+  return `${a}–${a + 14}s in minute`;
 }
 
 function formatEpochLocalShort(epochSec: number): string {
@@ -146,10 +144,10 @@ function WinnerTable({ rows, genesisGameHour }: { rows: PotRow[]; genesisGameHou
             {rows.map((r) => (
               <tr key={r.key} className="border-t border-outline-variant/20">
                 <td className="px-2 py-3 pr-2 font-headline text-primary-fixed tabular-nums">
-                  {hourIdForDisplay(r.hourId, genesisGameHour)}
+                  {hourIdForDisplay(r.roundId, genesisGameHour)}
                 </td>
                 <td className="px-2 py-3 pr-2 font-mono text-xs text-secondary md:text-sm">
-                  {utcPotSpanLabel(Number(r.winStartMinute))}
+                  {slotSpanLabel(Number(r.winSlot))}
                 </td>
                 <td className="truncate px-2 py-3 pr-2 font-mono text-xs md:text-sm" title={r.winner}>
                   {r.winner.toLowerCase() === ZERO_ADDR.toLowerCase() ? (
@@ -168,8 +166,8 @@ function WinnerTable({ rows, genesisGameHour }: { rows: PotRow[]; genesisGameHou
       </div>
       <p className="text-center font-body text-xs text-secondary opacity-75 md:text-sm">
         Amounts match on-chain <code className="text-primary-fixed/90">PotWin.ethPayout</code> (wei). Winners receive
-        that ETH in the same <code className="text-primary-fixed/90">finalizeHour</code> transaction (current deploy).
-        Each hour&apos;s POT slice stays in the contract until that hour is finalized; no-winner hours roll into{" "}
+        that ETH in the same <code className="text-primary-fixed/90">finalizeRound</code> transaction.
+        Each minute round&apos;s POT slice stays in the contract until that round is finalized; no-winner rounds roll into{" "}
         <code className="text-primary-fixed/90">potCarry</code>.
       </p>
     </div>
@@ -190,7 +188,7 @@ function SidebarPotWinners({ rows, genesisGameHour }: { rows: PotRow[]; genesisG
       </h3>
       {shown.length === 0 ? (
         <p className="text-center font-body text-sm leading-snug text-secondary">
-          No POT winners in range yet — finalize hours (cron or operator) or widen log history via deploy block env.
+          No POT winners in range yet — finalize rounds (cron or operator) or widen log history via deploy block env.
         </p>
       ) : (
         <ul className="space-y-2.5">
@@ -200,7 +198,7 @@ function SidebarPotWinners({ rows, genesisGameHour }: { rows: PotRow[]; genesisG
               className="rounded border border-emerald-500/25 bg-emerald-500/[0.07] px-3 py-2.5 text-center"
             >
               <div className="font-label text-xs uppercase tracking-wider text-secondary">
-                {rk} {hourIdForDisplay(r.hourId, genesisGameHour)}
+                {rk} {hourIdForDisplay(r.roundId, genesisGameHour)}
               </div>
               <div className="mt-1 truncate font-mono text-sm text-primary-fixed" title={r.winner}>
                 {r.winner.slice(0, 6)}…{r.winner.slice(-4)}
@@ -265,8 +263,8 @@ export function ClickMintDashboard() {
   const publicClient = usePublicClient({ chainId: clickmintChainId() });
   const queryClient = useQueryClient();
 
-  /** First `gameHour` bucket after deploy — from `NEXT_PUBLIC_GAME_GENESIS_UNIX` or `NEXT_PUBLIC_GAME_DEPLOY_BLOCK`. */
-  const [genesisGameHour, setGenesisGameHour] = useState<bigint | null>(() => readGenesisGameHourFromEnv());
+  /** First `gameRound` bucket after deploy — from `NEXT_PUBLIC_GAME_GENESIS_UNIX` or `NEXT_PUBLIC_GAME_DEPLOY_BLOCK`. */
+  const [genesisGameHour, setGenesisGameHour] = useState<bigint | null>(() => readGenesisGameRoundFromEnv());
 
   useEffect(() => {
     const blockStr = typeof process !== "undefined" ? process.env.NEXT_PUBLIC_GAME_DEPLOY_BLOCK?.trim() : undefined;
@@ -277,7 +275,7 @@ export function ClickMintDashboard() {
     void publicClient
       .getBlock({ blockNumber })
       .then((b) => {
-        if (!cancelled) setGenesisGameHour(gameHourIndexFromUnixSec(Number(b.timestamp)));
+        if (!cancelled) setGenesisGameHour(gameRoundIndexFromUnixSec(Number(b.timestamp)));
       })
       .catch(() => {});
     return () => {
@@ -287,59 +285,52 @@ export function ClickMintDashboard() {
 
   /** One wall-clock second bucket for reads + countdowns — avoids refetch thrash from `Date.now()` on unrelated renders. */
   const [tickSec, setTickSec] = useState(() => Math.floor(Date.now() / 1000));
-  /**
-   * Stable timestamp for `gameHour(ts)` reads: same on-chain hour for every second inside that hour.
-   * Must mirror `ClickMintGame.gameHour`: `(ts - RESET_BUFFER) / 3600` (not raw UTC hour start).
-   */
-  const gameHourReadTs = useMemo(() => {
-    if (tickSec <= GAME_RESET_BUFFER_SEC) return BigInt(GAME_RESET_BUFFER_SEC + 1);
-    const h = Math.floor((tickSec - GAME_RESET_BUFFER_SEC) / 3600);
-    return BigInt(GAME_RESET_BUFFER_SEC + h * 3600 + 1);
-  }, [tickSec]);
-  const { data: gameHourNow } = useReadContract({
+  /** Wall-clock second for `gameRound(ts)` — any ts in the current minute returns the same round id. */
+  const gameRoundReadTs = useMemo(() => BigInt(tickSec), [tickSec]);
+  const { data: gameRoundNow } = useReadContract({
     address: gameAddr,
     abi: clickMintGameAbi,
-    functionName: "gameHour",
-    args: [gameHourReadTs],
+    functionName: "gameRound",
+    args: [gameRoundReadTs],
     query: { enabled: !!gameAddr, placeholderData: keepPreviousData },
   });
 
-  const { data: totalClicksThisHour } = useReadContract({
+  const { data: totalClicksThisRound } = useReadContract({
     address: gameAddr,
     abi: clickMintGameAbi,
-    functionName: "totalClicksInHour",
-    args: gameHourNow !== undefined ? [gameHourNow] : undefined,
+    functionName: "totalClicksInRound",
+    args: gameRoundNow !== undefined ? [gameRoundNow] : undefined,
     query: {
-      enabled: !!gameAddr && gameHourNow !== undefined,
+      enabled: !!gameAddr && gameRoundNow !== undefined,
       refetchInterval: 4_000,
     },
   });
 
   /** 1-based round counter since contract deploy (requires genesis env). */
   const roundsSinceLaunch = useMemo(() => {
-    if (gameHourNow === undefined || genesisGameHour === null) return undefined;
-    return gameHourNow >= genesisGameHour ? gameHourNow - genesisGameHour + 1n : 1n;
-  }, [gameHourNow, genesisGameHour]);
+    if (gameRoundNow === undefined || genesisGameHour === null) return undefined;
+    return gameRoundNow >= genesisGameHour ? gameRoundNow - genesisGameHour + 1n : 1n;
+  }, [gameRoundNow, genesisGameHour]);
 
-  const prevHour = useMemo(() => {
-    if (gameHourNow === undefined || gameHourNow === 0n) return undefined;
-    return gameHourNow - 1n;
-  }, [gameHourNow]);
+  const prevRound = useMemo(() => {
+    if (gameRoundNow === undefined || gameRoundNow === 0n) return undefined;
+    return gameRoundNow - 1n;
+  }, [gameRoundNow]);
 
   const { data: prevFinalized } = useReadContract({
     address: gameAddr,
     abi: clickMintGameAbi,
-    functionName: "hourFinalized",
-    args: prevHour !== undefined ? [prevHour] : undefined,
-    query: { enabled: !!gameAddr && prevHour !== undefined },
+    functionName: "roundFinalized",
+    args: prevRound !== undefined ? [prevRound] : undefined,
+    query: { enabled: !!gameAddr && prevRound !== undefined },
   });
 
-  const { data: prevHourWinWindow } = useReadContract({
+  const { data: prevRoundWinSlot } = useReadContract({
     address: gameAddr,
     abi: clickMintGameAbi,
-    functionName: "hourWinWindow",
-    args: prevHour !== undefined ? [prevHour] : undefined,
-    query: { enabled: !!gameAddr && prevHour !== undefined && !!prevFinalized },
+    functionName: "roundWinSlot",
+    args: prevRound !== undefined ? [prevRound] : undefined,
+    query: { enabled: !!gameAddr && prevRound !== undefined && !!prevFinalized },
   });
 
   useEffect(() => {
@@ -349,24 +340,23 @@ export function ClickMintDashboard() {
 
   const potClock = useMemo(() => {
     const now = tickSec;
-    if (gameHourNow === undefined) return null;
-    const nextBoundary = (gameHourNow + 1n) * 3600n + BigInt(GAME_RESET_BUFFER_SEC);
-    const secToHourEnd = Math.max(0, Number(nextBoundary - BigInt(now)));
+    if (gameRoundNow === undefined) return null;
+    const nextBoundary = (gameRoundNow + 1n) * 60n + BigInt(GAME_RESET_BUFFER_SEC);
+    const secToRoundEnd = Math.max(0, Number(nextBoundary - BigInt(now)));
 
     let secUntilFinalizeGate: number | null = null;
-    if (gameHourNow > 0n) {
-      const gate = gameHourNow * 3600n + BigInt(GAME_RESET_BUFFER_SEC);
+    if (gameRoundNow > 0n) {
+      const gate = gameRoundNow * 60n + BigInt(GAME_RESET_BUFFER_SEC);
       secUntilFinalizeGate = now >= Number(gate) ? 0 : Number(gate - BigInt(now));
     }
 
     return {
-      secToHourEnd,
+      secToRoundEnd,
       secUntilFinalizeGate,
-      currentMinuteUtc: minuteInHourFromUnix(now),
-      gameHourId: gameHourNow,
+      gameRoundId: gameRoundNow,
       nextBoundaryEpochSec: Number(nextBoundary),
     };
-  }, [gameHourNow, tickSec]);
+  }, [gameRoundNow, tickSec]);
 
   const { data: credits, refetch: refetchCredits } = useReadContract({
     address: gameAddr,
@@ -477,8 +467,8 @@ export function ClickMintDashboard() {
   const clickInFlight = useRef(false);
   const [cooldownMs, setCooldownMs] = useState(0);
 
-  /** Matches on-chain `MAX_CLICKS_PER_BLOCK` pacing — stay slightly under 2/block when blocks are fast. */
-  const MIN_CLICK_INTERVAL_MS = 750;
+  /** UX pacing; on-chain limit is `MAX_CLICKS_PER_BLOCK` (20) per L2 block. */
+  const MIN_CLICK_INTERVAL_MS = 100;
 
   const triggerHeroClickFlash = useCallback(() => {
     if (heroClickFlashTimerRef.current) {
@@ -545,10 +535,10 @@ export function ClickMintDashboard() {
       let invalidatePot = false;
       for (const log of logs) {
         const args = log.args as unknown as {
-          hourId: bigint;
+          roundId: bigint;
           winner: Address;
           ethPayout: bigint;
-          winStartMinute: number;
+          winSlot: number;
           entropy: `0x${string}`;
         };
         if (!args?.winner || args.winner === ZERO_ADDR) {
@@ -750,7 +740,7 @@ export function ClickMintDashboard() {
         /out of gas|intrinsic gas too low|exceeds block gas|gas required exceeds/i.test(msg)
       ) {
         msg =
-          "Your wallet often labels reverts as “out of gas.” Here, rapid clicks can exceed the on-chain limit of 2 clicks per block, or the random click-hash check can fail as difficulty rises — wait for confirmation, then try again.";
+          "Your wallet often labels reverts as “out of gas.” Here, rapid clicks can exceed the on-chain limit of 20 clicks per L2 block, or the random click-hash check can fail as difficulty rises — wait for confirmation, then try again.";
       }
       toast.error("Click failed", { description: msg.slice(0, 320), duration: 12_000 });
     } finally {
@@ -840,23 +830,23 @@ export function ClickMintDashboard() {
   };
 
   const onFinalize = async () => {
-    if (!gameAddr || wrongChain || prevHour === undefined) return;
+    if (!gameAddr || wrongChain || prevRound === undefined) return;
     try {
       await writeContractAsync({
         chainId: clickmintChainId(),
         address: gameAddr,
         abi: clickMintGameAbi,
-        functionName: "finalizeHour",
-        args: [prevHour],
+        functionName: "finalizeRound",
+        args: [prevRound],
       });
       toast.message(
-        `Finalize ${potRoundKind(genesisGameHour)} ${hourIdForDisplay(prevHour, genesisGameHour)} sent`
+        `Finalize ${potRoundKind(genesisGameHour)} ${hourIdForDisplay(prevRound, genesisGameHour)} sent`
       );
     } catch (e) {
       sfxRef.current.playError();
       const data = extractRevertData(e);
       const msg = data ? explainRevertData(data) : (e as Error).message;
-      console.error("finalizeHour() failed", e);
+      console.error("finalizeRound() failed", e);
       toast.error("Finalize failed", { description: msg.slice(0, 220) });
     }
   };
@@ -927,9 +917,22 @@ export function ClickMintDashboard() {
   const canSendClick =
     isConnected && !writePending && !gaslessActionPending && !gameLinkPending && gameLinkOk;
 
-  const hourlyPotCard = (
+  const { data: slotInRoundNow } = useReadContract({
+    address: gameAddr,
+    abi: clickMintGameAbi,
+    functionName: "slotInRound",
+    args: [BigInt(tickSec)],
+    query: { enabled: !!gameAddr },
+  });
+
+  const wallSlotLabel =
+    slotInRoundNow === undefined
+      ? "—"
+      : (["0–14s", "15–29s", "30–44s", "45–59s"] as const)[Number(slotInRoundNow)] ?? "—";
+
+  const minutePotCard = (
     <div className="w-full max-w-[17rem] space-y-2 rounded border border-outline-variant/25 bg-surface-container-low/50 px-3 py-2.5 text-center shadow-sm shadow-black/20">
-      <p className="font-label text-[10px] uppercase tracking-[0.2em] text-primary-fixed/90 md:text-[11px]">Hourly POT</p>
+      <p className="font-label text-[10px] uppercase tracking-[0.2em] text-primary-fixed/90 md:text-[11px]">Minute POT</p>
       <div className="flex justify-between font-label text-[11px] uppercase tracking-widest text-secondary md:text-xs">
         <span>{potEthStr} ETH</span>
         <span className="text-primary-fixed">{potFillPct.toFixed(0)}%</span>
@@ -943,7 +946,7 @@ export function ClickMintDashboard() {
       <p className="font-body text-[11px] leading-snug text-secondary opacity-90 md:text-xs">
         {minPotClicks !== undefined ? (
           <>
-            Qualify: ≥{minPotClicks.toString()} clicks/hr + overlap with winning 15-min span.{" "}
+            Qualify: ≥{minPotClicks.toString()} clicks this round + overlap with winning 15s slot.{" "}
           </>
         ) : null}
         <Link href="/documentation#pot" className="text-primary-fixed/90 underline-offset-2 hover:underline">
@@ -952,11 +955,11 @@ export function ClickMintDashboard() {
       </p>
       <button
         type="button"
-        disabled={!canAct || prevHour === undefined || !!prevFinalized}
+        disabled={!canAct || prevRound === undefined || !!prevFinalized}
         onClick={() => void onFinalize()}
         className="w-full rounded border border-primary-fixed/40 bg-primary-fixed/10 py-2.5 font-label text-[11px] font-semibold uppercase tracking-widest text-primary-fixed shadow-[0_0_12px_rgba(0,251,251,0.12)] transition-colors hover:bg-primary-fixed/20 disabled:opacity-25 md:text-xs"
       >
-        Finalize hour / settle round
+        Finalize round / settle POT
       </button>
     </div>
   );
@@ -965,13 +968,13 @@ export function ClickMintDashboard() {
     potClock !== null ? (
       <div className="w-full max-w-lg rounded border border-outline-variant/20 bg-surface-container-low/30 px-3 py-2.5 text-center font-body text-[12px] leading-snug text-secondary md:text-sm">
         <p className="font-headline text-sm font-bold tabular-nums text-white md:text-base">
-          Next reset <span className="text-primary-fixed">{formatCountdown(potClock.secToHourEnd)}</span>
+          Next round <span className="text-primary-fixed">{formatCountdown(potClock.secToRoundEnd)}</span>
         </p>
         <p className="mt-1 text-[11px] text-on-surface/80 md:text-xs">
           ~{formatEpochLocalShort(potClock.nextBoundaryEpochSec)} your time
         </p>
         <p className="mt-2 text-[12px] font-semibold text-primary-fixed md:text-sm">
-          :{String(potClock.currentMinuteUtc).padStart(2, "0")} UTC
+          15s slot: <span className="text-on-surface/90">{wallSlotLabel}</span>
           <span className="mx-1.5 font-normal text-outline-variant">·</span>
           <span className="font-normal text-on-surface/85">
             {new Date(tickSec * 1000).toLocaleTimeString(undefined, {
@@ -982,9 +985,9 @@ export function ClickMintDashboard() {
             local
           </span>
         </p>
-        {prevHour !== undefined && prevFinalized !== undefined ? (
+        {prevRound !== undefined && prevFinalized !== undefined ? (
           <p className="mt-2 text-[11px] text-secondary md:text-xs">
-            Last {potRoundKind(genesisGameHour)} {hourIdForDisplay(prevHour, genesisGameHour)}{" "}
+            Last {potRoundKind(genesisGameHour)} {hourIdForDisplay(prevRound, genesisGameHour)}{" "}
             {prevFinalized ? (
               <span className="text-emerald-300/90">settled</span>
             ) : (
@@ -992,26 +995,26 @@ export function ClickMintDashboard() {
             )}
           </p>
         ) : null}
-        {prevHour !== undefined ? (
+        {prevRound !== undefined ? (
           <div className="mt-1 text-[11px] leading-snug md:text-xs">
             {prevFinalized ? (
               <p className="text-secondary">
-                Last span:{" "}
+                Winning slot:{" "}
                 <span className="font-semibold text-primary-fixed">
-                  {prevHourWinWindow !== undefined ? utcPotSpanLabel(Number(prevHourWinWindow)) : "—"}
+                  {prevRoundWinSlot !== undefined ? slotSpanLabel(Number(prevRoundWinSlot)) : "—"}
                 </span>
               </p>
             ) : potClock.secUntilFinalizeGate !== null ? (
               potClock.secUntilFinalizeGate > 0 ? (
                 <p className="text-secondary">
-                  Settlement — {potRoundKind(genesisGameHour)} {hourIdForDisplay(prevHour, genesisGameHour)} in{" "}
+                  Settlement — {potRoundKind(genesisGameHour)} {hourIdForDisplay(prevRound, genesisGameHour)} in{" "}
                   <span className="font-semibold tabular-nums text-primary-fixed">
                     {formatCountdown(potClock.secUntilFinalizeGate)}
                   </span>
                 </p>
               ) : (
                 <p className="rounded border border-amber-400/30 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-100/95 md:text-xs">
-                  {potRoundKind(genesisGameHour)} {hourIdForDisplay(prevHour, genesisGameHour)} ready to settle (operators).
+                  {potRoundKind(genesisGameHour)} {hourIdForDisplay(prevRound, genesisGameHour)} ready to settle (operators).
                 </p>
               )
             ) : null}
@@ -1028,8 +1031,8 @@ export function ClickMintDashboard() {
       <section className="mx-auto w-full max-w-xl space-y-3 px-2 text-center">
         <p className="mx-auto max-w-xl font-body text-[13px] leading-relaxed text-secondary md:text-sm">
           <span className="font-semibold text-on-surface/95">Objective:</span> spend credits to{" "}
-          <span className="text-primary-fixed/95">CLICK</span> each hour, earn $CLICK (vesting), and compete for the hourly
-          ETH pot. Use <span className="text-primary-fixed/90">Claim vested</span> for time-unlocked tokens, or{" "}
+          <span className="text-primary-fixed/95">CLICK</span> each minute round, earn $CLICK (vesting), and compete for the
+          ETH pot + Block Bet. Use <span className="text-primary-fixed/90">Claim vested</span> for time-unlocked tokens, or{" "}
           <span className="text-primary-fixed/90">Early claim</span> to exit locked balance early — details under the amount
           field (<span className="font-semibold text-primary-fixed/85">More info</span>).
         </p>
@@ -1081,121 +1084,135 @@ export function ClickMintDashboard() {
         )}
       </section>
 
-      {/* Centered CLICK hero — desktop: round/since launch sits above button (aligned with main column). */}
-      <div className="relative mx-auto flex w-full max-w-3xl flex-col items-center justify-center space-y-2 px-1 py-1 md:space-y-3 md:py-4">
-        {gameHourNow !== undefined ? (
-          <div className="hidden w-full flex-col items-center pb-0.5 text-center md:flex">
-            <p
-              className={cn("font-mono text-4xl font-black tabular-nums leading-none md:text-5xl", NEON_MAGENTA_TEXT)}
-              title={
-                roundsSinceLaunch !== undefined
-                  ? "Rounds since this game contract was deployed."
-                  : "Raw on-chain hour bucket (epoch). Add NEXT_PUBLIC_GAME_GENESIS_UNIX or NEXT_PUBLIC_GAME_DEPLOY_BLOCK for “rounds since launch.”"
-              }
-            >
-              {roundsSinceLaunch !== undefined ? roundsSinceLaunch.toString() : `#${gameHourNow.toString()}`}
-            </p>
-            <p className="mt-1 max-w-[14rem] font-label text-[10px] uppercase tracking-widest text-secondary md:text-[11px]">
-              {roundsSinceLaunch !== undefined ? "Since launch" : "Game hour index (chain)"}
-            </p>
-          </div>
-        ) : null}
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-10 md:hidden">
-          <div className="pulse-ring h-64 w-64 rounded-full border border-primary-container" />
-        </div>
-        <button
-          type="button"
-          disabled={!canSendClick}
-          onClick={() => {
-            triggerHeroClickFlash();
-            void onClick();
-          }}
-          className={cn(
-            "relative z-10 flex h-56 w-56 flex-col items-center justify-center font-headline font-black uppercase transition-transform active:scale-90",
-            "md:h-[17rem] md:w-[17rem] md:shrink-0",
-            "rounded-full border-4 border-primary-container bg-surface-container md:rounded-none md:border-0 md:bg-primary-fixed md:text-on-primary-fixed",
-            wrongChain && "ring-2 ring-amber-400/80"
-          )}
-        >
-          <span
-            aria-hidden
-            className={cn(
-              "pointer-events-none absolute inset-0 z-0 rounded-full md:rounded-none neon-pulse",
-              heroClickFlash && "click-hero-flash"
-            )}
-          />
-          <span className="absolute inset-0 z-[1] bg-gradient-to-tr from-primary-container/20 to-transparent md:hidden" />
-          <span className="relative z-20 font-headline text-5xl font-extrabold tracking-tighter text-white glitch-text md:text-6xl md:text-on-primary-fixed md:[text-shadow:none]">
-            CLICK
-          </span>
-          <span className="relative z-20 mt-1 font-label text-[10px] font-medium tracking-[0.3em] text-primary-fixed md:hidden">
-            EXECUTE
-          </span>
-        </button>
-        {wrongChain && (
-          <p className="max-w-xs text-center font-body text-[10px] uppercase tracking-wider text-amber-200/90 md:text-[11px]">
-            Wrong network — tap CLICK to switch to {clickmintChainLabel()}, or use the header link.
-          </p>
-        )}
-        <div className="flex flex-col items-center gap-1.5">
-          <div className="border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 font-label text-[10px] uppercase tracking-widest text-primary-fixed">
-            <span className="inline-flex items-center gap-2">
-              <span
-                className="material-symbols-outlined text-xs"
-                style={{ fontVariationSettings: `"FILL" 1, "wght" 400` } as CSSProperties}
+      {/* CLICK hero inside 46-tile block-bet ring (4×15s sides). */}
+      <div className="mx-auto w-full max-w-3xl px-2 py-2 md:py-4">
+        <BlockBetPanel
+          gameAddr={gameAddr}
+          tickSec={tickSec}
+          wrongChain={wrongChain}
+          canAct={canAct}
+          aboveRing={
+            gameRoundNow !== undefined ? (
+              <div className="hidden w-full flex-col items-center pb-0.5 text-center md:flex">
+                <p
+                  className={cn("font-mono text-3xl font-black tabular-nums leading-none md:text-4xl", NEON_MAGENTA_TEXT)}
+                  title={
+                    roundsSinceLaunch !== undefined
+                      ? "Rounds since this game contract was deployed."
+                      : "Raw on-chain minute round id. Add NEXT_PUBLIC_GAME_GENESIS_UNIX or NEXT_PUBLIC_GAME_DEPLOY_BLOCK for “rounds since launch.”"
+                  }
+                >
+                  {roundsSinceLaunch !== undefined ? roundsSinceLaunch.toString() : `#${gameRoundNow.toString()}`}
+                </p>
+                <p className="mt-1 max-w-[14rem] font-label text-[10px] uppercase tracking-widest text-secondary md:text-[11px]">
+                  {roundsSinceLaunch !== undefined ? "Since launch" : "Game round index (chain)"}
+                </p>
+              </div>
+            ) : null
+          }
+          center={
+            <div className="relative flex min-h-0 w-full flex-col items-center justify-center">
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-10 md:hidden">
+                <div className="pulse-ring h-56 w-56 rounded-full border border-primary-container" />
+              </div>
+              <button
+                type="button"
+                disabled={!canSendClick}
+                onClick={() => {
+                  triggerHeroClickFlash();
+                  void onClick();
+                }}
+                className={cn(
+                  "relative z-10 flex h-56 w-56 flex-col items-center justify-center font-headline font-black uppercase transition-transform active:scale-90",
+                  "md:h-64 md:w-64 md:shrink-0",
+                  "rounded-full border-4 border-primary-container bg-surface-container md:rounded-2xl md:border-2 md:bg-primary-fixed md:text-on-primary-fixed",
+                  wrongChain && "ring-2 ring-amber-400/80"
+                )}
               >
-                bolt
-              </span>
-              {cooldownLabel !== null ? (
-                <>RATE LIMIT: {cooldownLabel}s</>
-              ) : needsBuyCredits ? (
-                <>Buy credits</>
-              ) : (
-                <>READY</>
+                <span
+                  aria-hidden
+                  className={cn(
+                    "pointer-events-none absolute inset-0 z-0 rounded-full md:rounded-2xl neon-pulse",
+                    heroClickFlash && "click-hero-flash"
+                  )}
+                />
+                <span className="absolute inset-0 z-[1] rounded-full bg-gradient-to-tr from-primary-container/20 to-transparent md:rounded-2xl md:hidden" />
+                <span className="relative z-20 font-headline text-4xl font-extrabold tracking-tighter text-white glitch-text md:text-5xl md:text-on-primary-fixed md:[text-shadow:none]">
+                  CLICK
+                </span>
+                <span className="relative z-20 mt-1 font-label text-[10px] font-medium tracking-[0.3em] text-primary-fixed md:hidden">
+                  EXECUTE
+                </span>
+              </button>
+              {wrongChain && (
+                <p className="mt-2 max-w-xs text-center font-body text-[10px] uppercase tracking-wider text-amber-200/90 md:text-[11px]">
+                  Wrong network — tap CLICK to switch to {clickmintChainLabel()}, or use the header link.
+                </p>
               )}
-            </span>
-          </div>
-          {totalClicksThisHour !== undefined ? (
-            <p
-              className="max-w-sm px-2 text-center font-mono text-[11px] tabular-nums text-primary-fixed/90 md:text-xs"
-              title="All players’ clicks recorded on-chain for the current game hour bucket."
-            >
-              Total clicks this {genesisGameHour !== null ? "round" : "hour"}:{" "}
-              <span className="font-semibold text-on-surface/95">{totalClicksThisHour.toString()}</span>
-            </p>
-          ) : null}
-          <button
-            type="button"
-            id="hero-add-credits"
-            aria-haspopup="dialog"
-            aria-expanded={depositOpen}
-            disabled={!isConnected}
-            onClick={() => setDepositOpen(true)}
-            className={cn(
-              "inline-flex items-center gap-1.5 px-3 py-1.5 font-label text-[10px] font-bold uppercase tracking-[0.15em] transition-colors",
-              !isConnected
-                ? "cursor-not-allowed border-2 border-outline-variant/30 text-secondary opacity-50"
-                : depositOpen
-                  ? cn(NEON_MAGENTA_BTN, "bg-[#ff2ee8]/20")
-                  : cn(NEON_MAGENTA_BTN)
-            )}
-          >
-            <Icon name="add_circle" className="text-sm opacity-90" />
-            Add credits
-          </button>
-        </div>
-        {gasless.status === "ready" ? (
-          <p className="max-w-md px-2 text-center font-body text-[11px] leading-snug text-secondary md:text-xs">
-            <span className="font-semibold text-primary-fixed/90">Gasless mode active</span> — clicks are free of gas. Your
-            EOA receives all rewards and uses your existing credits. Executor:{" "}
-            <span className="font-mono text-primary-fixed/85">
-              {gasless.smartAccountAddress
-                ? `${gasless.smartAccountAddress.slice(0, 6)}…${gasless.smartAccountAddress.slice(-4)}`
-                : "—"}
-            </span>
-            .
-          </p>
-        ) : null}
+            </div>
+          }
+          belowRing={
+            <div className="flex w-full flex-col items-center gap-2">
+              <div className="border border-outline-variant/30 bg-surface-container-low px-3 py-1.5 font-label text-[10px] uppercase tracking-widest text-primary-fixed">
+                <span className="inline-flex items-center gap-2">
+                  <span
+                    className="material-symbols-outlined text-xs"
+                    style={{ fontVariationSettings: `"FILL" 1, "wght" 400` } as CSSProperties}
+                  >
+                    bolt
+                  </span>
+                  {cooldownLabel !== null ? (
+                    <>RATE LIMIT: {cooldownLabel}s</>
+                  ) : needsBuyCredits ? (
+                    <>Buy credits</>
+                  ) : (
+                    <>READY</>
+                  )}
+                </span>
+              </div>
+              {totalClicksThisRound !== undefined ? (
+                <p
+                  className="max-w-sm px-2 text-center font-mono text-[11px] tabular-nums text-primary-fixed/90 md:text-xs"
+                  title="All players’ clicks recorded on-chain for the current minute round."
+                >
+                  Total clicks this round:{" "}
+                  <span className="font-semibold text-on-surface/95">{totalClicksThisRound.toString()}</span>
+                </p>
+              ) : null}
+              <button
+                type="button"
+                id="hero-add-credits"
+                aria-haspopup="dialog"
+                aria-expanded={depositOpen}
+                disabled={!isConnected}
+                onClick={() => setDepositOpen(true)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 px-3 py-1.5 font-label text-[10px] font-bold uppercase tracking-[0.15em] transition-colors",
+                  !isConnected
+                    ? "cursor-not-allowed border-2 border-outline-variant/30 text-secondary opacity-50"
+                    : depositOpen
+                      ? cn(NEON_MAGENTA_BTN, "bg-[#ff2ee8]/20")
+                      : cn(NEON_MAGENTA_BTN)
+                )}
+              >
+                <Icon name="add_circle" className="text-sm opacity-90" />
+                Add credits
+              </button>
+              {gasless.status === "ready" ? (
+                <p className="max-w-md px-2 text-center font-body text-[11px] leading-snug text-secondary md:text-xs">
+                  <span className="font-semibold text-primary-fixed/90">Gasless mode active</span> — clicks are free of
+                  gas. Your EOA receives all rewards and uses your existing credits. Executor:{" "}
+                  <span className="font-mono text-primary-fixed/85">
+                    {gasless.smartAccountAddress
+                      ? `${gasless.smartAccountAddress.slice(0, 6)}…${gasless.smartAccountAddress.slice(-4)}`
+                      : "—"}
+                  </span>
+                  .
+                </p>
+              ) : null}
+            </div>
+          }
+        />
       </div>
 
       {/* Stats — top center */}
@@ -1391,7 +1408,7 @@ export function ClickMintDashboard() {
           <DialogContent className="border-outline-variant/40">
             <DialogHeader>
               <DialogTitle>POT winners</DialogTitle>
-              <DialogDescription className="sr-only">Hourly pot payout history from this browser session</DialogDescription>
+              <DialogDescription className="sr-only">POT payout history from this browser session</DialogDescription>
             </DialogHeader>
             <WinnerTable rows={potRows} genesisGameHour={genesisGameHour} />
           </DialogContent>
@@ -1419,7 +1436,14 @@ export function ClickMintDashboard() {
         <div className="relative mx-auto flex min-h-[4rem] max-w-[100vw] items-center justify-between gap-x-2 px-3 py-2 sm:px-4 md:min-h-[4.25rem] md:px-4 md:py-2 lg:px-6">
           <div className="relative z-20 flex min-w-0 max-w-[min(100%,14rem)] flex-col gap-0.5 sm:max-w-[min(100%,11rem)] md:max-w-none">
             <div className="flex min-w-0 items-center gap-2">
-              <span className="material-symbols-outlined shrink-0 text-primary-fixed md:hidden">token</span>
+              <Image
+                src="/ClickMint_logo_tp.jpg"
+                alt=""
+                width={36}
+                height={36}
+                className="h-8 w-8 shrink-0 rounded-sm object-cover md:h-9 md:w-9"
+                priority
+              />
               <span className="truncate text-lg font-black tracking-tighter text-white md:text-2xl">CLICKMINT</span>
               <Link
                 href="/documentation"
@@ -1436,7 +1460,7 @@ export function ClickMintDashboard() {
             </p>
           </div>
 
-          {gameHourNow !== undefined ? (
+          {gameRoundNow !== undefined ? (
             <div className="pointer-events-none absolute inset-y-0 left-1/2 z-10 flex -translate-x-1/2 items-center md:left-[calc(18rem+min(56rem,100vw-18rem)/2)]">
               <div className="pointer-events-auto flex max-h-full flex-col items-center justify-center gap-1 py-1 md:gap-1.5 md:py-0">
                 <div className="flex flex-col items-center gap-0.5 text-center md:hidden">
@@ -1445,13 +1469,13 @@ export function ClickMintDashboard() {
                     title={
                       roundsSinceLaunch !== undefined
                         ? "Rounds since this game contract was deployed."
-                        : "Raw on-chain hour bucket (epoch). Add NEXT_PUBLIC_GAME_GENESIS_UNIX or NEXT_PUBLIC_GAME_DEPLOY_BLOCK for “rounds since launch.”"
+                        : "Raw on-chain minute round id. Add NEXT_PUBLIC_GAME_GENESIS_UNIX or NEXT_PUBLIC_GAME_DEPLOY_BLOCK for “rounds since launch.”"
                     }
                   >
-                    {roundsSinceLaunch !== undefined ? roundsSinceLaunch.toString() : `#${gameHourNow.toString()}`}
+                    {roundsSinceLaunch !== undefined ? roundsSinceLaunch.toString() : `#${gameRoundNow.toString()}`}
                   </p>
                   <p className="max-w-[14rem] font-label text-[7px] uppercase tracking-widest text-secondary">
-                    {roundsSinceLaunch !== undefined ? "Since launch" : "Game hour index (chain)"}
+                    {roundsSinceLaunch !== undefined ? "Since launch" : "Game round index (chain)"}
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center justify-center gap-1.5">
@@ -1816,7 +1840,7 @@ export function ClickMintDashboard() {
         </nav>
         <div className="mt-4 space-y-4 border-t border-outline-variant/25 px-4 pb-36 pt-4 md:pb-44">
           <div className="mx-auto w-full max-w-[17rem]">{resetTimerStrip}</div>
-          <div className="mx-auto flex w-full max-w-[17rem] justify-center">{hourlyPotCard}</div>
+          <div className="mx-auto flex w-full max-w-[17rem] justify-center">{minutePotCard}</div>
           <div className="border-t border-outline-variant/20 pt-4">
             <ClickHistoryPanel
               gameAddr={gameAddr}

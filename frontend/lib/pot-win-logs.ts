@@ -1,20 +1,20 @@
 import type { PublicClient } from "viem";
 import { parseAbiItem, type Address } from "viem";
 
-/** Matches `ClickMintGame.PotWin` (third field was historically minted CLICK wei; on current deploys it is ETH wei). */
+/** Matches `ClickMintGame.PotWin` (third field is ETH wei paid to winner). */
 const potWinEvent = parseAbiItem(
-  "event PotWin(uint256 indexed hourId, address indexed winner, uint256 ethPayout, uint8 winStartMinute, bytes32 entropy)"
+  "event PotWin(uint256 indexed roundId, address indexed winner, uint256 ethPayout, uint8 winSlot, bytes32 entropy)"
 );
 
 const LOG_CHUNK = 8_000n;
 
 export type PotWinLogRow = {
   key: string;
-  hourId: bigint;
+  roundId: bigint;
   winner: Address;
-  /** ETH wei from `PotWin` (legacy games used CLICK wei here). */
+  /** ETH wei from `PotWin`. */
   payout: bigint;
-  winStartMinute: number;
+  winSlot: number;
   entropy?: `0x${string}`;
   blockNumber: bigint;
   logIndex: number;
@@ -46,19 +46,19 @@ export async function fetchPotWinLogs(
     });
 
     for (const log of logs) {
-      const { hourId, winner, ethPayout, winStartMinute, entropy } = log.args as {
-        hourId: bigint;
+      const { roundId, winner, ethPayout, winSlot, entropy } = log.args as {
+        roundId: bigint;
         winner: Address;
         ethPayout: bigint;
-        winStartMinute: number;
+        winSlot: number;
         entropy: `0x${string}`;
       };
       rows.push({
         key: `${log.transactionHash}-${log.logIndex}`,
-        hourId,
+        roundId,
         winner,
         payout: ethPayout,
-        winStartMinute,
+        winSlot: Number(winSlot),
         entropy,
         blockNumber: log.blockNumber,
         logIndex: log.logIndex,
@@ -71,7 +71,7 @@ export async function fetchPotWinLogs(
   rows.sort((a, b) => {
     if (a.blockNumber !== b.blockNumber) return a.blockNumber > b.blockNumber ? -1 : 1;
     if (a.logIndex !== b.logIndex) return a.logIndex > b.logIndex ? -1 : 1;
-    return a.hourId > b.hourId ? -1 : 1;
+    return a.roundId > b.roundId ? -1 : 1;
   });
 
   return rows.slice(0, 96);

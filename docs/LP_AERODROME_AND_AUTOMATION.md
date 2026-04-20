@@ -65,56 +65,56 @@ This repository **does not** include that helper yet; it is a small dedicated co
 
 ---
 
-## How hourly POT settlement works today
+## How minute POT + Block Bet settlement works
 
-1. **`finalizeHour(hourId)`** on **ClickMintGame** runs **after** the game hour ends and the **`RESET_BUFFER`** (20s) has passed — see `GameFinalizeEarly` in the contract.
-2. It derives **pseudo-random** entropy from **`block.prevrandao`** and other fields, picks a **winning 15-minute UTC span** with a **random start minute 0–44** (so the span stays inside the hour), then **eligible** players (min clicks + at least one click whose **minute-of-hour** falls in that span). **Sends accumulated POT ETH** (`potEthByHour` + `potCarry`) to the winner; if there is no eligible winner, **carries** that hour’s slice forward in **`potCarry`** (no ETH transfer that round).
-3. Previously **only `owner`** could call `finalizeHour` (MEV/grief mitigation in comments).
+1. **`finalizeRound(roundId)`** on **ClickMintGame** runs **after** that UTC **minute** round ends and **`ROUND_BUFFER`** (~5s) has passed — see `GameFinalizeEarly` in the contract.
+2. It derives **pseudo-random** entropy. **POT:** winning **quadrant** `0–3` (same buckets as **`slotInRound`** for clicks); eligible players need min clicks and a click in that quadrant. **Block bet:** a **separate** draw picks winning window **`0..45`** (15s slice starting at second `k`). POT ETH goes to the POT winner; block-bet ETH splits among stakers on the winning **`k`**, or **carries** if unstaked. If there is no eligible POT winner, POT ETH **carries** in **`potCarry`**.
+3. **`owner`** or **`potKeeper`** may call `finalizeRound` (when `potKeeper` is set).
 
 ### Automatic settlement (no manual owner click)
 
-**Deployments:** The **`potKeeper`** field exists only in contract versions that include **`setPotKeeper`**. Older **`ClickMintGame`** deployments are still **owner-only** for `finalizeHour` until you **redeploy** the game (or upgrade via proxy, if you use one) and point the frontend at the new address.
+**Deployments:** The **`potKeeper`** field exists only in contract versions that include **`setPotKeeper`**. Older deployments may be **owner-only** until you **redeploy** and point envs at the new game.
 
 The contract supports an optional **`potKeeper`** address:
 
 - **`setPotKeeper(address)`** — **owner** only; set to **`address(0)`** to disable (only owner can finalize).
-- **`finalizeHour`** may be called by **`owner`** **or** **`potKeeper`** (when non-zero).
+- **`finalizeRound`** may be called by **`owner`** **or** **`potKeeper`** (when non-zero).
 
 **Typical setup:**
 
-1. Create a **dedicated wallet** (or use the vendor’s **relay** address) that will submit `finalizeHour`.
-2. **`setPotKeeper(thatAddress)`** on the game (owner). **`finalizeHour`** may then be sent by **owner** or **`potKeeper`**.
-3. Schedule a job that runs **after** each game hour boundary (see below), and calls **`finalizeHour(hourId)`** for the **previous** on-chain hour — the same `hourId` the dashboard uses as “last round to settle.”
+1. Create a **dedicated wallet** (or use the vendor’s **relay** address) that will submit `finalizeRound`.
+2. **`setPotKeeper(thatAddress)`** on the game (owner).
+3. Schedule a job **every minute** (or frequent retries) that calls **`finalizeRound(roundId)`** for **`gameRound(now) - 1`** — the same round the dashboard treats as “previous round to settle.”
 
-**`hourId` for the keeper (match the UI):**
+**`roundId` for the keeper (match the UI):**
 
-- On-chain time buckets use **`RESET_BUFFER` = 20 seconds** (see `ClickMintGame` / `GAME_RESET_BUFFER_SEC` in the frontend). The **current** game hour is `gameHour(timestamp)`; the hour to finalize is **`gameHour(now) - 1`** once that previous hour has ended and the buffer has passed.
-- Practically: run your job on a **few fixed minutes each hour** (e.g. **:01, :06, :11, …** every five minutes) so the first run is safely after the buffer, with retries until the hour finalizes. Each run should:
-  1. Read **`gameHour`** for “now” (or compute the same bucket from Unix time and `RESET_BUFFER`).
-  2. Let **`targetHour = gameHourNow - 1`**. Skip if `targetHour` is absent or zero.
-  3. If **`hourFinalized(targetHour)`** is already true, exit.
-  4. Else send **`finalizeHour(targetHour)`** from the **`potKeeper`** key.
+- On-chain time buckets use **`ROUND_BUFFER`** (see `ClickMintGame` / `GAME_ROUND_BUFFER_SEC` in the frontend). The **current** round is `gameRound(timestamp)`; the round to finalize is **`gameRound(now) - 1`** once that minute has ended and the buffer has passed.
+- Each run should:
+  1. Read **`gameRound`** for “now”.
+  2. Let **`targetRound = gameRoundNow - 1`**. Skip if `targetRound` is absent or zero.
+  3. If **`roundFinalized(targetRound)`** is already true, exit.
+  4. Else send **`finalizeRound(targetRound)`** from the **`potKeeper`** key.
 
-Idempotent behavior: repeating the job is safe once the hour is finalized (the tx will revert or you skip on the read).
+Idempotent behavior: repeating the job is safe once the round is finalized (the tx will revert or you skip on the read).
 
 ---
 
 ### Recommended automation (no Supabase required)
 
-**Gelato (Cloud vs legacy):** **[app.gelato.network](https://app.gelato.network/)** Web3 Functions / “Create Task” is **deprecated** for new work; **[Gelato Cloud](https://app.gelato.cloud/)** focuses on **Paymaster & Bundler, Relay, and Gas Tank**. Scheduled keeper-style **tasks** are often no longer available there after migrating accounts. You can still drive **Relay** from your own cron (your server calls Gelato), but `finalizeHour` must execute as **`potKeeper`**, so you still need that identity funded and signing — the options below are usually simpler.
+**Gelato (Cloud vs legacy):** **[app.gelato.network](https://app.gelato.network/)** Web3 Functions / “Create Task” is **deprecated** for new work; **[Gelato Cloud](https://app.gelato.cloud/)** focuses on **Paymaster & Bundler, Relay, and Gas Tank**. Scheduled keeper-style **tasks** are often no longer available there after migrating accounts. You can still drive **Relay** from your own cron (your server calls Gelato), but `finalizeRound` must execute as **`potKeeper`**, so you still need that identity funded and signing — the options below are usually simpler.
 
-**Default for this repo (Vercel):** **Vercel Cron → `GET /api/cron/finalize-hour`**  
-Route Handler in **`frontend/app/api/cron/finalize-hour/route.ts`**: requires **`Authorization: Bearer $CRON_SECRET`**, uses **`POT_KEEPER_PRIVATE_KEY`** (must match on-chain **`potKeeper`**; fund with ETH), runs **`gameHour` → `targetHour = gameHourNow - 1` → `hourFinalized` → `finalizeHour`** (idempotent). **`frontend/vercel.json`** schedules **`1,6,11,16,21,26,31,36,41,46,51,56 * * * *`** (first tick **:01** past each hour, then every **5 minutes**) — Vercel cron has **no second-level schedule**; **`finalizeHour`** must run **after** the prior game hour ends plus **`RESET_BUFFER` (20s)**. Optional **`POT_KEEPER_RPC_URL`**; otherwise **`NEXT_PUBLIC_QUICKNODE_RPC`**.
+**Default for this repo (Vercel):** **Vercel Cron → `GET /api/cron/finalize-round`**  
+Route Handler in **`frontend/app/api/cron/finalize-round/route.ts`**: requires **`Authorization: Bearer $CRON_SECRET`**, uses **`POT_KEEPER_PRIVATE_KEY`** (must match on-chain **`potKeeper`**; fund with ETH), runs **`gameRound` → `targetRound = gameRoundNow - 1` → `roundFinalized` → `finalizeRound`** (idempotent). **`frontend/vercel.json`** schedules **`* * * * *`** (every minute UTC). **`finalizeRound`** is only valid **after** the prior minute round ends plus **`ROUND_BUFFER`** (~5s on current deploy). Optional **`POT_KEEPER_RPC_URL`**; otherwise **`NEXT_PUBLIC_QUICKNODE_RPC`**.
 
 **Production vs Preview:** Cron jobs run against your **production deployment** by default. **`CRON_SECRET`**, **`POT_KEEPER_PRIVATE_KEY`**, and **`NEXT_PUBLIC_QUICKNODE_RPC`** must exist on **Production** in Vercel → Settings → Environment Variables, then redeploy. If they are only set for Preview, the cron **500s** immediately (often before any RPC call).
 
 **Strong alternative: [OpenZeppelin Defender](https://defender.openzeppelin.com/) — Relayer + Autotask**  
-Scheduled serverless task that submits **`finalizeHour`** from a Defender **Relayer** you set as **`potKeeper`**.
+Scheduled serverless task that submits **`finalizeRound`** from a Defender **Relayer** you set as **`potKeeper`**.
 
 **Simpler but rougher: GitHub Actions `schedule`**  
 Workflow every few minutes + viem/ethers + **`POT_KEEPER`** in repo **secrets**. Fine for testnet; lock down repo access for mainnet.
 
-**Usually skip for this job:** **Chainlink Automation** unless you already run LINK upkeeps — more setup and LINK economics for a single hourly `eth_call` + occasional tx.
+**Usually skip for this job:** **Chainlink Automation** unless you already run LINK upkeeps — more setup and LINK economics for a single `eth_call` + occasional tx.
 
 **Optional later:** **Supabase Edge Function + cron** — same pattern as Vercel (serverless + secrets + schedule); use only if you already standardize on Supabase for this product.
 
@@ -124,7 +124,7 @@ Workflow every few minutes + viem/ethers + **`POT_KEEPER`** in repo **secrets**.
 
 | Option | Notes |
 |--------|--------|
-| **Vercel Cron + `/api/cron/finalize-hour`** | **Shipped in repo** — `CRON_SECRET` + `POT_KEEPER_PRIVATE_KEY`; see `frontend/vercel.json` + `.env.example`. |
+| **Vercel Cron + `/api/cron/finalize-round`** | **Shipped in repo** — `CRON_SECRET` + `POT_KEEPER_PRIVATE_KEY`; see `frontend/vercel.json` + `.env.example`. |
 | **OpenZeppelin Defender** | Relayer + Autotask; turnkey UI and logs. |
 | **GitHub Actions schedule** | OK for testnet; protect secrets on mainnet. |
 | **Gelato Relay + your cron** | Only if execution satisfies **`msg.sender == potKeeper`**. |
@@ -140,7 +140,7 @@ You still pay **gas** for each finalization (or sponsor via your own paymaster).
 
 ## Related code
 
-- **POT logic:** `contracts/contracts/ClickMintGame.sol` — `finalizeHour`, `potKeeper`, `RESET_BUFFER`.
-- **Vercel keeper:** `frontend/app/api/cron/finalize-hour/route.ts`, `frontend/vercel.json`.
-- **Keeper `hourId` (frontend parity):** `frontend/lib/game-genesis.ts` — `GAME_RESET_BUFFER_SEC`, `gameHourIndexFromUnixSec`; `frontend/components/clickmint-dashboard.tsx` — `gameHourReadTs`, `prevHour = gameHourNow - 1n`.
+- **POT + Block Bet:** `contracts/contracts/ClickMintGame.sol` — `finalizeRound`, `potKeeper`, `ROUND_BUFFER`.
+- **Vercel keeper:** `frontend/app/api/cron/finalize-round/route.ts`, `frontend/vercel.json`.
+- **Keeper `roundId` (frontend parity):** `frontend/lib/game-genesis.ts` — `GAME_ROUND_BUFFER_SEC`, `gameRoundIndexFromUnixSec`; `frontend/components/clickmint-dashboard.tsx` — `prevRound = gameRoundNow - 1n`.
 - **Early-claim LP mint:** `contracts/contracts/CLICK.sol` — `earlySpendPending`, `lpRecipient`, `setLpRecipient`.

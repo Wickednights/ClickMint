@@ -12,7 +12,7 @@ import {
  * Deploy with **`DEPLOY_ECONOMY=testnet`** (default) or **`DEPLOY_ECONOMY=mainnet`**.
  *
  * - **testnet:** 1M CLICK cap, 10 trophy supply, 10m vesting, readable click costs.
- * - **mainnet:** 100B CLICK cap, 10k trophies, 7d vesting, ~1¢/click at `MAINNET_ETH_USD`.
+ * - **mainnet:** 10B CLICK cap, 10k trophies, 30d vesting, ~$0.10/click at `MAINNET_ETH_USD`.
  *
  * See `scripts/config/economy.ts` (`TESTNET_PRESET` / `MAINNET_PRESET`).
  */
@@ -33,7 +33,7 @@ async function main() {
     maxSupplyWei: caps.maxSupplyWei.toString(),
     trophyMaxSupply: caps.trophyMaxSupply.toString(),
     clicksPerHashTier: caps.clicksPerHashTier.toString(),
-    trophyDropBps: caps.trophyDropBps.toString(),
+    trophyDropWeight: caps.trophyDropWeight.toString(),
     minPotClicks: caps.minPotClicks.toString(),
     vestingSeconds: vestingSec.toString(),
   });
@@ -41,10 +41,13 @@ async function main() {
   const Treasury = await ethers.getContractFactory("Treasury");
   const treasury = await Treasury.deploy(owner);
   await treasury.waitForDeployment();
+  console.log("Treasury (deployed):", await treasury.getAddress());
 
   const SecretPrizeWallet = await ethers.getContractFactory("SecretPrizeWallet");
   const secret = await SecretPrizeWallet.deploy(owner);
   await secret.waitForDeployment();
+  const secretAddr = await secret.getAddress();
+  console.log("SecretPrizeWallet (deployed):", secretAddr);
 
   /** Until you call `CLICK.setLpRecipient`, early-claim LP share mints here — default is owner for bootstrap. */
   const lpRecipient = owner;
@@ -93,6 +96,7 @@ async function main() {
     }
   }
   if (maxS === undefined) throw new Error("Could not read CLICK.maxSupply() after deploy");
+  console.log("CLICK (deployed):", clickAddr);
   console.log("CLICK.maxSupply (wei):", maxS.toString());
 
   const ClickMintGame = await ethers.getContractFactory("ClickMintGame");
@@ -100,15 +104,15 @@ async function main() {
     owner,
     await click.getAddress(),
     await treasury.getAddress(),
-    await secret.getAddress(),
     clickPerEthWei,
     clickCostCredits,
     baseClickReward,
     caps.clicksPerHashTier,
-    caps.trophyDropBps,
+    caps.trophyDropWeight,
     caps.minPotClicks
   );
   await game.waitForDeployment();
+  console.log("ClickMintGame (deployed):", await game.getAddress());
   await (await click.setGame(await game.getAddress())).wait();
 
   const BinaryTrophyNFT = await ethers.getContractFactory("BinaryTrophyNFT");
@@ -120,6 +124,7 @@ async function main() {
     branding.erc721Symbol
   );
   await trophy.waitForDeployment();
+  console.log("BinaryTrophyNFT (deployed):", await trophy.getAddress());
 
   await (await trophy.setClickMintGame(await game.getAddress())).wait();
   await (await game.setTrophyNft(await trophy.getAddress())).wait();
@@ -127,9 +132,11 @@ async function main() {
   const Escrow = await ethers.getContractFactory("Escrow");
   const escrow = await Escrow.deploy(owner);
   await escrow.waitForDeployment();
+  console.log("Escrow (deployed):", await escrow.getAddress());
 
+  console.log("\n--- Deploy summary ---");
   console.log("Treasury:", await treasury.getAddress());
-  console.log("SecretPrizeWallet:", await secret.getAddress());
+  console.log("SecretPrizeWallet:", secretAddr);
   console.log("CLICK:", await click.getAddress());
   console.log("ClickMintGame:", await game.getAddress());
   console.log("BinaryTrophyNFT:", await trophy.getAddress());

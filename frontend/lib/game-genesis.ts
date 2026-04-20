@@ -1,39 +1,51 @@
-/** Must match `ClickMintGame.RESET_BUFFER` (20). */
-export const GAME_RESET_BUFFER_SEC = 20;
+/** Must match `ClickMintGame.ROUND_BUFFER` (5). */
+export const GAME_ROUND_BUFFER_SEC = 5;
+
+/** @deprecated Use `GAME_ROUND_BUFFER_SEC`. */
+export const GAME_RESET_BUFFER_SEC = GAME_ROUND_BUFFER_SEC;
 
 /**
- * Same as on-chain `gameHour(ts)`: hour bucket used for POT / rounds.
+ * Same as on-chain `gameRound(ts)`: minute bucket for POT / Block Bet / rounds.
  * @param unixSec Unix timestamp in seconds (e.g. contract deployment time).
  */
-export function gameHourIndexFromUnixSec(unixSec: number): bigint {
+export function gameRoundIndexFromUnixSec(unixSec: number): bigint {
   const ts = Math.floor(unixSec);
-  if (ts <= GAME_RESET_BUFFER_SEC) return 0n;
-  return BigInt(Math.floor((ts - GAME_RESET_BUFFER_SEC) / 3600));
+  if (ts <= GAME_ROUND_BUFFER_SEC) return 0n;
+  return BigInt(Math.floor((ts - GAME_ROUND_BUFFER_SEC) / 60));
 }
 
+/** @deprecated Use `gameRoundIndexFromUnixSec`. */
+export const gameHourIndexFromUnixSec = gameRoundIndexFromUnixSec;
+
 /**
- * First game hour index after deploy — from env (no RPC).
+ * First game round index after deploy — from env (no RPC).
  * Set `NEXT_PUBLIC_GAME_GENESIS_UNIX` to the game contract deployment time (seconds, Basescan).
  */
-export function readGenesisGameHourFromEnv(): bigint | null {
+export function readGenesisGameRoundFromEnv(): bigint | null {
   const raw =
     typeof process !== "undefined" ? process.env.NEXT_PUBLIC_GAME_GENESIS_UNIX?.trim() : undefined;
   if (!raw) return null;
   const n = Number(raw);
   if (!Number.isFinite(n) || n < 0) return null;
-  return gameHourIndexFromUnixSec(n);
+  return gameRoundIndexFromUnixSec(n);
 }
+
+/** @deprecated Use `readGenesisGameRoundFromEnv`. */
+export const readGenesisGameHourFromEnv = readGenesisGameRoundFromEnv;
 
 /**
- * On-chain `hourId` as the **round since launch** (1-based) when `genesisHour` is known; otherwise raw chain hour id string.
+ * On-chain `roundId` as the **round since launch** (1-based) when `genesisRound` is known; otherwise raw chain round id string.
  */
-export function hourIdForDisplay(hourId: bigint, genesisHour: bigint | null): string {
-  if (genesisHour === null) return hourId.toString();
-  if (hourId < genesisHour) return "1";
-  return (hourId - genesisHour + 1n).toString();
+export function roundIdForDisplay(roundId: bigint, genesisRound: bigint | null): string {
+  if (genesisRound === null) return roundId.toString();
+  if (roundId < genesisRound) return "1";
+  return (roundId - genesisRound + 1n).toString();
 }
 
-/** Table column / labels: "Round" when genesis is set, else "Hour" (raw index). */
-export function potRoundKind(genesisHour: bigint | null): "Round" | "Hour" {
-  return genesisHour === null ? "Hour" : "Round";
+/** @deprecated Use `roundIdForDisplay`. */
+export const hourIdForDisplay = roundIdForDisplay;
+
+/** Table column / labels: "Round" when genesis is set, else raw index label. */
+export function potRoundKind(genesisRound: bigint | null): "Round" | "Index" {
+  return genesisRound === null ? "Index" : "Round";
 }
