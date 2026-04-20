@@ -405,7 +405,9 @@ export function BlockBetPanel({
   return (
     <section
       className={cn(
-        "w-full max-w-3xl rounded-xl border border-cyan-500/20 bg-black/60 px-3 py-2 shadow-[0_0_32px_rgba(34,211,238,0.06)] md:px-4 md:py-3"
+        "w-full max-w-3xl rounded-xl border px-3 py-2 shadow-[0_0_32px_rgba(34,211,238,0.06)] md:px-4 md:py-3",
+        "max-md:border-cyan-400/45 max-md:bg-black/35 max-md:shadow-[0_0_40px_rgba(34,211,238,0.12)]",
+        "md:border-cyan-500/20 md:bg-black/60"
       )}
     >
       {/* Mobile: block-bet controls live in the header menu; desktop: right rail (`BlockBetSidebarCard`). */}
